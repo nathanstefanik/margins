@@ -1,0 +1,32 @@
+---
+description: Marginalia EPUB reader development conventions and commit message format
+alwaysApply: true
+---
+
+# Marginalia development rules
+
+## Commit messages
+
+Always prefix commit messages with a type tag:
+
+- `FEAT` — new feature
+- `BUG` — bug fix
+- `CHORE` — maintenance, tooling, formatting
+- `DOCS` — documentation
+- `REFACTOR` — non-functional code change
+
+Format: `TYPE Short imperative summary`
+
+Example: `FEAT Add merge import for synced libraries`
+
+## Code style
+
+- Rust: run `cargo fmt` before committing Rust changes
+- TypeScript: keep modules small; match existing patterns in `src/`
+- Do not commit `.env` or secrets
+- Annotation data stays in markdown/JSON on disk — see `docs/storage.md`
+
+## Scope
+
+- Prefer minimal diffs; this is a zathura-inspired reader, not a full Calibre replacement
+- GPL-3.0-or-later applies to all distributed code
