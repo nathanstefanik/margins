@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Marginalia</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">marginalia</div>
+        <div class="topbar-actions">
+          <button id="btn-library" class="ghost" title="Library (l)">library</button>
+          <button id="btn-import" class="ghost" title="Import EPUB (o)">import</button>
+          <button id="btn-export" class="ghost" title="Export library (E)">export</button>
+          <button id="btn-set-root" class="ghost" title="Set library root (R)">root</button>
+        </div>
+        <div id="status" class="status"></div>
+      </header>
+
+      <div id="library-view" class="panel hidden">
+        <div class="panel-header">
+          <h2>Library</h2>
+          <span id="library-root" class="muted"></span>
+        </div>
+        <ul id="book-list" class="book-list"></ul>
+      </div>
+
+      <div id="reader-view" class="reader-layout hidden">
+        <aside id="chapter-list" class="chapter-sidebar"></aside>
+        <main id="reader-pane" class="reader-pane" tabindex="0"></main>
+        <aside id="notes-pane" class="notes-pane">
+          <div class="notes-header">
+            <h3 id="notes-title">Chapter notes</h3>
+            <span id="word-count" class="muted">0 words</span>
+          </div>
+          <textarea
+            id="notes-editor"
+            spellcheck="true"
+            placeholder="Write your ~100 word chapter summary..."
+          ></textarea>
+          <div class="notes-footer">
+            <button id="btn-save-note" class="primary">Save (:w)</button>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="keybar">
+        <span><kbd>j</kbd>/<kbd>k</kbd> scroll</span>
+        <span><kbd>n</kbd>/<kbd>p</kbd> chapter</span>
+        <span><kbd>i</kbd> notes</span>
+        <span><kbd>Esc</kbd> reader</span>
+        <span><kbd>l</kbd> library</span>
+        <span><kbd>:</kbd> command</span>
+      </footer>
+
+      <div id="command-bar" class="command-bar hidden">
+        <span class="prompt">:</span>
+        <input id="command-input" type="text" autocomplete="off" spellcheck="false" />
+      </div>
+    </div>
+  </body>
+</html>
