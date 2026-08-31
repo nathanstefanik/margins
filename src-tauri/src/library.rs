@@ -1,5 +1,5 @@
 use crate::epub_meta;
-use crate::models::{BookMeta, BookSummary, LibraryIndex};
+use crate::models::{BookMeta, BookSummary, LibraryIndex, NoteSearchHit};
 use crate::notes;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
@@ -144,6 +144,10 @@ impl Library {
             fs::remove_dir_all(book_dir)?;
         }
         Ok(())
+    }
+
+    pub fn search_notes(&self, query: &str) -> Result<Vec<NoteSearchHit>, LibraryError> {
+        Ok(notes::search_notes(&self.root, query)?)
     }
 
     fn write_index(&self, summaries: &[BookSummary]) -> Result<(), LibraryError> {

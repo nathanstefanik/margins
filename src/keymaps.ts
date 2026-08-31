@@ -1,4 +1,4 @@
-type Mode = "library" | "reader" | "notes" | "command";
+type Mode = "library" | "reader" | "notes" | "command" | "search";
 
 export interface KeymapHandlers {
   onLibrary: () => void;
@@ -14,6 +14,7 @@ export interface KeymapHandlers {
   onFocusNotes: () => void;
   onFocusReader: () => void;
   onSaveNote: () => void;
+  onSearch: (query?: string) => void;
   onCommand: (cmd: string) => void;
   onStatus: (msg: string) => void;
 }
@@ -49,7 +50,7 @@ export class Keymap {
   }
 
   handleKey(event: KeyboardEvent, target: EventTarget | null): void {
-    if (this.mode === "command") {
+    if (this.mode === "command" || this.mode === "search") {
       return;
     }
 
@@ -118,6 +119,10 @@ export class Keymap {
         event.preventDefault();
         this.handlers.onFocusNotes();
         break;
+      case "/":
+        event.preventDefault();
+        this.handlers.onSearch();
+        break;
       case "l":
         event.preventDefault();
         this.handlers.onLibrary();
@@ -166,15 +171,22 @@ export class Keymap {
     if (event.key === "Enter") {
       event.preventDefault();
       const cmd = input.value.trim();
+      if (this.runCommand(cmd)) {
+        return;
+      }
       this.mode = "reader";
-      this.runCommand(cmd);
       this.handlers.onFocusReader();
     }
   }
 
   private pendingG = false;
 
-  private runCommand(cmd: string): void {
+  private runCommand(cmd: string): boolean {
+    if (cmd === "search" || cmd.startsWith("search ")) {
+      this.handlers.onSearch(cmd.slice("search".length).trim());
+      return true;
+    }
+
     switch (cmd) {
       case "w":
         this.handlers.onSaveNote();
@@ -201,5 +213,6 @@ export class Keymap {
           this.handlers.onStatus(`unknown command: ${cmd}`);
         }
     }
+    return false;
   }
 }

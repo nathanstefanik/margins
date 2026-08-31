@@ -49,6 +49,17 @@ export interface SyncReport {
   destination: string;
 }
 
+export interface NoteSearchHit {
+  book_id: string;
+  book_title: string;
+  book_author: string;
+  chapter_key: string;
+  chapter_index: number;
+  chapter_title: string;
+  snippet: string;
+  word_count: number;
+}
+
 export const api = {
   getDataDir: () => invoke<string>("get_data_dir"),
   getLibraryRoot: () => invoke<string>("get_library_root"),
@@ -65,6 +76,7 @@ export const api = {
       body,
       kind: "summary",
     }),
+  searchNotes: (query: string) => invoke<NoteSearchHit[]>("search_notes", { query }),
   removeBook: (bookId: string) => invoke<void>("remove_book", { bookId }),
   exportLibrary: (destination: string) =>
     invoke<SyncReport>("export_library", { destination }),
