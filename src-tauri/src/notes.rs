@@ -175,3 +175,140 @@ fn slugify(title: &str) -> String {
     let slug = re.replace_all(&lower, "-");
     slug.trim_matches('-').chars().take(48).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::BookMeta;
+    use chrono::Utc;
+
+    fn seed_book(dir: &Path) -> ChapterMeta {
+        let chapter = ChapterMeta {
+            key: "001".into(),
+            index: 0,
+            title: "Introduction".into(),
+            href: "OEBPS/chapter1.xhtml".into(),
+        };
+        let meta = BookMeta {
+            id: "abc123".into(),
+            title: "Sample Book".into(),
+            author: "Test Author".into(),
+            language: Some("en".into()),
+            added_at: Utc::now(),
+            source_filename: "sample.epub".into(),
+            chapters: vec![chapter.clone()],
+        };
+        fs::create_dir_all(dir.join("notes/chapters")).unwrap();
+        fs::write(
+            dir.join("meta.json"),
+            serde_json::to_string_pretty(&meta).unwrap(),
+        )
+        .unwrap();
+        write_empty_index(dir).unwrap();
+        chapter
+    }
+
+    #[test]
+    fn count_words_skips_markdown_heading_tokens() {
+        // "# Heading" tokenizes as "#" + "Heading"; only "#" is dropped.
+        assert_eq!(count_words("# Heading\none two"), 3);
+        assert_eq!(count_words(""), 0);
+    }
+
+    #[test]
+    fn slugify_chapter_titles() {
+        assert_eq!(slugify("The Market"), "the-market");
+        assert_eq!(slugify("  Hello!!! World  "), "hello-world");
+    }
+
+    #[test]
+    fn save_and_load_note_roundtrip_updates_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book_dir = tmp.path();
+        let chapter = seed_book(book_dir);
+
+        let body = "This is a chapter summary with about twenty words so we can check persistence of content and word count.";
+        let frontmatter = NoteFrontmatter {
+            book_id: "abc123".into(),
+            chapter_key: chapter.key.clone(),
+            chapter_index: chapter.index,
+            chapter_title: chapter.title.clone(),
+            chapter_href: chapter.href.clone(),
+            epub_cfi: Some("epubcfi(/6/2)".into()),
+            kind: "summary".into(),
+            word_count: 0,
+            created_at: None,
+            updated_at: None,
+        };
+
+        let saved = save_chapter_note(book_dir, &chapter, frontmatter, body).unwrap();
+        assert!(Path::new(&saved.path).exists());
+        assert_eq!(saved.frontmatter.word_count, count_words(body));
+        assert!(saved.frontmatter.created_at.is_some());
+        assert_eq!(count_notes(book_dir).unwrap(), 1);
+
+        let loaded = load_chapter_note(book_dir, "001").unwrap();
+        assert_eq!(loaded.body, body);
+        assert_eq!(loaded.frontmatter.kind, "summary");
+        assert_eq!(
+            loaded.frontmatter.epub_cfi.as_deref(),
+            Some("epubcfi(/6/2)")
+        );
+
+        let index: NotesIndex =
+            serde_json::from_str(&fs::read_to_string(book_dir.join("notes/_index.json")).unwrap())
+                .unwrap();
+        assert_eq!(index.chapters.len(), 1);
+        assert_eq!(index.chapters[0].file, "chapters/001-introduction.md");
+    }
+
+    #[test]
+    fn resave_preserves_created_at() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book_dir = tmp.path();
+        let chapter = seed_book(book_dir);
+
+        let frontmatter = NoteFrontmatter {
+            book_id: "abc123".into(),
+            chapter_key: chapter.key.clone(),
+            chapter_index: chapter.index,
+            chapter_title: chapter.title.clone(),
+            chapter_href: chapter.href.clone(),
+            epub_cfi: None,
+            kind: "summary".into(),
+            word_count: 0,
+            created_at: None,
+            updated_at: None,
+        };
+
+        let first =
+            save_chapter_note(book_dir, &chapter, frontmatter.clone(), "first draft").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let second = save_chapter_note(
+            book_dir,
+            &chapter,
+            frontmatter,
+            "second draft with more words",
+        )
+        .unwrap();
+
+        assert_eq!(first.frontmatter.created_at, second.frontmatter.created_at);
+        assert_ne!(first.frontmatter.updated_at, second.frontmatter.updated_at);
+        assert_eq!(
+            load_chapter_note(book_dir, "001").unwrap().body,
+            "second draft with more words"
+        );
+    }
+
+    #[test]
+    fn load_missing_note_returns_default_body() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book_dir = tmp.path();
+        seed_book(book_dir);
+
+        let note = load_chapter_note(book_dir, "001").unwrap();
+        assert!(note.body.contains("Introduction"));
+        assert_eq!(note.frontmatter.word_count, 0);
+        assert!(note.path.is_empty());
+    }
+}

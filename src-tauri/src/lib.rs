@@ -5,6 +5,9 @@ mod models;
 mod notes;
 mod sync;
 
+#[cfg(test)]
+mod test_fixtures;
+
 use config::AppConfig;
 use library::Library;
 use models::{BookMeta, BookSummary, ChapterNote, ChapterRef, NoteFrontmatter, SyncReport};
@@ -159,13 +162,6 @@ fn import_library(
     let report = sync::import_library(PathBuf::from(source), destination, merge)
         .map_err(|e| e.to_string())?;
 
-    state
-        .library
-        .lock()
-        .map_err(|e| e.to_string())?
-        .reload()
-        .map_err(|e| e.to_string())?;
-
     Ok(report)
 }
 
@@ -175,7 +171,7 @@ fn set_library_root(state: State<'_, AppState>, path: String) -> Result<String, 
     let root = {
         let mut config = state.config.lock().map_err(|e| e.to_string())?;
         config
-            .set_library_root(new_root)
+            .set_library_root(new_root.clone())
             .map_err(|e| e.to_string())?;
         config.library_root()
     };
@@ -184,7 +180,7 @@ fn set_library_root(state: State<'_, AppState>, path: String) -> Result<String, 
         .library
         .lock()
         .map_err(|e| e.to_string())?
-        .reload()
+        .set_root(root.clone())
         .map_err(|e| e.to_string())?;
 
     Ok(root.display().to_string())

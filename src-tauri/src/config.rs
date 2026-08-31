@@ -81,3 +81,32 @@ fn resolve_data_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
         .join("marginalia")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_library_root_persists_and_reloads() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data_dir = tmp.path().join("data");
+        let library_root = tmp.path().join("external-lib");
+
+        // Isolate from the developer's real data dir.
+        std::env::set_var("MARGINALIA_DATA_DIR", &data_dir);
+        std::env::remove_var("MARGINALIA_LIBRARY_ROOT");
+
+        let mut config = AppConfig::load().unwrap();
+        assert_eq!(config.data_dir(), data_dir.as_path());
+        assert_eq!(config.library_root(), data_dir.join("library"));
+
+        config.set_library_root(library_root.clone()).unwrap();
+        assert_eq!(config.library_root(), library_root);
+        assert!(data_dir.join("config.json").exists());
+
+        let reloaded = AppConfig::load().unwrap();
+        assert_eq!(reloaded.library_root(), library_root);
+
+        std::env::remove_var("MARGINALIA_DATA_DIR");
+    }
+}
