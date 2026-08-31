@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, type BookMeta, type BookSummary, type ChapterMeta } from "./api";
+import { api, type BookMeta, type BookSummary, type ChapterMeta, type NoteSearchHit } from "./api";
 import { Keymap } from "./keymaps";
 import { EpubReader } from "./reader";
 
@@ -23,6 +23,14 @@ export class App {
   private libraryRoot = document.getElementById("library-root")!;
   private commandBar = document.getElementById("command-bar")!;
   private commandInput = document.getElementById("command-input") as HTMLInputElement;
+  private searchOverlay = document.getElementById("search-overlay")!;
+  private searchInput = document.getElementById("search-input") as HTMLInputElement;
+  private searchResults = document.getElementById("search-results")!;
+  private searchHits: NoteSearchHit[] = [];
+  private searchSelection = 0;
+  private searchTimer: number | null = null;
+  private searchGen = 0;
+  private modeBeforeSearch: "library" | "reader" | "notes" = "library";
 
   constructor() {
     this.reader = new EpubReader(this.readerPane, (chapter, cfi) => {
@@ -46,6 +54,7 @@ export class App {
       onFocusNotes: () => this.focusNotes(),
       onFocusReader: () => this.focusReader(),
       onSaveNote: () => void this.saveNote(),
+      onSearch: (query) => this.showSearch(query),
       onCommand: (cmd) => this.showCommand(cmd),
       onStatus: (msg) => this.setStatus(msg),
     });
@@ -60,8 +69,17 @@ export class App {
     document.getElementById("btn-export")?.addEventListener("click", () => void this.exportLibrary());
     document.getElementById("btn-set-root")?.addEventListener("click", () => void this.setLibraryRoot());
     document.getElementById("btn-save-note")?.addEventListener("click", () => void this.saveNote());
+    document.getElementById("btn-search")?.addEventListener("click", () => this.showSearch());
 
     this.notesEditor.addEventListener("input", () => this.updateWordCount());
+
+    this.searchInput.addEventListener("input", () => this.scheduleSearch());
+    this.searchInput.addEventListener("keydown", (event) => this.handleSearchKey(event));
+    this.searchOverlay.addEventListener("click", (event) => {
+      if (event.target === this.searchOverlay) {
+        this.closeSearch();
+      }
+    });
 
     this.commandInput.addEventListener("keydown", (event) => {
       this.keymap.handleCommandKey(event, this.commandInput);
@@ -124,15 +142,18 @@ export class App {
     }
   }
 
-  private async openBook(bookId: string): Promise<void> {
+  private async openBook(bookId: string, chapterKey?: string): Promise<void> {
     this.setStatus("opening book...");
     const meta = await api.getBook(bookId);
     const bytes = await api.readEpubBytes(bookId);
     const uint8 = new Uint8Array(bytes);
+    const startIndex = chapterKey
+      ? Math.max(0, meta.chapters.findIndex((c) => c.key === chapterKey))
+      : 0;
 
     this.currentBook = meta;
     this.renderChapterList(meta.chapters);
-    await this.reader.open(uint8, meta.chapters);
+    await this.reader.open(uint8, meta.chapters, startIndex);
 
     this.libraryView.classList.add("hidden");
     this.readerView.classList.remove("hidden");
@@ -189,6 +210,7 @@ export class App {
   }
 
   private showLibrary(): void {
+    this.searchOverlay.classList.add("hidden");
     this.reader.destroy();
     this.currentBook = null;
     this.currentChapter = null;
@@ -214,6 +236,152 @@ export class App {
     this.commandBar.classList.remove("hidden");
     this.commandInput.value = prefill;
     this.commandInput.focus();
+  }
+
+  private showSearch(query = ""): void {
+    const mode = this.keymap.getMode();
+    if (mode === "library" || mode === "reader" || mode === "notes") {
+      this.modeBeforeSearch = mode;
+    }
+    this.commandBar.classList.add("hidden");
+    this.searchOverlay.classList.remove("hidden");
+    this.keymap.setMode("search");
+    this.searchInput.value = query;
+    this.searchInput.focus();
+    this.searchInput.select();
+    if (query.trim()) {
+      void this.runSearch(query);
+    } else {
+      this.searchHits = [];
+      this.searchSelection = 0;
+      this.renderSearchResults();
+    }
+  }
+
+  private closeSearch(): void {
+    this.searchOverlay.classList.add("hidden");
+    if (this.searchTimer !== null) {
+      window.clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
+    if (this.modeBeforeSearch === "library") {
+      this.keymap.setMode("library");
+    } else if (this.modeBeforeSearch === "notes") {
+      this.focusNotes();
+    } else {
+      this.focusReader();
+    }
+  }
+
+  private scheduleSearch(): void {
+    if (this.searchTimer !== null) {
+      window.clearTimeout(this.searchTimer);
+    }
+    this.searchTimer = window.setTimeout(() => {
+      this.searchTimer = null;
+      void this.runSearch(this.searchInput.value);
+    }, 120);
+  }
+
+  private async runSearch(query: string): Promise<void> {
+    const gen = ++this.searchGen;
+    const trimmed = query.trim();
+    if (!trimmed) {
+      this.searchHits = [];
+      this.searchSelection = 0;
+      this.renderSearchResults();
+      this.setStatus("search notes");
+      return;
+    }
+    const hits = await api.searchNotes(trimmed);
+    if (gen !== this.searchGen) return;
+    this.searchHits = hits;
+    this.searchSelection = 0;
+    this.renderSearchResults();
+    this.setStatus(
+      this.searchHits.length === 0
+        ? `no notes match “${trimmed}”`
+        : `${this.searchHits.length} note${this.searchHits.length === 1 ? "" : "s"}`,
+    );
+  }
+
+  private renderSearchResults(): void {
+    this.searchResults.innerHTML = "";
+    if (this.searchHits.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "search-empty";
+      empty.textContent = this.searchInput.value.trim() ? "no matches" : "type to search notes";
+      this.searchResults.appendChild(empty);
+      return;
+    }
+
+    const query = this.searchInput.value;
+    this.searchHits.forEach((hit, index) => {
+      const li = document.createElement("li");
+      li.classList.toggle("selected", index === this.searchSelection);
+      li.innerHTML = `
+        <span class="search-hit-title">${escapeHtml(hit.book_title)} — ${escapeHtml(hit.chapter_title)}</span>
+        <span class="search-hit-meta">${escapeHtml(hit.book_author)} · ${hit.word_count} words</span>
+        <span class="search-hit-snippet">${highlightSnippet(hit.snippet, query)}</span>
+      `;
+      li.addEventListener("click", () => void this.openSearchHit(hit));
+      this.searchResults.appendChild(li);
+    });
+    this.searchResults.querySelectorAll("li")[this.searchSelection]?.scrollIntoView({
+      block: "nearest",
+    });
+  }
+
+  private moveSearchSelection(delta: number): void {
+    if (this.searchHits.length === 0) return;
+    this.searchSelection =
+      (this.searchSelection + delta + this.searchHits.length) % this.searchHits.length;
+    this.renderSearchResults();
+  }
+
+  private handleSearchKey(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      this.closeSearch();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const hit = this.searchHits[this.searchSelection];
+      if (hit) void this.openSearchHit(hit);
+      return;
+    }
+    if (event.key === "ArrowDown" || (event.ctrlKey && event.key === "n")) {
+      event.preventDefault();
+      this.moveSearchSelection(1);
+      return;
+    }
+    if (event.key === "ArrowUp" || (event.ctrlKey && event.key === "p")) {
+      event.preventDefault();
+      this.moveSearchSelection(-1);
+    }
+  }
+
+  private async openSearchHit(hit: NoteSearchHit): Promise<void> {
+    this.searchOverlay.classList.add("hidden");
+    if (this.searchTimer !== null) {
+      window.clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
+
+    if (this.currentBook?.id === hit.book_id) {
+      const idx = this.currentBook.chapters.findIndex((c) => c.key === hit.chapter_key);
+      if (idx >= 0) {
+        await this.reader.displayChapter(idx);
+      }
+      this.keymap.setMode("reader");
+      this.focusReader();
+      this.setStatus(`${hit.book_title} — ${hit.chapter_title}`);
+      return;
+    }
+
+    await this.openBook(hit.book_id, hit.chapter_key);
+    this.setStatus(`${hit.book_title} — ${hit.chapter_title}`);
   }
 
   private async importEpub(): Promise<void> {
@@ -260,4 +428,24 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlightSnippet(snippet: string, query: string): string {
+  const escaped = escapeHtml(snippet);
+  const terms = query
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(escapeHtml)
+    .sort((a, b) => b.length - a.length);
+  let result = escaped;
+  for (const term of terms) {
+    const re = new RegExp(escapeRegex(term), "gi");
+    result = result.replace(re, (match) => `<mark>${match}</mark>`);
+  }
+  return result;
 }

@@ -13,6 +13,7 @@
         <div class="brand">marginalia</div>
         <div class="topbar-actions">
           <button id="btn-library" class="ghost" title="Library (l)">library</button>
+          <button id="btn-search" class="ghost" title="Search notes (/)">search</button>
           <button id="btn-import" class="ghost" title="Import EPUB (o)">import</button>
           <button id="btn-export" class="ghost" title="Export library (E)">export</button>
           <button id="btn-set-root" class="ghost" title="Set library root (R)">root</button>
@@ -51,6 +52,7 @@
         <span><kbd>j</kbd>/<kbd>k</kbd> scroll</span>
         <span><kbd>n</kbd>/<kbd>p</kbd> chapter</span>
         <span><kbd>i</kbd> notes</span>
+        <span><kbd>/</kbd> search</span>
         <span><kbd>Esc</kbd> reader</span>
         <span><kbd>l</kbd> library</span>
         <span><kbd>:</kbd> command</span>
@@ -59,6 +61,22 @@
       <div id="command-bar" class="command-bar hidden">
         <span class="prompt">:</span>
         <input id="command-input" type="text" autocomplete="off" spellcheck="false" />
+      </div>
+
+      <div id="search-overlay" class="search-overlay hidden">
+        <div class="search-box">
+          <div class="search-bar">
+            <span class="prompt">/</span>
+            <input
+              id="search-input"
+              type="text"
+              placeholder="search notes"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <ul id="search-results" class="search-results"></ul>
+        </div>
       </div>
     </div>
   </body>

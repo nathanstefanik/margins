@@ -9,6 +9,7 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Import and browse EPUBs from a local library
 - Paginated reader with vim-style keybindings
 - Per-chapter markdown notes with YAML frontmatter (~100-word summaries)
+- Full-text search across notes (`/` or `:search`)
 - Export/import entire library trees (external drives, cloud sync folders)
 - Point library root at a synced directory via env or in-app **root** command
 
@@ -43,13 +44,14 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 | `n` / `p` | Next / previous chapter |
 | `gg` / `G` | Top / bottom of chapter |
 | `i` | Focus notes editor |
+| `/` | Search notes (library-wide) |
 | `Esc` | Return to reader |
 | `l` | Library |
 | `o` | Import EPUB |
 | `E` | Export library |
 | `R` | Set library root |
-| `Enter` | Open selected book (library) |
-| `:` | Command mode (`:w` save, `:q` library, `:import`, `:export`, `:root`, `:open 3`) |
+| `Enter` | Open selected book (library) or search hit |
+| `:` | Command mode (`:w` save, `:q` library, `:search`, `:import`, `:export`, `:root`, `:open 3`) |
 
 ## License
 
