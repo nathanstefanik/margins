@@ -1,4 +1,6 @@
-use crate::models::{ChapterMeta, ChapterNote, NoteFrontmatter, NotesIndex, NotesIndexEntry};
+use crate::models::{
+    BookMeta, ChapterMeta, ChapterNote, NoteFrontmatter, NoteSearchHit, NotesIndex, NotesIndexEntry,
+};
 use chrono::Utc;
 use regex::Regex;
 use std::fs;
@@ -167,6 +169,131 @@ pub fn count_words(text: &str) -> usize {
     text.split_whitespace()
         .filter(|w| !w.starts_with('#'))
         .count()
+}
+
+pub fn search_notes(library_root: &Path, query: &str) -> Result<Vec<NoteSearchHit>, NotesError> {
+    let terms: Vec<String> = query
+        .split_whitespace()
+        .map(|t| t.to_ascii_lowercase())
+        .filter(|t| !t.is_empty())
+        .collect();
+    if terms.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let books_dir = library_root.join("books");
+    if !books_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut hits = Vec::new();
+    for entry in fs::read_dir(&books_dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let book_dir = entry.path();
+        let meta_path = book_dir.join("meta.json");
+        if !meta_path.exists() {
+            continue;
+        }
+        let meta: BookMeta = serde_json::from_str(&fs::read_to_string(meta_path)?)?;
+        let index_path = book_dir.join("notes/_index.json");
+        if !index_path.exists() {
+            continue;
+        }
+        let index: NotesIndex = serde_json::from_str(&fs::read_to_string(index_path)?)?;
+
+        for chapter in &index.chapters {
+            let path = book_dir.join("notes").join(&chapter.file);
+            let Ok(note) = parse_note_file(&path, &chapter.chapter_key) else {
+                continue;
+            };
+            let haystack = format!(
+                "{} {} {} {}",
+                meta.title, meta.author, note.frontmatter.chapter_title, note.body
+            );
+            if !terms_match(&haystack, &terms) {
+                continue;
+            }
+            let snippet = if terms_match(&note.body, &terms) {
+                snippet_around(&note.body, &terms, 50)
+            } else if terms_match(&note.frontmatter.chapter_title, &terms) {
+                note.frontmatter.chapter_title.clone()
+            } else {
+                snippet_around(&note.body, &terms, 50)
+            };
+            hits.push((
+                terms_match(&note.frontmatter.chapter_title, &terms),
+                NoteSearchHit {
+                    book_id: meta.id.clone(),
+                    book_title: meta.title.clone(),
+                    book_author: meta.author.clone(),
+                    chapter_key: note.frontmatter.chapter_key,
+                    chapter_index: note.frontmatter.chapter_index,
+                    chapter_title: note.frontmatter.chapter_title,
+                    snippet,
+                    word_count: note.frontmatter.word_count,
+                },
+            ));
+        }
+    }
+
+    hits.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then(a.1.book_title.cmp(&b.1.book_title))
+            .then(a.1.chapter_index.cmp(&b.1.chapter_index))
+    });
+    Ok(hits.into_iter().map(|(_, hit)| hit).collect())
+}
+
+fn terms_match(text: &str, terms: &[String]) -> bool {
+    let lower = text.to_ascii_lowercase();
+    terms.iter().all(|t| lower.contains(t))
+}
+
+fn snippet_around(text: &str, terms: &[String], radius: usize) -> String {
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return String::new();
+    }
+    let lower = collapsed.to_ascii_lowercase();
+    let (pos, term_len) = terms
+        .iter()
+        .filter_map(|t| lower.find(t.as_str()).map(|p| (p, t.len())))
+        .min_by_key(|(p, _)| *p)
+        .unwrap_or((0, 0));
+    let start = floor_char_boundary(&collapsed, pos.saturating_sub(radius));
+    let end = ceil_char_boundary(&collapsed, (pos + term_len + radius).min(collapsed.len()));
+    let mut snippet = String::new();
+    if start > 0 {
+        snippet.push_str("...");
+    }
+    snippet.push_str(&collapsed[start..end]);
+    if end < collapsed.len() {
+        snippet.push_str("...");
+    }
+    snippet
+}
+
+fn floor_char_boundary(s: &str, mut i: usize) -> usize {
+    if i >= s.len() {
+        return s.len();
+    }
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
+}
+
+fn ceil_char_boundary(s: &str, mut i: usize) -> usize {
+    if i >= s.len() {
+        return s.len();
+    }
+    while i < s.len() && !s.is_char_boundary(i) {
+        i += 1;
+    }
+    i
 }
 
 fn slugify(title: &str) -> String {
