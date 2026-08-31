@@ -82,6 +82,18 @@ pub struct NotesIndexEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteSearchHit {
+    pub book_id: String,
+    pub book_title: String,
+    pub book_author: String,
+    pub chapter_key: String,
+    pub chapter_index: usize,
+    pub chapter_title: String,
+    pub snippet: String,
+    pub word_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncReport {
     pub files_copied: usize,
     pub bytes_copied: u64,

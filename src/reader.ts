@@ -12,7 +12,7 @@ export class EpubReader {
     private onChapterChange: (chapter: ChapterMeta, cfi?: string) => void,
   ) {}
 
-  async open(bytes: Uint8Array, chapters: ChapterMeta[]): Promise<void> {
+  async open(bytes: Uint8Array, chapters: ChapterMeta[], startIndex = 0): Promise<void> {
     this.destroy();
     this.chapters = chapters;
     this.chapterIndex = 0;
@@ -35,7 +35,9 @@ export class EpubReader {
       }
     });
 
-    if (chapters[0]) {
+    if (chapters[startIndex]) {
+      await this.displayChapter(startIndex);
+    } else if (chapters[0]) {
       await this.displayChapter(0);
     }
   }

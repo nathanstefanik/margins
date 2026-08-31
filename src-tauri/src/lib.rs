@@ -10,7 +10,9 @@ mod test_fixtures;
 
 use config::AppConfig;
 use library::Library;
-use models::{BookMeta, BookSummary, ChapterNote, ChapterRef, NoteFrontmatter, SyncReport};
+use models::{
+    BookMeta, BookSummary, ChapterNote, ChapterRef, NoteFrontmatter, NoteSearchHit, SyncReport,
+};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::State;
@@ -129,6 +131,16 @@ fn save_chapter_note(
 }
 
 #[tauri::command]
+fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<NoteSearchHit>, String> {
+    state
+        .library
+        .lock()
+        .map_err(|e| e.to_string())?
+        .search_notes(&query)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn remove_book(state: State<'_, AppState>, book_id: String) -> Result<(), String> {
     state
         .library
@@ -209,6 +221,7 @@ pub fn run() {
             read_epub_bytes,
             get_chapter_note,
             save_chapter_note,
+            search_notes,
             remove_book,
             export_library,
             import_library,
