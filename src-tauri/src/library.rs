@@ -33,7 +33,10 @@ impl Library {
         Ok(Self { root })
     }
 
-    pub fn reload(&mut self) -> Result<(), LibraryError> {
+    pub fn set_root(&mut self, root: PathBuf) -> Result<(), LibraryError> {
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(root.join("books"))?;
+        self.root = root;
         Ok(())
     }
 
@@ -183,4 +186,58 @@ fn hash_file(path: &Path) -> Result<String, LibraryError> {
         hasher.update(&buffer[..read]);
     }
     Ok(hex::encode(&hasher.finalize()[..12]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_fixtures::write_sample_epub;
+
+    #[test]
+    fn import_list_get_remove_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+
+        let meta = library.import_epub(epub.clone()).unwrap();
+        assert_eq!(meta.title, "Sample Book");
+        assert_eq!(meta.chapters.len(), 2);
+        assert!(library.book_dir(&meta.id).join("source.epub").exists());
+        assert!(library
+            .book_dir(&meta.id)
+            .join("notes/_index.json")
+            .exists());
+
+        let again = library.import_epub(epub).unwrap();
+        assert_eq!(again.id, meta.id);
+
+        let listed = library.list_books().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, meta.id);
+        assert_eq!(listed[0].notes_count, 0);
+        assert!(tmp.path().join("library/index.json").exists());
+
+        let bytes = library.read_epub_bytes(&meta.id).unwrap();
+        assert!(!bytes.is_empty());
+
+        library.remove_book(&meta.id).unwrap();
+        assert!(library.list_books().unwrap().is_empty());
+        assert!(!library.book_dir(&meta.id).exists());
+    }
+
+    #[test]
+    fn set_root_switches_active_library() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root_a = tmp.path().join("a");
+        let root_b = tmp.path().join("b");
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+
+        let mut library = Library::open(root_a).unwrap();
+        let meta = library.import_epub(epub).unwrap();
+        assert_eq!(library.list_books().unwrap().len(), 1);
+
+        library.set_root(root_b).unwrap();
+        assert!(library.list_books().unwrap().is_empty());
+        assert!(!library.book_dir(&meta.id).exists());
+    }
 }

@@ -208,3 +208,34 @@ fn title_from_href(archive: &mut ZipArchive<BufReader<File>>, href: &str) -> Opt
         .map(|m| m.as_str().trim().to_string())
         .filter(|s| !s.is_empty())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_fixtures::write_sample_epub;
+
+    #[test]
+    fn parse_sample_epub_metadata_and_chapters() {
+        let tmp = tempfile::tempdir().unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let info = parse_epub(&epub).expect("parse epub");
+
+        assert_eq!(info.title, "Sample Book");
+        assert_eq!(info.author, "Test Author");
+        assert_eq!(info.language.as_deref(), Some("en"));
+        assert_eq!(info.chapters.len(), 2);
+        assert_eq!(info.chapters[0].key, "001");
+        assert_eq!(info.chapters[0].title, "Introduction");
+        assert_eq!(info.chapters[0].href, "OEBPS/chapter1.xhtml");
+        assert_eq!(info.chapters[1].key, "002");
+        assert_eq!(info.chapters[1].title, "The Market");
+    }
+
+    #[test]
+    fn reject_non_epub_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("not.epub");
+        std::fs::write(&path, b"not a zip").unwrap();
+        assert!(parse_epub(&path).is_err());
+    }
+}
