@@ -197,20 +197,18 @@ fn set_library_root(state: State<'_, AppState>, path: String) -> Result<String, 
         .set_root(new_root.clone())
         .map_err(|e| e.to_string())?;
 
-    let config_result = state
-        .config
-        .lock()
-        .map_err(|e| e.to_string())?
-        .set_library_root(new_root.clone())
-        .map_err(|e| e.to_string());
+    let config_result = match state.config.lock() {
+        Ok(mut config) => config
+            .set_library_root(new_root.clone())
+            .map_err(|e| e.to_string()),
+        Err(error) => Err(error.to_string()),
+    };
 
     if let Err(error) = config_result {
-        let restore_result = state
-            .library
-            .lock()
-            .map_err(|e| e.to_string())?
-            .set_root(previous_root)
-            .map_err(|e| e.to_string());
+        let restore_result = match state.library.lock() {
+            Ok(mut library) => library.set_root(previous_root).map_err(|e| e.to_string()),
+            Err(restore_error) => Err(restore_error.to_string()),
+        };
 
         if let Err(restore_error) = restore_result {
             return Err(format!(

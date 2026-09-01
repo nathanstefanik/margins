@@ -1,4 +1,5 @@
-type Mode = "library" | "reader" | "notes" | "command" | "search";
+type ContentMode = "library" | "reader" | "notes";
+type Mode = ContentMode | "command" | "search";
 
 export interface KeymapHandlers {
   onLibrary: () => void;
@@ -21,6 +22,7 @@ export interface KeymapHandlers {
 
 export class Keymap {
   private mode: Mode = "library";
+  private modeBeforeCommand: ContentMode = "library";
   private librarySelection = 0;
   private bookCount = 0;
 
@@ -75,6 +77,7 @@ export class Keymap {
 
     if (event.key === ":") {
       event.preventDefault();
+      this.modeBeforeCommand = this.mode;
       this.mode = "command";
       this.handlers.onCommand("");
       return;
@@ -163,23 +166,30 @@ export class Keymap {
   handleCommandKey(event: KeyboardEvent, input: HTMLInputElement): void {
     if (event.key === "Escape") {
       event.preventDefault();
-      this.mode = "reader";
-      this.handlers.onFocusReader();
+      this.restoreModeAfterCommand();
       return;
     }
 
     if (event.key === "Enter") {
       event.preventDefault();
       const cmd = input.value.trim();
-      if (this.runCommand(cmd)) {
+      if (this.runCommand(cmd) && this.mode !== "command") {
         return;
       }
-      this.mode = "reader";
-      this.handlers.onFocusReader();
+      this.restoreModeAfterCommand();
     }
   }
 
   private pendingG = false;
+
+  private restoreModeAfterCommand(): void {
+    this.mode = this.modeBeforeCommand;
+    if (this.mode === "reader") {
+      this.handlers.onFocusReader();
+    } else if (this.mode === "notes") {
+      this.handlers.onFocusNotes();
+    }
+  }
 
   private runCommand(cmd: string): boolean {
     if (cmd === "search" || cmd.startsWith("search ")) {
@@ -190,24 +200,25 @@ export class Keymap {
     switch (cmd) {
       case "w":
         this.handlers.onSaveNote();
-        break;
+        return true;
       case "q":
         this.handlers.onLibrary();
-        break;
+        return true;
       case "import":
         this.handlers.onImport();
-        break;
+        return true;
       case "export":
         this.handlers.onExport();
-        break;
+        return true;
       case "root":
         this.handlers.onSetRoot();
-        break;
+        return true;
       default:
         if (cmd.startsWith("open ")) {
           const n = Number.parseInt(cmd.slice(5), 10);
           if (!Number.isNaN(n)) {
             this.handlers.onOpenBook(n - 1);
+            return true;
           }
         } else if (cmd) {
           this.handlers.onStatus(`unknown command: ${cmd}`);
