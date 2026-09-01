@@ -11,6 +11,8 @@ import {
 import { Keymap } from "./keymaps";
 import { EpubReader } from "./reader";
 
+type FileOperation = "import" | "export" | "root";
+
 export class App {
   private books: BookSummary[] = [];
   private currentBook: BookMeta | null = null;
@@ -43,7 +45,7 @@ export class App {
   private searchTimer: number | null = null;
   private searchGen = 0;
   private modeBeforeSearch: "library" | "reader" | "notes" = "library";
-  private importing = false;
+  private fileOperation: FileOperation | null = null;
 
   constructor() {
     this.reader = new EpubReader(this.readerPane, (chapter, cfi) => {
@@ -398,20 +400,20 @@ export class App {
   }
 
   private async importEpub(): Promise<void> {
-    if (this.importing) return;
+    if (this.fileOperation) return;
 
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "EPUB", extensions: ["epub"] }],
-    });
-    if (!selected || Array.isArray(selected)) return;
-
-    this.importing = true;
-    this.setImportBusy(true);
-    this.showImportProgress();
+    this.fileOperation = "import";
+    this.setFileOperationsBusy(true);
 
     let unlisten: (() => void) | undefined;
     try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "EPUB", extensions: ["epub"] }],
+      });
+      if (!selected || Array.isArray(selected)) return;
+
+      this.showImportProgress();
       unlisten = await listen<ImportProgress>("import-progress", (event) => {
         this.updateImportProgress(event.payload);
       });
@@ -425,8 +427,8 @@ export class App {
       this.setStatus(`import failed: ${errorMessage(error)}`);
     } finally {
       unlisten?.();
-      this.importing = false;
-      this.setImportBusy(false);
+      this.fileOperation = null;
+      this.setFileOperationsBusy(false);
       this.importProgress.classList.add("hidden");
     }
   }
@@ -453,7 +455,7 @@ export class App {
     this.importProgressLabel.textContent = labels[progress.stage] ?? progress.stage;
   }
 
-  private setImportBusy(busy: boolean): void {
+  private setFileOperationsBusy(busy: boolean): void {
     ["btn-import", "btn-export", "btn-set-root"].forEach((id) => {
       const button = document.getElementById(id) as HTMLButtonElement | null;
       if (button) button.disabled = busy;
@@ -461,22 +463,44 @@ export class App {
   }
 
   private async exportLibrary(): Promise<void> {
-    const destination = await open({ directory: true, multiple: false });
-    if (!destination || Array.isArray(destination)) return;
+    if (this.fileOperation) return;
+    this.fileOperation = "export";
+    this.setFileOperationsBusy(true);
 
-    this.setStatus("exporting library...");
-    const report = await api.exportLibrary(destination);
-    this.setStatus(`exported ${report.files_copied} files`);
+    try {
+      const destination = await open({ directory: true, multiple: false });
+      if (!destination || Array.isArray(destination)) return;
+
+      this.setStatus("exporting library...");
+      const report = await api.exportLibrary(destination);
+      this.setStatus(`exported ${report.files_copied} files`);
+    } catch (error) {
+      this.setStatus(`export failed: ${errorMessage(error)}`);
+    } finally {
+      this.fileOperation = null;
+      this.setFileOperationsBusy(false);
+    }
   }
 
   private async setLibraryRoot(): Promise<void> {
-    const path = await open({ directory: true, multiple: false });
-    if (!path || Array.isArray(path)) return;
+    if (this.fileOperation) return;
+    this.fileOperation = "root";
+    this.setFileOperationsBusy(true);
 
-    const root = await api.setLibraryRoot(path);
-    this.libraryRoot.textContent = root;
-    await this.refreshLibrary();
-    this.setStatus(`library root set`);
+    try {
+      const path = await open({ directory: true, multiple: false });
+      if (!path || Array.isArray(path)) return;
+
+      const root = await api.setLibraryRoot(path);
+      this.libraryRoot.textContent = root;
+      await this.refreshLibrary();
+      this.setStatus(`library root set`);
+    } catch (error) {
+      this.setStatus(`root change failed: ${errorMessage(error)}`);
+    } finally {
+      this.fileOperation = null;
+      this.setFileOperationsBusy(false);
+    }
   }
 
   private setStatus(message: string): void {
