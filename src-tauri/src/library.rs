@@ -73,7 +73,7 @@ impl Library {
             });
         }
 
-        summaries.sort_by(|a, b| b.added_at.cmp(&a.added_at));
+        summaries.sort_by_key(|summary| std::cmp::Reverse(summary.added_at));
         self.write_index(&summaries)?;
         Ok(summaries)
     }
