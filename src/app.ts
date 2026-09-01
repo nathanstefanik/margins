@@ -411,10 +411,27 @@ export class App {
     const path = await open({ directory: true, multiple: false });
     if (!path || Array.isArray(path)) return;
 
-    const root = await api.setLibraryRoot(path);
-    this.libraryRoot.textContent = root;
-    await this.refreshLibrary();
-    this.setStatus(`library root set`);
+    this.setStatus("setting library directory...");
+    try {
+      const root = await api.setLibraryRoot(path);
+      this.libraryRoot.textContent = root;
+      this.searchOverlay.classList.add("hidden");
+      this.commandBar.classList.add("hidden");
+
+      // A book opened from the previous directory is no longer the active book.
+      this.reader.destroy();
+      this.currentBook = null;
+      this.currentChapter = null;
+      this.currentCfi = undefined;
+      this.readerView.classList.add("hidden");
+      this.libraryView.classList.remove("hidden");
+      this.keymap.setMode("library");
+
+      await this.refreshLibrary();
+      this.setStatus("library directory set");
+    } catch (error) {
+      this.setStatus(`could not set library directory: ${String(error)}`);
+    }
   }
 
   private setStatus(message: string): void {
