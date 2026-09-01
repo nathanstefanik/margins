@@ -60,6 +60,11 @@ export interface NoteSearchHit {
   word_count: number;
 }
 
+export interface ImportProgress {
+  percent: number;
+  stage: string;
+}
+
 export const api = {
   getDataDir: () => invoke<string>("get_data_dir"),
   getLibraryRoot: () => invoke<string>("get_library_root"),

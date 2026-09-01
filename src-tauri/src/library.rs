@@ -4,7 +4,7 @@ use crate::notes;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -96,19 +96,33 @@ impl Library {
         Ok(fs::read(epub_path)?)
     }
 
-    pub fn import_epub(&self, source_path: PathBuf) -> Result<BookMeta, LibraryError> {
+    pub fn import_epub_with_progress<F>(
+        &self,
+        source_path: PathBuf,
+        mut on_progress: F,
+    ) -> Result<BookMeta, LibraryError>
+    where
+        F: FnMut(u8, &'static str),
+    {
+        on_progress(0, "preparing");
         if !source_path.exists() {
             return Err(LibraryError::Other("source file does not exist".into()));
         }
 
+        on_progress(5, "reading-metadata");
         let info = epub_meta::parse_epub(&source_path)?;
-        let book_id = hash_file(&source_path)?;
+        on_progress(30, "hashing");
+        let book_id = hash_file_with_progress(&source_path, |processed, total| {
+            on_progress(progress_between(30, 50, processed, total), "hashing");
+        })?;
         let book_dir = self.book_dir(&book_id);
 
         if book_dir.exists() {
+            on_progress(100, "already-imported");
             return self.get_book(&book_id);
         }
 
+        on_progress(55, "copying");
         fs::create_dir_all(book_dir.join("notes/chapters"))?;
 
         let source_filename = source_path
@@ -117,7 +131,13 @@ impl Library {
             .unwrap_or("book.epub")
             .to_string();
 
-        fs::copy(&source_path, book_dir.join("source.epub"))?;
+        copy_file_with_progress(
+            &source_path,
+            &book_dir.join("source.epub"),
+            |processed, total| {
+                on_progress(progress_between(55, 94, processed, total), "copying");
+            },
+        )?;
 
         let meta = BookMeta {
             id: book_id.clone(),
@@ -129,12 +149,16 @@ impl Library {
             chapters: info.chapters,
         };
 
+        on_progress(95, "saving");
         let meta_raw = serde_json::to_string_pretty(&meta)?;
         fs::write(book_dir.join("meta.json"), meta_raw)?;
 
+        on_progress(97, "saving");
         notes::write_empty_index(&book_dir)?;
+        on_progress(99, "saving");
         self.write_book_readme(&book_dir, &meta)?;
 
+        on_progress(100, "complete");
         Ok(meta)
     }
 
@@ -178,18 +202,66 @@ impl Library {
     }
 }
 
-fn hash_file(path: &Path) -> Result<String, LibraryError> {
+fn hash_file_with_progress<F>(path: &Path, mut on_progress: F) -> Result<String, LibraryError>
+where
+    F: FnMut(u64, u64),
+{
     let mut file = fs::File::open(path)?;
+    let total = file.metadata()?.len();
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
+    let mut processed = 0;
+    on_progress(processed, total);
     loop {
         let read = file.read(&mut buffer)?;
         if read == 0 {
             break;
         }
         hasher.update(&buffer[..read]);
+        processed += read as u64;
+        on_progress(processed, total);
     }
     Ok(hex::encode(&hasher.finalize()[..12]))
+}
+
+fn copy_file_with_progress<F>(
+    source: &Path,
+    destination: &Path,
+    mut on_progress: F,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(u64, u64),
+{
+    let mut source_file = fs::File::open(source)?;
+    let total = source_file.metadata()?.len();
+    let mut destination_file = fs::File::create(destination)?;
+    let mut buffer = [0u8; 64 * 1024];
+    let mut processed = 0;
+    on_progress(processed, total);
+
+    loop {
+        let read = source_file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        destination_file.write_all(&buffer[..read])?;
+        processed += read as u64;
+        on_progress(processed, total);
+    }
+
+    destination_file.flush()?;
+    Ok(())
+}
+
+fn progress_between(start: u8, end: u8, processed: u64, total: u64) -> u8 {
+    if total == 0 {
+        return end;
+    }
+
+    let range = u128::from(end.saturating_sub(start));
+    let completed = u128::from(processed.min(total));
+    let total = u128::from(total);
+    start.saturating_add((range * completed / total) as u8)
 }
 
 #[cfg(test)]
@@ -203,7 +275,9 @@ mod tests {
         let library = Library::open(tmp.path().join("library")).unwrap();
         let epub = write_sample_epub(tmp.path(), "sample.epub");
 
-        let meta = library.import_epub(epub.clone()).unwrap();
+        let meta = library
+            .import_epub_with_progress(epub.clone(), |_, _| {})
+            .unwrap();
         assert_eq!(meta.title, "Sample Book");
         assert_eq!(meta.chapters.len(), 2);
         assert!(library.book_dir(&meta.id).join("source.epub").exists());
@@ -212,7 +286,7 @@ mod tests {
             .join("notes/_index.json")
             .exists());
 
-        let again = library.import_epub(epub).unwrap();
+        let again = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
         assert_eq!(again.id, meta.id);
 
         let listed = library.list_books().unwrap();
@@ -230,6 +304,24 @@ mod tests {
     }
 
     #[test]
+    fn import_reports_monotonic_progress() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let mut updates = Vec::new();
+
+        library
+            .import_epub_with_progress(epub, |percent, stage| updates.push((percent, stage)))
+            .unwrap();
+
+        assert_eq!(updates.first(), Some(&(0, "preparing")));
+        assert_eq!(updates.last(), Some(&(100, "complete")));
+        assert!(updates.iter().any(|(_, stage)| *stage == "hashing"));
+        assert!(updates.iter().any(|(_, stage)| *stage == "copying"));
+        assert!(updates.windows(2).all(|pair| pair[1].0 >= pair[0].0));
+    }
+
+    #[test]
     fn set_root_switches_active_library() {
         let tmp = tempfile::tempdir().unwrap();
         let root_a = tmp.path().join("a");
@@ -237,7 +329,7 @@ mod tests {
         let epub = write_sample_epub(tmp.path(), "sample.epub");
 
         let mut library = Library::open(root_a).unwrap();
-        let meta = library.import_epub(epub).unwrap();
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
         assert_eq!(library.list_books().unwrap().len(), 1);
 
         library.set_root(root_b).unwrap();
