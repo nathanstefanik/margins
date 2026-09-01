@@ -11,7 +11,7 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Per-chapter markdown notes with YAML frontmatter (~100-word summaries)
 - Full-text search across notes (`/` or `:search`)
 - Export/import entire library trees (external drives, cloud sync folders)
-- Point library root at a synced directory via env or in-app **root** command
+- Choose the library directory with the in-app folder picker or **root** command
 
 ## Quick start
 
@@ -32,7 +32,7 @@ npm run tauri build
 | Variable | Purpose |
 |----------|---------|
 | `MARGINS_DATA_DIR` | App data directory (config + default library) |
-| `MARGINS_LIBRARY_ROOT` | Use a specific library root (e.g. synced folder) |
+| `MARGINS_LIBRARY_ROOT` | Use a specific library directory (e.g. synced folder) |
 
 See [docs/storage.md](docs/storage.md) for the on-disk layout.
 
@@ -49,7 +49,7 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 | `l` | Library |
 | `o` | Import EPUB |
 | `E` | Export library |
-| `R` | Set library root |
+| `R` | Choose the library directory |
 | `Enter` | Open selected book (library) or search hit |
 | `:` | Command mode (`:w` save, `:q` library, `:search`, `:import`, `:export`, `:root`, `:open 3`) |
 
