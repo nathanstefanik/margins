@@ -31,6 +31,7 @@ export class App {
   private searchTimer: number | null = null;
   private searchGen = 0;
   private modeBeforeSearch: "library" | "reader" | "notes" = "library";
+  private settingLibraryRoot = false;
 
   constructor() {
     this.reader = new EpubReader(this.readerPane, (chapter, cfi) => {
@@ -260,6 +261,7 @@ export class App {
 
   private closeSearch(): void {
     this.searchOverlay.classList.add("hidden");
+    this.searchGen += 1;
     if (this.searchTimer !== null) {
       window.clearTimeout(this.searchTimer);
       this.searchTimer = null;
@@ -364,6 +366,7 @@ export class App {
 
   private async openSearchHit(hit: NoteSearchHit): Promise<void> {
     this.searchOverlay.classList.add("hidden");
+    this.searchGen += 1;
     if (this.searchTimer !== null) {
       window.clearTimeout(this.searchTimer);
       this.searchTimer = null;
@@ -408,15 +411,22 @@ export class App {
   }
 
   private async setLibraryRoot(): Promise<void> {
-    const path = await open({ directory: true, multiple: false });
-    if (!path || Array.isArray(path)) return;
-
-    this.setStatus("setting library directory...");
+    if (this.settingLibraryRoot) return;
+    this.settingLibraryRoot = true;
     try {
+      const path = await open({ directory: true, multiple: false });
+      if (!path || Array.isArray(path)) return;
+
+      this.setStatus("setting library directory...");
       const root = await api.setLibraryRoot(path);
       this.libraryRoot.textContent = root;
       this.searchOverlay.classList.add("hidden");
       this.commandBar.classList.add("hidden");
+      this.searchGen += 1;
+      if (this.searchTimer !== null) {
+        window.clearTimeout(this.searchTimer);
+        this.searchTimer = null;
+      }
 
       // A book opened from the previous directory is no longer the active book.
       this.reader.destroy();
@@ -431,6 +441,8 @@ export class App {
       this.setStatus("library directory set");
     } catch (error) {
       this.setStatus(`could not set library directory: ${String(error)}`);
+    } finally {
+      this.settingLibraryRoot = false;
     }
   }
 
