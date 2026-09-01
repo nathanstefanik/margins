@@ -7,6 +7,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum LibraryError {
@@ -54,6 +55,9 @@ impl Library {
 
         for entry in fs::read_dir(&books_dir)? {
             let entry = entry?;
+            if entry.file_name().to_string_lossy().starts_with('.') {
+                continue;
+            }
             if !entry.file_type()?.is_dir() {
                 continue;
             }
@@ -115,15 +119,24 @@ impl Library {
         let book_id = hash_file_with_progress(&source_path, |processed, total| {
             on_progress(progress_between(30, 50, processed, total), "hashing");
         })?;
-        let book_dir = self.book_dir(&book_id);
+        let final_book_dir = self.book_dir(&book_id);
 
-        if book_dir.exists() {
+        if final_book_dir.join("meta.json").is_file()
+            && final_book_dir.join("source.epub").is_file()
+        {
+            let existing = self.get_book(&book_id)?;
             on_progress(100, "already-imported");
-            return self.get_book(&book_id);
+            return Ok(existing);
         }
 
+        let staging = ImportStaging::new(
+            self.root
+                .join("books")
+                .join(format!(".{book_id}.importing-{}", Uuid::new_v4())),
+        );
+
         on_progress(55, "copying");
-        fs::create_dir_all(book_dir.join("notes/chapters"))?;
+        fs::create_dir_all(staging.path.join("notes/chapters"))?;
 
         let source_filename = source_path
             .file_name()
@@ -133,7 +146,7 @@ impl Library {
 
         copy_file_with_progress(
             &source_path,
-            &book_dir.join("source.epub"),
+            &staging.path.join("source.epub"),
             |processed, total| {
                 on_progress(progress_between(55, 94, processed, total), "copying");
             },
@@ -151,13 +164,19 @@ impl Library {
 
         on_progress(95, "saving");
         let meta_raw = serde_json::to_string_pretty(&meta)?;
-        fs::write(book_dir.join("meta.json"), meta_raw)?;
+        fs::write(staging.path.join("meta.json"), meta_raw)?;
 
         on_progress(97, "saving");
-        notes::write_empty_index(&book_dir)?;
+        notes::write_empty_index(&staging.path)?;
         on_progress(99, "saving");
-        self.write_book_readme(&book_dir, &meta)?;
+        self.write_book_readme(&staging.path, &meta)?;
 
+        if final_book_dir.exists() {
+            // A previous interrupted import can leave an incomplete final directory.
+            // Remove it only after the source has been copied into staging.
+            fs::remove_dir_all(&final_book_dir)?;
+        }
+        staging.commit(&final_book_dir)?;
         on_progress(100, "complete");
         Ok(meta)
     }
@@ -199,6 +218,34 @@ impl Library {
         );
         fs::write(book_dir.join("README.md"), readme)?;
         Ok(())
+    }
+}
+
+struct ImportStaging {
+    path: PathBuf,
+    committed: bool,
+}
+
+impl ImportStaging {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            committed: false,
+        }
+    }
+
+    fn commit(mut self, destination: &Path) -> Result<(), std::io::Error> {
+        fs::rename(&self.path, destination)?;
+        self.committed = true;
+        Ok(())
+    }
+}
+
+impl Drop for ImportStaging {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = fs::remove_dir_all(&self.path);
+        }
     }
 }
 
@@ -319,6 +366,95 @@ mod tests {
         assert!(updates.iter().any(|(_, stage)| *stage == "hashing"));
         assert!(updates.iter().any(|(_, stage)| *stage == "copying"));
         assert!(updates.windows(2).all(|pair| pair[1].0 >= pair[0].0));
+    }
+
+    #[test]
+    fn failed_import_can_be_retried_without_a_partial_book() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let original = fs::read(&epub).unwrap();
+        let mut failed_once = false;
+
+        let first_attempt = library.import_epub_with_progress(epub.clone(), |_, stage| {
+            if stage == "copying" && !failed_once {
+                failed_once = true;
+                fs::remove_file(&epub).unwrap();
+            }
+        });
+
+        assert!(first_attempt.is_err());
+        fs::write(&epub, original).unwrap();
+        assert!(library.import_epub_with_progress(epub, |_, _| {}).is_ok());
+    }
+
+    #[test]
+    fn repairing_incomplete_book_does_not_delete_its_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let original_epub = write_sample_epub(tmp.path(), "sample.epub");
+        let book_id = hash_file_with_progress(&original_epub, |_, _| {}).unwrap();
+        let partial_dir = library.book_dir(&book_id);
+        fs::create_dir_all(&partial_dir).unwrap();
+        fs::copy(&original_epub, partial_dir.join("source.epub")).unwrap();
+
+        assert!(library
+            .import_epub_with_progress(partial_dir.join("source.epub"), |_, _| {})
+            .is_ok());
+    }
+
+    #[test]
+    fn list_books_ignores_interrupted_import_staging_directories() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+        let staging_dir = library
+            .book_dir(&meta.id)
+            .parent()
+            .unwrap()
+            .join(format!(".{}.importing-crashed", meta.id));
+        fs::create_dir_all(&staging_dir).unwrap();
+        fs::copy(
+            library.book_dir(&meta.id).join("meta.json"),
+            staging_dir.join("meta.json"),
+        )
+        .unwrap();
+
+        let listed = library.list_books().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, meta.id);
+    }
+
+    #[test]
+    fn failed_duplicate_import_does_not_report_completion() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let meta = library
+            .import_epub_with_progress(epub.clone(), |_, _| {})
+            .unwrap();
+        fs::write(library.book_dir(&meta.id).join("meta.json"), b"not json").unwrap();
+        let mut updates = Vec::new();
+
+        assert!(library
+            .import_epub_with_progress(epub, |percent, stage| updates.push((percent, stage)))
+            .is_err());
+        assert!(!updates.iter().any(|(percent, _)| *percent == 100));
+    }
+
+    #[test]
+    fn reimport_repairs_a_missing_source_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let meta = library
+            .import_epub_with_progress(epub.clone(), |_, _| {})
+            .unwrap();
+        fs::remove_file(library.book_dir(&meta.id).join("source.epub")).unwrap();
+
+        library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+        assert!(library.book_dir(&meta.id).join("source.epub").is_file());
     }
 
     #[test]
