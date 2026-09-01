@@ -1,6 +1,6 @@
 # Storage layout
 
-Marginalia stores everything as plain files under a single library root. The layout is designed for:
+Margins stores everything as plain files under a single library root. The layout is designed for:
 
 1. **Scale** — hundreds of notes per book, hundreds of books, without a database
 2. **Portability** — copy the folder to an external drive or sync target
@@ -10,10 +10,10 @@ Marginalia stores everything as plain files under a single library root. The lay
 
 | OS | Default data dir |
 |----|------------------|
-| Linux | `~/.local/share/marginalia` |
-| macOS | `~/Library/Application Support/marginalia` |
+| Linux | `~/.local/share/margins` |
+| macOS | `~/Library/Application Support/margins` |
 
-Override with `MARGINALIA_DATA_DIR` or point `MARGINALIA_LIBRARY_ROOT` at a synced folder.
+Override with `MARGINS_DATA_DIR` or point `MARGINS_LIBRARY_ROOT` at a synced folder.
 
 ## Tree
 
@@ -64,7 +64,7 @@ Your ~100 word chapter summary here.
 
 ## Sync workflow
 
-1. Set library root to your sync folder (`R` or `MARGINALIA_LIBRARY_ROOT`)
+1. Set library root to your sync folder (`R` or `MARGINS_LIBRARY_ROOT`)
 2. Read on machine A; notes write as plain files
 3. Sync folder replicates to machine B or external drive
 4. Use **export** / **import** for one-shot copies without changing root

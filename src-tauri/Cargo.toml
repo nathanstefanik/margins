@@ -1,13 +1,13 @@
 [package]
-name = "marginalia"
+name = "margins"
 version = "0.1.0"
 description = "Minimal EPUB reader with file-based, AI-friendly annotations"
-authors = ["Marginalia contributors"]
+authors = ["Margins contributors"]
 edition = "2021"
 license = "GPL-3.0-or-later"
 
 [lib]
-name = "marginalia_lib"
+name = "margins_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
