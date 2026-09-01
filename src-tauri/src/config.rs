@@ -65,13 +65,13 @@ impl AppConfig {
 }
 
 fn resolve_data_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("MARGINALIA_DATA_DIR") {
+    if let Ok(dir) = std::env::var("MARGINS_DATA_DIR") {
         if !dir.is_empty() {
             return PathBuf::from(dir);
         }
     }
 
-    if let Ok(dir) = std::env::var("MARGINALIA_LIBRARY_ROOT") {
+    if let Ok(dir) = std::env::var("MARGINS_LIBRARY_ROOT") {
         if !dir.is_empty() {
             return PathBuf::from(dir);
         }
@@ -79,7 +79,7 @@ fn resolve_data_dir() -> PathBuf {
 
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("marginalia")
+        .join("margins")
 }
 
 #[cfg(test)]
@@ -93,8 +93,8 @@ mod tests {
         let library_root = tmp.path().join("external-lib");
 
         // Isolate from the developer's real data dir.
-        std::env::set_var("MARGINALIA_DATA_DIR", &data_dir);
-        std::env::remove_var("MARGINALIA_LIBRARY_ROOT");
+        std::env::set_var("MARGINS_DATA_DIR", &data_dir);
+        std::env::remove_var("MARGINS_LIBRARY_ROOT");
 
         let mut config = AppConfig::load().unwrap();
         assert_eq!(config.data_dir(), data_dir.as_path());
@@ -107,6 +107,6 @@ mod tests {
         let reloaded = AppConfig::load().unwrap();
         assert_eq!(reloaded.library_root(), library_root);
 
-        std::env::remove_var("MARGINALIA_DATA_DIR");
+        std::env::remove_var("MARGINS_DATA_DIR");
     }
 }

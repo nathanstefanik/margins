@@ -1,4 +1,4 @@
-# Marginalia
+# Margins
 
 Minimal cross-platform EPUB reader (Linux + macOS) with file-based, AI-friendly annotations.
 
@@ -31,8 +31,8 @@ npm run tauri build
 
 | Variable | Purpose |
 |----------|---------|
-| `MARGINALIA_DATA_DIR` | App data directory (config + default library) |
-| `MARGINALIA_LIBRARY_ROOT` | Use a specific library root (e.g. synced folder) |
+| `MARGINS_DATA_DIR` | App data directory (config + default library) |
+| `MARGINS_LIBRARY_ROOT` | Use a specific library root (e.g. synced folder) |
 
 See [docs/storage.md](docs/storage.md) for the on-disk layout.
 
