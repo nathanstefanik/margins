@@ -1,4 +1,4 @@
-# Marginalia — agent guide
+# Margins — agent guide
 
 EPUB reader (Tauri 2 + Rust + TypeScript). Annotations live on disk as markdown + JSON — see `docs/storage.md`.
 

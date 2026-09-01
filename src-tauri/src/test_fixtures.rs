@@ -37,7 +37,7 @@ pub fn write_sample_epub(dir: &Path, filename: &str) -> PathBuf {
     <dc:title>Sample Book</dc:title>
     <dc:creator>Test Author</dc:creator>
     <dc:language>en</dc:language>
-    <dc:identifier id="uid">urn:marginalia:test</dc:identifier>
+    <dc:identifier id="uid">urn:margins:test</dc:identifier>
   </metadata>
   <manifest>
     <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
