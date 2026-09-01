@@ -41,6 +41,10 @@ impl Library {
         Ok(())
     }
 
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     pub fn book_dir(&self, book_id: &str) -> PathBuf {
         self.root.join("books").join(book_id)
     }

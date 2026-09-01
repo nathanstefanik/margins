@@ -275,6 +275,7 @@ export class App {
 
   private closeSearch(): void {
     this.searchOverlay.classList.add("hidden");
+    this.searchGen += 1;
     if (this.searchTimer !== null) {
       window.clearTimeout(this.searchTimer);
       this.searchTimer = null;
@@ -379,6 +380,7 @@ export class App {
 
   private async openSearchHit(hit: NoteSearchHit): Promise<void> {
     this.searchOverlay.classList.add("hidden");
+    this.searchGen += 1;
     if (this.searchTimer !== null) {
       window.clearTimeout(this.searchTimer);
       this.searchTimer = null;
@@ -491,12 +493,30 @@ export class App {
       const path = await open({ directory: true, multiple: false });
       if (!path || Array.isArray(path)) return;
 
+      this.setStatus("setting library directory...");
       const root = await api.setLibraryRoot(path);
       this.libraryRoot.textContent = root;
+      this.searchOverlay.classList.add("hidden");
+      this.commandBar.classList.add("hidden");
+      this.searchGen += 1;
+      if (this.searchTimer !== null) {
+        window.clearTimeout(this.searchTimer);
+        this.searchTimer = null;
+      }
+
+      // A book opened from the previous directory is no longer the active book.
+      this.reader.destroy();
+      this.currentBook = null;
+      this.currentChapter = null;
+      this.currentCfi = undefined;
+      this.readerView.classList.add("hidden");
+      this.libraryView.classList.remove("hidden");
+      this.keymap.setMode("library");
+
       await this.refreshLibrary();
-      this.setStatus(`library root set`);
+      this.setStatus("library directory set");
     } catch (error) {
-      this.setStatus(`root change failed: ${errorMessage(error)}`);
+      this.setStatus(`could not set library directory: ${errorMessage(error)}`);
     } finally {
       this.fileOperation = null;
       this.setFileOperationsBusy(false);
