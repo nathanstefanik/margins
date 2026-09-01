@@ -1,5 +1,13 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, type BookMeta, type BookSummary, type ChapterMeta, type NoteSearchHit } from "./api";
+import { listen } from "@tauri-apps/api/event";
+import {
+  api,
+  type BookMeta,
+  type BookSummary,
+  type ChapterMeta,
+  type ImportProgress,
+  type NoteSearchHit,
+} from "./api";
 import { Keymap } from "./keymaps";
 import { EpubReader } from "./reader";
 
@@ -21,6 +29,10 @@ export class App {
   private wordCount = document.getElementById("word-count")!;
   private status = document.getElementById("status")!;
   private libraryRoot = document.getElementById("library-root")!;
+  private importProgress = document.getElementById("import-progress")!;
+  private importProgressBar = document.getElementById("import-progress-bar") as HTMLProgressElement;
+  private importProgressLabel = document.getElementById("import-progress-label")!;
+  private importProgressPercent = document.getElementById("import-progress-percent")!;
   private commandBar = document.getElementById("command-bar")!;
   private commandInput = document.getElementById("command-input") as HTMLInputElement;
   private searchOverlay = document.getElementById("search-overlay")!;
@@ -31,6 +43,7 @@ export class App {
   private searchTimer: number | null = null;
   private searchGen = 0;
   private modeBeforeSearch: "library" | "reader" | "notes" = "library";
+  private importing = false;
 
   constructor() {
     this.reader = new EpubReader(this.readerPane, (chapter, cfi) => {
@@ -385,17 +398,66 @@ export class App {
   }
 
   private async importEpub(): Promise<void> {
+    if (this.importing) return;
+
     const selected = await open({
       multiple: false,
       filters: [{ name: "EPUB", extensions: ["epub"] }],
     });
     if (!selected || Array.isArray(selected)) return;
 
-    this.setStatus("importing...");
-    const meta = await api.importEpub(selected);
-    await this.refreshLibrary();
-    this.setStatus(`imported ${meta.title}`);
-    await this.openBook(meta.id);
+    this.importing = true;
+    this.setImportBusy(true);
+    this.showImportProgress();
+
+    let unlisten: (() => void) | undefined;
+    try {
+      unlisten = await listen<ImportProgress>("import-progress", (event) => {
+        this.updateImportProgress(event.payload);
+      });
+      this.setStatus("importing...");
+      const meta = await api.importEpub(selected);
+      await this.refreshLibrary();
+      this.updateImportProgress({ percent: 100, stage: "complete" });
+      this.setStatus(`imported ${meta.title}`);
+      await this.openBook(meta.id);
+    } catch (error) {
+      this.setStatus(`import failed: ${errorMessage(error)}`);
+    } finally {
+      unlisten?.();
+      this.importing = false;
+      this.setImportBusy(false);
+      this.importProgress.classList.add("hidden");
+    }
+  }
+
+  private showImportProgress(): void {
+    this.importProgress.classList.remove("hidden");
+    this.updateImportProgress({ percent: 0, stage: "preparing" });
+  }
+
+  private updateImportProgress(progress: ImportProgress): void {
+    const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+    const labels: Record<string, string> = {
+      preparing: "Preparing EPUB",
+      "reading-metadata": "Reading metadata",
+      hashing: "Checking file",
+      copying: "Copying EPUB",
+      saving: "Saving to library",
+      "already-imported": "Already in library",
+      complete: "Import complete",
+    };
+    this.importProgressBar.value = percent;
+    this.importProgressBar.textContent = `${percent}%`;
+    this.importProgressPercent.textContent = `${percent}%`;
+    this.importProgressLabel.textContent = labels[progress.stage] ?? progress.stage;
+  }
+
+  private setImportBusy(busy: boolean): void {
+    ["btn-import", "btn-export", "btn-set-root"].forEach((id) => {
+      const button = document.getElementById(id) as HTMLButtonElement | null;
+      if (button) button.disabled = busy;
+    });
   }
 
   private async exportLibrary(): Promise<void> {
@@ -448,4 +510,10 @@ function highlightSnippet(snippet: string, query: string): string {
     result = result.replace(re, (match) => `<mark>${match}</mark>`);
   }
   return result;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "unknown error";
 }

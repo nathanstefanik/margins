@@ -13,13 +13,20 @@ use library::Library;
 use models::{
     BookMeta, BookSummary, ChapterNote, ChapterRef, NoteFrontmatter, NoteSearchHit, SyncReport,
 };
+use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 struct AppState {
     config: Mutex<AppConfig>,
     library: Mutex<Library>,
+}
+
+#[derive(Clone, Serialize)]
+struct ImportProgress {
+    percent: u8,
+    stage: &'static str,
 }
 
 #[tauri::command]
@@ -55,12 +62,27 @@ fn list_books(state: State<'_, AppState>) -> Result<Vec<BookSummary>, String> {
 }
 
 #[tauri::command]
-fn import_epub(state: State<'_, AppState>, source_path: String) -> Result<BookMeta, String> {
+fn import_epub(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    source_path: String,
+) -> Result<BookMeta, String> {
+    let mut last_progress: Option<(u8, &'static str)> = None;
+    let mut emit_progress = |percent: u8, stage: &'static str| {
+        if last_progress == Some((percent, stage)) {
+            return;
+        }
+        last_progress = Some((percent, stage));
+        let _ = app.emit("import-progress", ImportProgress { percent, stage });
+    };
+
     state
         .library
         .lock()
         .map_err(|e| e.to_string())?
-        .import_epub(PathBuf::from(source_path))
+        .import_epub_with_progress(PathBuf::from(source_path), |percent, stage| {
+            emit_progress(percent, stage);
+        })
         .map_err(|e| e.to_string())
 }
 

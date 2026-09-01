@@ -21,6 +21,16 @@
         <div id="status" class="status"></div>
       </header>
 
+      <div id="import-progress" class="operation-progress hidden" role="status" aria-live="polite">
+        <div class="operation-progress-header">
+          <span id="import-progress-label">Importing EPUB</span>
+          <span id="import-progress-percent">0%</span>
+        </div>
+        <progress id="import-progress-bar" max="100" value="0" aria-label="EPUB import progress">
+          0%
+        </progress>
+      </div>
+
       <div id="library-view" class="panel hidden">
         <div class="panel-header">
           <h2>Library</h2>

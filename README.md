@@ -7,6 +7,7 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 ## Features (MVP)
 
 - Import and browse EPUBs from a local library
+- Progress feedback while importing EPUBs
 - Paginated reader with vim-style keybindings
 - Per-chapter markdown notes with YAML frontmatter (~100-word summaries)
 - Full-text search across notes (`/` or `:search`)
