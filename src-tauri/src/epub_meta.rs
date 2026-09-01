@@ -159,12 +159,41 @@ fn parse_opf_metadata(opf: &str) -> Result<Metadata, EpubError> {
 
 fn parse_manifest(opf: &str) -> Result<std::collections::HashMap<String, String>, EpubError> {
     let mut map = std::collections::HashMap::new();
-    let re = Regex::new(r#"<item\s+[^>]*id="([^"]+)"[^>]*href="([^"]+)""#).unwrap();
-    for cap in re.captures_iter(opf) {
-        let id = cap.get(1).unwrap().as_str().to_string();
-        let href = cap.get(2).unwrap().as_str().to_string();
-        map.insert(id, href);
+
+    let mut reader = Reader::from_str(opf);
+    reader.config_mut().trim_text(true);
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(element)) | Ok(Event::Empty(element))
+                if element.local_name().as_ref() == b"item" =>
+            {
+                let mut id = None;
+                let mut href = None;
+
+                for attribute in element.attributes() {
+                    let attribute = attribute.map_err(|err| EpubError::Xml(err.to_string()))?;
+                    let value = attribute
+                        .decode_and_unescape_value(reader.decoder())
+                        .map_err(|err| EpubError::Xml(err.to_string()))?
+                        .into_owned();
+
+                    match attribute.key.local_name().as_ref() {
+                        b"id" => id = Some(value),
+                        b"href" => href = Some(value),
+                        _ => {}
+                    }
+                }
+
+                if let (Some(id), Some(href)) = (id, href) {
+                    map.insert(id, href);
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(err) => return Err(EpubError::Xml(err.to_string())),
+            _ => {}
+        }
     }
+
     Ok(map)
 }
 
