@@ -1,7 +1,17 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, type BookMeta, type BookSummary, type ChapterMeta, type NoteSearchHit } from "./api";
+import { listen } from "@tauri-apps/api/event";
+import {
+  api,
+  type BookMeta,
+  type BookSummary,
+  type ChapterMeta,
+  type ImportProgress,
+  type NoteSearchHit,
+} from "./api";
 import { Keymap } from "./keymaps";
 import { EpubReader } from "./reader";
+
+type FileOperation = "import" | "export" | "root";
 
 export class App {
   private books: BookSummary[] = [];
@@ -21,6 +31,10 @@ export class App {
   private wordCount = document.getElementById("word-count")!;
   private status = document.getElementById("status")!;
   private libraryRoot = document.getElementById("library-root")!;
+  private importProgress = document.getElementById("import-progress")!;
+  private importProgressBar = document.getElementById("import-progress-bar") as HTMLProgressElement;
+  private importProgressLabel = document.getElementById("import-progress-label")!;
+  private importProgressPercent = document.getElementById("import-progress-percent")!;
   private commandBar = document.getElementById("command-bar")!;
   private commandInput = document.getElementById("command-input") as HTMLInputElement;
   private searchOverlay = document.getElementById("search-overlay")!;
@@ -31,7 +45,7 @@ export class App {
   private searchTimer: number | null = null;
   private searchGen = 0;
   private modeBeforeSearch: "library" | "reader" | "notes" = "library";
-  private settingLibraryRoot = false;
+  private fileOperation: FileOperation | null = null;
 
   constructor() {
     this.reader = new EpubReader(this.readerPane, (chapter, cfi) => {
@@ -388,31 +402,93 @@ export class App {
   }
 
   private async importEpub(): Promise<void> {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "EPUB", extensions: ["epub"] }],
-    });
-    if (!selected || Array.isArray(selected)) return;
+    if (this.fileOperation) return;
 
-    this.setStatus("importing...");
-    const meta = await api.importEpub(selected);
-    await this.refreshLibrary();
-    this.setStatus(`imported ${meta.title}`);
-    await this.openBook(meta.id);
+    this.fileOperation = "import";
+    this.setFileOperationsBusy(true);
+
+    let unlisten: (() => void) | undefined;
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "EPUB", extensions: ["epub"] }],
+      });
+      if (!selected || Array.isArray(selected)) return;
+
+      this.showImportProgress();
+      unlisten = await listen<ImportProgress>("import-progress", (event) => {
+        this.updateImportProgress(event.payload);
+      });
+      this.setStatus("importing...");
+      const meta = await api.importEpub(selected);
+      await this.refreshLibrary();
+      this.updateImportProgress({ percent: 100, stage: "complete" });
+      this.setStatus(`imported ${meta.title}`);
+      await this.openBook(meta.id);
+    } catch (error) {
+      this.setStatus(`import failed: ${errorMessage(error)}`);
+    } finally {
+      unlisten?.();
+      this.fileOperation = null;
+      this.setFileOperationsBusy(false);
+      this.importProgress.classList.add("hidden");
+    }
+  }
+
+  private showImportProgress(): void {
+    this.importProgress.classList.remove("hidden");
+    this.updateImportProgress({ percent: 0, stage: "preparing" });
+  }
+
+  private updateImportProgress(progress: ImportProgress): void {
+    const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
+    const labels: Record<string, string> = {
+      preparing: "Preparing EPUB",
+      "reading-metadata": "Reading metadata",
+      hashing: "Checking file",
+      copying: "Copying EPUB",
+      saving: "Saving to library",
+      "already-imported": "Already in library",
+      complete: "Import complete",
+    };
+    this.importProgressBar.value = percent;
+    this.importProgressBar.textContent = `${percent}%`;
+    this.importProgressPercent.textContent = `${percent}%`;
+    this.importProgressLabel.textContent = labels[progress.stage] ?? progress.stage;
+  }
+
+  private setFileOperationsBusy(busy: boolean): void {
+    ["btn-import", "btn-export", "btn-set-root"].forEach((id) => {
+      const button = document.getElementById(id) as HTMLButtonElement | null;
+      if (button) button.disabled = busy;
+    });
   }
 
   private async exportLibrary(): Promise<void> {
-    const destination = await open({ directory: true, multiple: false });
-    if (!destination || Array.isArray(destination)) return;
+    if (this.fileOperation) return;
+    this.fileOperation = "export";
+    this.setFileOperationsBusy(true);
 
-    this.setStatus("exporting library...");
-    const report = await api.exportLibrary(destination);
-    this.setStatus(`exported ${report.files_copied} files`);
+    try {
+      const destination = await open({ directory: true, multiple: false });
+      if (!destination || Array.isArray(destination)) return;
+
+      this.setStatus("exporting library...");
+      const report = await api.exportLibrary(destination);
+      this.setStatus(`exported ${report.files_copied} files`);
+    } catch (error) {
+      this.setStatus(`export failed: ${errorMessage(error)}`);
+    } finally {
+      this.fileOperation = null;
+      this.setFileOperationsBusy(false);
+    }
   }
 
   private async setLibraryRoot(): Promise<void> {
-    if (this.settingLibraryRoot) return;
-    this.settingLibraryRoot = true;
+    if (this.fileOperation) return;
+    this.fileOperation = "root";
+    this.setFileOperationsBusy(true);
+
     try {
       const path = await open({ directory: true, multiple: false });
       if (!path || Array.isArray(path)) return;
@@ -440,9 +516,10 @@ export class App {
       await this.refreshLibrary();
       this.setStatus("library directory set");
     } catch (error) {
-      this.setStatus(`could not set library directory: ${String(error)}`);
+      this.setStatus(`could not set library directory: ${errorMessage(error)}`);
     } finally {
-      this.settingLibraryRoot = false;
+      this.fileOperation = null;
+      this.setFileOperationsBusy(false);
     }
   }
 
@@ -477,4 +554,10 @@ function highlightSnippet(snippet: string, query: string): string {
     result = result.replace(re, (match) => `<mark>${match}</mark>`);
   }
   return result;
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return "unknown error";
 }

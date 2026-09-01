@@ -35,6 +35,10 @@ both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
           002-the-market.md
 ```
 
+Imports are assembled in hidden `.importing-*` directories under `books/` and renamed into
+place only after all book files are written. The catalog ignores these directories, so an
+interrupted import cannot appear as a book; abandoned staging directories can be removed safely.
+
 ## Chapter note format
 
 Each note is a markdown file with YAML frontmatter:
