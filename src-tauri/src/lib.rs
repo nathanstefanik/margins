@@ -36,10 +36,10 @@ fn get_data_dir(state: State<'_, AppState>) -> Result<String, String> {
 #[tauri::command]
 fn get_library_root(state: State<'_, AppState>) -> Result<String, String> {
     Ok(state
-        .config
+        .library
         .lock()
         .map_err(|e| e.to_string())?
-        .library_root()
+        .root()
         .display()
         .to_string())
 }
@@ -153,10 +153,11 @@ fn remove_book(state: State<'_, AppState>, book_id: String) -> Result<(), String
 #[tauri::command]
 fn export_library(state: State<'_, AppState>, destination: String) -> Result<SyncReport, String> {
     let root = state
-        .config
+        .library
         .lock()
         .map_err(|e| e.to_string())?
-        .library_root();
+        .root()
+        .to_path_buf();
     sync::export_library(root, PathBuf::from(destination)).map_err(|e| e.to_string())
 }
 
@@ -167,10 +168,11 @@ fn import_library(
     merge: bool,
 ) -> Result<SyncReport, String> {
     let destination = state
-        .config
+        .library
         .lock()
         .map_err(|e| e.to_string())?
-        .library_root();
+        .root()
+        .to_path_buf();
     let report = sync::import_library(PathBuf::from(source), destination, merge)
         .map_err(|e| e.to_string())?;
 
@@ -180,22 +182,43 @@ fn import_library(
 #[tauri::command]
 fn set_library_root(state: State<'_, AppState>, path: String) -> Result<String, String> {
     let new_root = PathBuf::from(&path);
-    let root = {
-        let mut config = state.config.lock().map_err(|e| e.to_string())?;
-        config
-            .set_library_root(new_root.clone())
-            .map_err(|e| e.to_string())?;
-        config.library_root()
-    };
+
+    let previous_root = state
+        .library
+        .lock()
+        .map_err(|e| e.to_string())?
+        .root()
+        .to_path_buf();
 
     state
         .library
         .lock()
         .map_err(|e| e.to_string())?
-        .set_root(root.clone())
+        .set_root(new_root.clone())
         .map_err(|e| e.to_string())?;
 
-    Ok(root.display().to_string())
+    let config_result = match state.config.lock() {
+        Ok(mut config) => config
+            .set_library_root(new_root.clone())
+            .map_err(|e| e.to_string()),
+        Err(error) => Err(error.to_string()),
+    };
+
+    if let Err(error) = config_result {
+        let restore_result = match state.library.lock() {
+            Ok(mut library) => library.set_root(previous_root).map_err(|e| e.to_string()),
+            Err(restore_error) => Err(restore_error.to_string()),
+        };
+
+        if let Err(restore_error) = restore_result {
+            return Err(format!(
+                "could not save library directory: {error}; could not restore active directory: {restore_error}"
+            ));
+        }
+        return Err(error);
+    }
+
+    Ok(new_root.display().to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
