@@ -13,7 +13,10 @@ Margins stores everything as plain files under a single library root. The layout
 | Linux | `~/.local/share/margins` |
 | macOS | `~/Library/Application Support/margins` |
 
-Override with `MARGINS_DATA_DIR` or point `MARGINS_LIBRARY_ROOT` at a synced folder.
+Override the app data directory with `MARGINS_DATA_DIR`, or point `MARGINS_LIBRARY_ROOT` at a
+synced folder. The in-app directory picker (`R` or `:root`) saves the selected path in
+`{data_dir}/config.json`; the library files themselves stay under the selected directory. When
+both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
 
 ## Tree
 
@@ -68,7 +71,7 @@ Your ~100 word chapter summary here.
 
 ## Sync workflow
 
-1. Set library root to your sync folder (`R` or `MARGINS_LIBRARY_ROOT`)
+1. Set the library directory to your sync folder (`R` or `MARGINS_LIBRARY_ROOT`)
 2. Read on machine A; notes write as plain files
 3. Sync folder replicates to machine B or external drive
 4. Use **export** / **import** for one-shot copies without changing root
