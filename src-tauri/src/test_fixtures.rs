@@ -40,8 +40,8 @@ pub fn write_sample_epub(dir: &Path, filename: &str) -> PathBuf {
     <dc:identifier id="uid">urn:margins:test</dc:identifier>
   </metadata>
   <manifest>
-    <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
-    <item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+    <item href="chapter1.xhtml" id="c1" media-type="application/xhtml+xml"/>
+    <item href="chapter2.xhtml" id="c2" media-type="application/xhtml+xml"/>
   </manifest>
   <spine>
     <itemref idref="c1"/>
