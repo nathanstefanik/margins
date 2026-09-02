@@ -334,6 +334,7 @@ mod tests {
             source_filename: "sample.epub".into(),
             chapters: vec![chapter.clone()],
             cover: None,
+            progress_percent: None,
         };
         fs::create_dir_all(dir.join("notes/chapters")).unwrap();
         fs::write(

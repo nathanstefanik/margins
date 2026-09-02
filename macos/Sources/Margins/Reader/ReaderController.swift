@@ -102,10 +102,14 @@ final class ReaderController: NSObject {
         components.scheme = "margins-reader"
         components.host = "app"
         components.path = "/reader.html"
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "book", value: bookID),
             URLQueryItem(name: "chapter", value: chapterHref),
         ]
+        if let cfi = reader.resumeCfi {
+            queryItems.append(URLQueryItem(name: "cfi", value: cfi))
+        }
+        components.queryItems = queryItems
         return components.url
     }
 }
@@ -141,7 +145,12 @@ extension ReaderController: WKScriptMessageHandler {
         case "relocated":
             let page = (body["page"] as? NSNumber)?.intValue ?? 1
             let totalPages = (body["totalPages"] as? NSNumber)?.intValue ?? 0
-            reader.relocated(page: page, totalPages: totalPages, href: body["href"] as? String)
+            reader.relocated(
+                page: page,
+                totalPages: totalPages,
+                href: body["href"] as? String,
+                cfi: body["cfi"] as? String
+            )
         default:
             break
         }

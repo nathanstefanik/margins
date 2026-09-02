@@ -155,6 +155,31 @@ public final class LibraryModel {
         }
     }
 
+    /// Opens a book at its saved reading position (chapter + CFI), falling
+    /// back to the first chapter for books never opened. Used by Enter,
+    /// double-click, and the detail view's Read button; explicit chapter
+    /// jumps still open that chapter directly.
+    public func openBookResuming(id bookID: String) async {
+        await selectBook(id: bookID)
+        guard let book = selectedBook, !book.chapters.isEmpty, let reader else { return }
+        var target = book.chapters[0]
+        var cfi: String?
+        if let store,
+           let position = try? await store.readingPosition(bookId: book.id),
+           let saved = book.chapters.first(where: { $0.key == position.chapterKey }) {
+            target = saved
+            cfi = position.epubCfi
+        }
+        reader.open(book: book, chapter: target)
+        reader.resume(at: cfi)
+    }
+
+    /// Persists a reading position (called from the reader's debounce).
+    public func saveReadingPosition(bookId: String, position: ReadingPosition) async {
+        guard let store else { return }
+        try? await store.saveReadingPosition(bookId: bookId, position: position)
+    }
+
     /// Moves the sidebar selection by `delta` books (shell keyboard j/k).
     public func moveLibrarySelection(_ delta: Int) {
         guard !books.isEmpty else { return }

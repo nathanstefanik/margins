@@ -39,6 +39,16 @@ public actor CoreStore {
         try core.removeBook(id: id)
     }
 
+    /// The book's saved reading position, or `nil` when it was never opened.
+    public func readingPosition(bookId: String) throws -> ReadingPosition? {
+        core.getReadingPosition(id: bookId)
+    }
+
+    /// Persists the book's reading position into the library tree.
+    public func saveReadingPosition(bookId: String, position: ReadingPosition) throws {
+        try core.saveReadingPosition(id: bookId, position: position)
+    }
+
     /// Synchronous, thread-safe EPUB byte access for the reader's scheme
     /// handler, which runs on WebKit-owned threads. `MarginsCore` is
     /// `@unchecked Sendable` and internally `Mutex`-guarded, so calling it

@@ -19,6 +19,11 @@ struct BookRowView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if let percent = book.progressPercent, percent > 0 {
+                    ProgressView(value: min(percent, 100), total: 100)
+                        .progressViewStyle(.linear)
+                        .controlSize(.small)
+                }
             }
         }
         .padding(.vertical, 2)

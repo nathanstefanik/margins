@@ -227,10 +227,7 @@ final class ShellKeyboardController {
     }
 
     private func openSelectedBook() {
-        Task {
-            await model.loadSelectedBook()
-            guard let book = model.selectedBook, let first = book.chapters.first else { return }
-            reader.open(book: book, chapter: first)
-        }
+        guard let id = model.selectedBookID else { return }
+        Task { await model.openBookResuming(id: id) }
     }
 }

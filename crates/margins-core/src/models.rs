@@ -13,6 +13,10 @@ pub struct BookSummary {
     /// `cover.jpg`), or `None` when the book has no cover.
     #[serde(default)]
     pub cover: Option<String>,
+    /// Percent complete (0–100) from the book's reading position, or `None`
+    /// when the book was never opened.
+    #[serde(default)]
+    pub progress_percent: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +41,22 @@ pub struct BookMeta {
     /// so the library tree stays portable across machines and sync targets.
     #[serde(default)]
     pub cover: Option<String>,
+    /// Percent complete (0–100) joined from the book's reading position.
+    /// Never persisted into `meta.json` — it lives in `position.json`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress_percent: Option<f64>,
+}
+
+/// Where a reader left off in a book, stored as
+/// `books/{book_id}/position.json` so it syncs with the library tree.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadingPosition {
+    pub chapter_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epub_cfi: Option<String>,
+    /// Percent complete for the whole book, clamped to 0–100.
+    pub percent: f64,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

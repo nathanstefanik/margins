@@ -14,6 +14,9 @@ struct SidebarView: View {
                 ForEach(model.books) { book in
                     BookRowView(book: book)
                         .tag(book.id)
+                        .onTapGesture(count: 2) {
+                            Task { await model.openBookResuming(id: book.id) }
+                        }
                         .contextMenu {
                             Button("Remove…", role: .destructive) {
                                 requestRemoval(of: book)
