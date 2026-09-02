@@ -46,6 +46,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "Margins",
+            dependencies: ["MarginsCore", "MarginsModel"]
+        ),
+        // UI-agnostic model layer for the library browser (import, remove,
+        // selection, errors). Separate target so MarginsTests can unit-test
+        // it without touching SwiftUI.
+        .target(
+            name: "MarginsModel",
             dependencies: ["MarginsCore"]
         ),
         // Swift Testing tests. This is an executable rather than a
@@ -56,7 +63,7 @@ let package = Package(
         // bug is fixed or full Xcode (xcodebuild) becomes available.
         .executableTarget(
             name: "MarginsTests",
-            dependencies: ["MarginsCore"],
+            dependencies: ["MarginsCore", "MarginsModel"],
             swiftSettings: [
                 .unsafeFlags(["-F\(cltDeveloperFrameworks)"])
             ],
