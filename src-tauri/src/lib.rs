@@ -1,17 +1,8 @@
-mod config;
-mod epub_meta;
-mod library;
-mod models;
-mod notes;
-mod sync;
-
-#[cfg(test)]
-mod test_fixtures;
-
-use config::AppConfig;
-use library::Library;
-use models::{
-    BookMeta, BookSummary, ChapterNote, ChapterRef, NoteFrontmatter, NoteSearchHit, SyncReport,
+use margins_core::notes;
+use margins_core::sync;
+use margins_core::{
+    AppConfig, BookMeta, BookSummary, ChapterNote, ChapterRef, Library, NoteFrontmatter,
+    NoteSearchHit, SyncReport,
 };
 use serde::Serialize;
 use std::path::PathBuf;
