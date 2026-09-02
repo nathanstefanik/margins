@@ -8,9 +8,18 @@
 const readerParams = new URLSearchParams(window.location.search);
 const readerBookId = readerParams.get("book");
 const readerStartHref = readerParams.get("chapter");
+// Saved reading position: an epub.js CFI takes precedence over the chapter
+// href so a resumed book opens on the same page.
+const readerStartCfi = readerParams.get("cfi");
 
 let readerBook = null;
 let readerRendition = null;
+// Latest typography spec from the shell: {fontSize, lineHeight, lineWidthCh}.
+// Applied as soon as the rendition exists and to every section as it loads.
+let readerTypography = null;
+// True once the first display finished; relayouts are only queued after that.
+let readerOpened = false;
+let readerRelayoutTimer = null;
 
 async function readerOpen() {
   if (!readerBookId) {
@@ -33,11 +42,27 @@ async function readerOpen() {
   });
 
   readerRendition.hooks.content.register(readerPreserveAspectRatio);
+  readerRendition.hooks.content.register(readerStyleContents);
+  readerRendition.on("relocated", readerReportRelocated);
 
-  await readerRendition.display(readerStartHref || undefined);
+  // Preferences may have arrived before the book finished opening.
+  readerApplyViewerWidth();
+
+  try {
+    await readerRendition.display(readerStartCfi || readerStartHref || undefined);
+  } catch (error) {
+    // A stale CFI (externally updated EPUB, position synced from another
+    // machine) must not brick the reader: fall back to the chapter top.
+    if (readerStartCfi) {
+      await readerRendition.display(readerStartHref || undefined);
+    } else {
+      throw error;
+    }
+  }
+  readerOpened = true;
 }
 
-// Keep images at their intrinsic aspect ratio: the paginated columns would
+// Keeps images at their intrinsic aspect ratio: the paginated columns would
 // otherwise stretch content to fill the window's shape, and Gutenberg-style
 // covers use SVGs with preserveAspectRatio="none".
 function readerPreserveAspectRatio(contents) {
@@ -55,6 +80,94 @@ function readerPreserveAspectRatio(contents) {
     .forEach((svg) => {
       svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
     });
+}
+
+// Typography (called from Swift): constrain the text column in the outer
+// page, then style each section's content document. Font size goes on the
+// root (so `rem`-based publisher styles scale) with the body inheriting, so
+// publisher `body` font rules don't win; `!important` inline styles sit in
+// the same layer epub.js itself uses for layout, so nothing accumulates.
+function readerApplyTypography(fontSize, lineHeight, lineWidthCh) {
+  readerTypography = { fontSize: fontSize, lineHeight: lineHeight, lineWidthCh: lineWidthCh };
+  readerApplyViewerWidth();
+  if (readerRendition) {
+    readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
+    readerQueueRelayout();
+  }
+}
+
+function readerApplyViewerWidth() {
+  const viewer = document.getElementById("viewer");
+  if (!viewer || !readerTypography) {
+    return;
+  }
+  const width = readerTypography.lineWidthCh;
+  if (width > 0) {
+    // Line width is the target measure in characters per line of reading
+    // text, so the column scales with font size: stepping the font size
+    // widens the column rather than shrinking the measure.
+    const scaled = width * (readerTypography.fontSize / 100);
+    viewer.style.maxWidth = `${scaled}ch`;
+    viewer.style.margin = "0 auto";
+  } else {
+    viewer.style.maxWidth = "none";
+    viewer.style.margin = "";
+  }
+}
+
+// The stage only re-lays out on window resizes (epub.js listens for those
+// exclusively), so changing the inner viewer's width must force one: without
+// it the columns keep the old pixel width and the next page peeks into the
+// wider viewport, cut off. rendition.resize() re-measures the stage,
+// recomputes the column layout, and re-displays at the current position.
+function readerQueueRelayout() {
+  if (!readerOpened || !readerRendition) {
+    return;
+  }
+  if (readerRelayoutTimer) {
+    clearTimeout(readerRelayoutTimer);
+  }
+  readerRelayoutTimer = setTimeout(() => {
+    readerRelayoutTimer = null;
+    if (readerRendition) {
+      readerRendition.resize();
+    }
+  }, 120);
+}
+
+function readerStyleContents(contents) {
+  if (!readerTypography || !contents || !contents.document) {
+    return;
+  }
+  const doc = contents.document;
+  if (doc.documentElement) {
+    doc.documentElement.style.setProperty("font-size", `${readerTypography.fontSize}%`, "important");
+  }
+  const body = contents.content || doc.body;
+  if (body) {
+    body.style.setProperty("font-size", "inherit", "important");
+    body.style.setProperty("line-height", String(readerTypography.lineHeight), "important");
+  }
+}
+
+// Forward relocation to the shell: page position within the chapter for the
+// progress footer, plus the section href and the exact CFI so the shell can
+// follow chapter changes made by paging across boundaries and save the
+// reading position.
+function readerReportRelocated(location) {
+  const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.reader;
+  if (!handler) {
+    return;
+  }
+  const start = location && location.start;
+  const displayed = (start && start.displayed) || {};
+  handler.postMessage({
+    type: "relocated",
+    href: start && start.href ? start.href : null,
+    cfi: start && start.cfi ? start.cfi : null,
+    page: displayed.page || 1,
+    totalPages: displayed.total || 0,
+  });
 }
 
 function readerDisplay(href) {
@@ -110,6 +223,7 @@ window.readerDisplay = readerDisplay;
 window.readerScrollBy = readerScrollBy;
 window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
+window.readerApplyTypography = readerApplyTypography;
 
 readerOpen().catch((error) => {
   readerShowError(error);

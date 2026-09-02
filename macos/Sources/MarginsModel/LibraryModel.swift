@@ -14,6 +14,9 @@ public final class LibraryModel {
     public private(set) var libraryRoot = ""
     public private(set) var books: [BookSummary] = []
     public private(set) var selectedBook: BookMeta?
+    /// The selected book's notes index (`notes/_index.json`), loaded with
+    /// the book so the detail view can flag chapters that have notes.
+    public private(set) var selectedBookNotesIndex: [NoteIndexEntry] = []
     public private(set) var errorMessage: String?
 
     /// The selected book's id. Views may bind to this (e.g. sidebar list
@@ -55,6 +58,7 @@ public final class LibraryModel {
             } else {
                 selectedBook = nil
                 selectedBookID = nil
+                selectedBookNotesIndex = []
             }
         } catch {
             errorMessage = String(describing: error)
@@ -66,6 +70,7 @@ public final class LibraryModel {
         guard let store, let selectedBookID else { return }
         do {
             selectedBook = try await store.getBook(id: selectedBookID)
+            selectedBookNotesIndex = try await store.notesIndex(bookId: selectedBookID)
         } catch {
             errorMessage = String(describing: error)
         }
@@ -78,6 +83,39 @@ public final class LibraryModel {
             await loadSelectedBook()
         } else {
             selectedBook = nil
+            selectedBookNotesIndex = []
+        }
+    }
+
+    /// Points the library at a new root directory and reloads. The books and
+    /// notes move with the directory; the selection does not survive it.
+    public func setLibraryRoot(_ path: String) async {
+        guard let store else { return }
+        do {
+            try await store.setLibraryRoot(path: path)
+            selectedBookID = nil
+            selectedBook = nil
+            selectedBookNotesIndex = []
+            await refresh()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    /// Maps a book's chapters to the word counts of their notes, joined from
+    /// the notes index. Chapters without notes are absent from the result.
+    public static func noteWordCounts(
+        chapters: [ChapterMeta],
+        index: [NoteIndexEntry]
+    ) -> [String: UInt32] {
+        var counts: [String: UInt32] = [:]
+        for entry in index {
+            counts[entry.chapterKey] = entry.wordCount
+        }
+        return chapters.reduce(into: [:]) { result, chapter in
+            if let count = counts[chapter.key] {
+                result[chapter.key] = count
+            }
         }
     }
 
@@ -96,6 +134,23 @@ public final class LibraryModel {
             errorMessage = String(describing: error)
             return false
         }
+    }
+
+    /// Human-readable progress for a running import, e.g.
+    /// "Importing 2 of 3: karamazov.epub" — nil when idle.
+    public private(set) var importStatus: String?
+
+    /// Imports several EPUBs in turn, surfacing per-file progress for the
+    /// sidebar. One failed file does not stop the rest.
+    public func importEpubs(atPaths paths: [String]) async {
+        for (offset, path) in paths.enumerated() {
+            let name = URL(fileURLWithPath: path).lastPathComponent
+            importStatus = paths.count > 1
+                ? "Importing \(offset + 1) of \(paths.count): \(name)"
+                : "Importing \(name)…"
+            _ = await importEpub(atPath: path)
+        }
+        importStatus = nil
     }
 
     /// The reader state this library drives. Wired once at app startup so
@@ -117,6 +172,31 @@ public final class LibraryModel {
         }
     }
 
+    /// Opens a book at its saved reading position (chapter + CFI), falling
+    /// back to the first chapter for books never opened. Used by Enter,
+    /// double-click, and the detail view's Read button; explicit chapter
+    /// jumps still open that chapter directly.
+    public func openBookResuming(id bookID: String) async {
+        await selectBook(id: bookID)
+        guard let book = selectedBook, !book.chapters.isEmpty, let reader else { return }
+        var target = book.chapters[0]
+        var cfi: String?
+        if let store,
+           let position = try? await store.readingPosition(bookId: book.id),
+           let saved = book.chapters.first(where: { $0.key == position.chapterKey }) {
+            target = saved
+            cfi = position.epubCfi
+        }
+        reader.open(book: book, chapter: target)
+        reader.resume(at: cfi)
+    }
+
+    /// Persists a reading position (called from the reader's debounce).
+    public func saveReadingPosition(bookId: String, position: ReadingPosition) async {
+        guard let store else { return }
+        try? await store.saveReadingPosition(bookId: bookId, position: position)
+    }
+
     /// Moves the sidebar selection by `delta` books (shell keyboard j/k).
     public func moveLibrarySelection(_ delta: Int) {
         guard !books.isEmpty else { return }
@@ -127,6 +207,9 @@ public final class LibraryModel {
         selectedBookID = ids[next]
         Task { await loadSelectedBook() }
     }
+
+    /// The palette's query lifecycle (debounce, cap, recents).
+    public let search = SearchController()
 
     /// Dismisses the currently displayed error.
     public func clearError() {
@@ -151,7 +234,19 @@ public final class LibraryModel {
     /// same flag: the monitor closes the overlay on Esc because the search
     /// field's AppKit field editor consumes the key before any SwiftUI
     /// handler can see it.
-    public var searchOpen = false
+    public var searchOpen = false {
+        didSet {
+            if searchOpen { helpOpen = false }
+        }
+    }
+
+    /// Whether the keyboard-shortcuts cheat sheet is presented; mutually
+    /// exclusive with the search palette.
+    public var helpOpen = false {
+        didSet {
+            if helpOpen { searchOpen = false }
+        }
+    }
 
     /// Presents the note search overlay (`/`, ⌘F).
     public func requestSearch() {
@@ -161,6 +256,16 @@ public final class LibraryModel {
     /// Dismisses the note search overlay (Esc, click outside, opening a hit).
     public func requestSearchDismissal() {
         searchOpen = false
+    }
+
+    /// Presents the keyboard-shortcuts cheat sheet (`?`, Help menu).
+    public func requestHelp() {
+        helpOpen = true
+    }
+
+    /// Dismisses the cheat sheet (Esc, click outside).
+    public func requestHelpDismissal() {
+        helpOpen = false
     }
 
     /// Loads the note for the reader's current chapter into its state.
@@ -182,21 +287,48 @@ public final class LibraryModel {
     /// Saves the reader's current note body (markdown + YAML frontmatter).
     public func saveChapterNote(reader: ReaderModel) async {
         guard let store, let book = reader.book, let chapter = reader.chapter else { return }
+        let body = reader.noteBody
         let ref = ChapterRef(key: chapter.key, epubCfi: nil)
         do {
             let note = try await store.saveChapterNote(
                 bookId: book.id,
                 chapter: ref,
-                body: reader.noteBody,
+                body: body,
                 kind: nil
             )
             reader.noteSaved(
                 path: note.path,
                 wordCount: note.frontmatter.wordCount,
-                updatedAt: note.frontmatter.updatedAt
+                updatedAt: note.frontmatter.updatedAt,
+                savedBody: body
             )
         } catch {
             reader.noteFailed(String(describing: error))
+        }
+    }
+
+    /// Autosave target: persists an editor snapshot for a specific chapter,
+    /// independent of the reader's *current* chapter (which may already have
+    /// moved on by the time a debounced save fires).
+    public func saveChapterNoteText(bookId: String, chapterKey: String, body: String) async {
+        guard let store else { return }
+        do {
+            let book = try await store.getBook(id: bookId)
+            guard let chapter = book.chapters.first(where: { $0.key == chapterKey }) else { return }
+            let note = try await store.saveChapterNote(
+                bookId: bookId,
+                chapter: ChapterRef(key: chapter.key, epubCfi: nil),
+                body: body,
+                kind: nil
+            )
+            reader?.noteSaved(
+                path: note.path,
+                wordCount: note.frontmatter.wordCount,
+                updatedAt: note.frontmatter.updatedAt,
+                savedBody: body
+            )
+        } catch {
+            reader?.noteFailed(String(describing: error))
         }
     }
 

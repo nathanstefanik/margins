@@ -8,7 +8,9 @@ use margins_core::models::NoteFrontmatter;
 use margins_core::notes;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use types::{BookMeta, BookSummary, ChapterNote, ChapterRef, NoteSearchHit};
+use types::{
+    BookMeta, BookSummary, ChapterNote, ChapterRef, NoteIndexEntry, NoteSearchHit, ReadingPosition,
+};
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -110,27 +112,25 @@ impl MarginsCore {
     }
 
     pub fn list_books(&self) -> Result<Vec<BookSummary>, CoreError> {
-        Ok(self
-            .library
-            .lock()
-            .map_err(poisoned)?
+        let library = self.library.lock().map_err(poisoned)?;
+        Ok(library
             .list_books()?
             .into_iter()
-            .map(Into::into)
+            .map(|summary| BookSummary::from_core(summary, &library))
             .collect())
     }
 
     pub fn import_epub(&self, path: String) -> Result<BookMeta, CoreError> {
-        Ok(self
-            .library
-            .lock()
-            .map_err(poisoned)?
-            .import_epub_with_progress(PathBuf::from(path), |_, _| {})?
-            .into())
+        let library = self.library.lock().map_err(poisoned)?;
+        Ok(BookMeta::from_core(
+            library.import_epub_with_progress(PathBuf::from(path), |_, _| {})?,
+            &library,
+        ))
     }
 
     pub fn get_book(&self, id: String) -> Result<BookMeta, CoreError> {
-        Ok(self.library.lock().map_err(poisoned)?.get_book(&id)?.into())
+        let library = self.library.lock().map_err(poisoned)?;
+        Ok(BookMeta::from_core(library.get_book(&id)?, &library))
     }
 
     pub fn remove_book(&self, id: String) -> Result<(), CoreError> {
@@ -143,6 +143,26 @@ impl MarginsCore {
             .lock()
             .map_err(poisoned)?
             .read_epub_bytes(&id)?)
+    }
+
+    /// The book's saved reading position, or `None` when it was never
+    /// opened (or the position file is missing/corrupt).
+    pub fn get_reading_position(&self, id: String) -> Option<ReadingPosition> {
+        let library = self.library.lock().map_err(poisoned).ok()?;
+        library.read_position(&id).map(ReadingPosition::from_core)
+    }
+
+    /// Persists the book's reading position into the library tree.
+    pub fn save_reading_position(
+        &self,
+        id: String,
+        position: ReadingPosition,
+    ) -> Result<(), CoreError> {
+        Ok(self
+            .library
+            .lock()
+            .map_err(poisoned)?
+            .write_position(&id, position.into_core())?)
     }
 
     pub fn get_chapter_note(
@@ -184,7 +204,20 @@ impl MarginsCore {
             updated_at: None,
         };
 
-        Ok(notes::save_chapter_note(&book_dir, &chapter_meta, frontmatter, &body)?.into())
+        let saved = notes::save_chapter_note(&book_dir, &chapter_meta, frontmatter, &body)?;
+        // Keep the search index warm: update this book's docs in place.
+        library.refresh_note_index(&book_id);
+        Ok(saved.into())
+    }
+
+    pub fn get_notes_index(&self, book_id: String) -> Result<Vec<NoteIndexEntry>, CoreError> {
+        let library = self.library.lock().map_err(poisoned)?;
+        let book_dir = library.book_dir(&book_id);
+        if !book_dir.exists() {
+            return Err(CoreError::Message(format!("book not found: {book_id}")));
+        }
+        let index = notes::read_notes_index(&book_dir)?;
+        Ok(index.chapters.into_iter().map(Into::into).collect())
     }
 
     pub fn search_notes(&self, query: String) -> Result<Vec<NoteSearchHit>, CoreError> {

@@ -65,7 +65,7 @@ struct ReaderKeymapTests {
         #expect(keymap.handle(ReaderKeyEvent(key: "PageUp"), now: 0).isEmpty)
     }
 
-    @Test("library mode: j/k move the selection, Enter opens, Enter is inert in reader mode")
+    @Test("library mode: j/k move the selection, Enter opens; reader Enter enters notes focus")
     func libraryModeKeys() {
         let keymap = ReaderKeymap(mode: .library)
         #expect(keymap.handle(ReaderKeyEvent(key: "j"), now: 0) == [.moveLibrarySelection(delta: 1)])
@@ -73,7 +73,7 @@ struct ReaderKeymapTests {
         #expect(keymap.handle(ReaderKeyEvent(key: "Enter"), now: 0) == [.openSelectedBook])
 
         keymap.setMode(.reader)
-        #expect(keymap.handle(ReaderKeyEvent(key: "Enter"), now: 0).isEmpty)
+        #expect(keymap.handle(ReaderKeyEvent(key: "Enter"), now: 0) == [.focusNotes])
     }
 
     @Test("i, /, l, Escape, and o map to their actions")

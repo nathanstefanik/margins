@@ -38,6 +38,7 @@ public enum ReaderAction: Equatable, Sendable {
     case search
     case backToLibrary
     case importBook
+    case help
 }
 
 /// A small vim-style state machine mirroring `src/keymaps.ts`: `j`/`k`
@@ -95,6 +96,7 @@ public final class ReaderKeymap {
         case "k":
             return [mode == .library ? .moveLibrarySelection(delta: -1) : .scroll(delta: -80)]
         case "g":
+            guard mode == .reader else { return [] }
             if pendingG {
                 pendingG = false
                 pendingGSince = nil
@@ -104,25 +106,30 @@ public final class ReaderKeymap {
             pendingGSince = now
             return []
         case "G":
-            return [.scrollBottom]
+            return mode == .reader ? [.scrollBottom] : []
         case "ArrowRight", "PageDown", " ":
             return mode == .reader ? [.scroll(delta: 80)] : []
         case "ArrowLeft", "PageUp":
             return mode == .reader ? [.scroll(delta: -80)] : []
         case "n":
-            return [.nextChapter]
+            return mode == .reader ? [.nextChapter] : []
         case "p":
-            return [.previousChapter]
+            return mode == .reader ? [.previousChapter] : []
         case "i":
-            return [.focusNotes]
+            return mode == .reader ? [.focusNotes] : []
         case "/":
             return [.search]
+        case "?":
+            return [.help]
         case "l", "Escape":
-            return [.backToLibrary]
+            return mode == .reader ? [.backToLibrary] : []
         case "o":
             return [.importBook]
         case "Enter":
-            return mode == .library ? [.openSelectedBook] : []
+            // Library: open the selected book. Reader: enter the notes
+            // focus (nvim-style `i`/Enter in, Esc out; repeated presses
+            // never type into the editor — Esc leaves it).
+            return mode == .library ? [.openSelectedBook] : [.focusNotes]
         default:
             pendingG = false
             pendingGSince = nil

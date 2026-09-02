@@ -18,4 +18,8 @@ struct ReaderWebView: NSViewRepresentable {
         // The webview is created once; chapter changes are pushed into it
         // by the coordinator itself.
     }
+
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: ReaderController) {
+        coordinator.dismantle()
+    }
 }

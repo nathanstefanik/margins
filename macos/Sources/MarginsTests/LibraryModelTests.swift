@@ -83,4 +83,48 @@ struct LibraryModelTests {
         model.clearError()
         #expect(model.errorMessage == nil)
     }
+
+    @Test("placeholder initials and tint index are deterministic")
+    func placeholderVisualsAreDeterministic() {
+        #expect(BookCoverPlaceholder.initials(for: "The Brothers Karamazov") == "TB")
+        #expect(BookCoverPlaceholder.initials(for: "moby dick") == "MD")
+        #expect(BookCoverPlaceholder.initials(for: "Dune") == "D")
+        #expect(BookCoverPlaceholder.initials(for: "") == "")
+
+        let paletteSize = 8
+        for title in ["Dune", "1984", "A Brief History of Time", "Капитанская дочка", ""] {
+            let first = BookCoverPlaceholder.tintIndex(for: title, paletteSize: paletteSize)
+            let second = BookCoverPlaceholder.tintIndex(for: title, paletteSize: paletteSize)
+            #expect(first == second, "tint must not depend on process state")
+            #expect(first >= 0 && first < paletteSize)
+        }
+    }
+
+    @Test("chapter → note word count join from the notes index")
+    @MainActor
+    func chapterNoteWordCountJoin() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteBody = "one two three four"
+        await model.saveChapterNote(reader: reader)
+        #expect(reader.notesError == nil)
+
+        // Reloading the book (as the detail view does on selection) brings
+        // the notes index along; the join then flags only chapter one.
+        await model.loadSelectedBook()
+        let counts = LibraryModel.noteWordCounts(
+            chapters: book.chapters,
+            index: model.selectedBookNotesIndex
+        )
+        #expect(counts[book.chapters[0].key] == 4)
+        #expect(counts.count == 1)
+        #expect(counts[book.chapters[1].key] == nil)
+    }
 }

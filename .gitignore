@@ -47,3 +47,6 @@ npm-debug.log*
 
 # Tauri
 src-tauri/WixTools/
+
+# Icon build intermediates (regenerate with scripts/make-icon.swift)
+scripts/assets/Margins.iconset/

@@ -8,6 +8,15 @@ struct MarginsApp: App {
 
     init() {
         model.reader = reader
+        reader.positionSaver = { [weak model] bookId, position in
+            await model?.saveReadingPosition(bookId: bookId, position: position)
+        }
+        reader.noteSaver = { [weak model] bookId, chapterKey, body in
+            await model?.saveChapterNoteText(bookId: bookId, chapterKey: chapterKey, body: body)
+        }
+        model.search.setExecutor { [weak model] text in
+            await model?.searchNotes(text) ?? []
+        }
     }
 
     var body: some Scene {
@@ -20,8 +29,7 @@ struct MarginsApp: App {
             MarginsCommands(model: model, reader: reader)
         }
         Settings {
-            Text("Nothing to configure yet.")
-                .frame(minWidth: 280, minHeight: 120)
+            SettingsView(model: model, reader: reader)
         }
     }
 }

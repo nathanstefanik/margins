@@ -1,5 +1,5 @@
 use crate::epub_meta;
-use crate::models::{BookMeta, BookSummary, LibraryIndex, NoteSearchHit};
+use crate::models::{BookMeta, BookSummary, LibraryIndex, NoteSearchHit, ReadingPosition};
 use crate::notes;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
@@ -25,19 +25,26 @@ pub enum LibraryError {
 
 pub struct Library {
     root: PathBuf,
+    search_index: std::sync::Mutex<crate::search::SearchEngine>,
 }
 
 impl Library {
     pub fn open(root: PathBuf) -> Result<Self, LibraryError> {
         fs::create_dir_all(&root)?;
         fs::create_dir_all(root.join("books"))?;
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            search_index: std::sync::Mutex::new(crate::search::SearchEngine::new()),
+        })
     }
 
     pub fn set_root(&mut self, root: PathBuf) -> Result<(), LibraryError> {
         fs::create_dir_all(&root)?;
         fs::create_dir_all(root.join("books"))?;
         self.root = root;
+        // The cached index refers to the previous root; the next query
+        // rebuilds it against the new one.
+        self.search_index()?.clear();
         Ok(())
     }
 
@@ -71,6 +78,11 @@ impl Library {
             }
             let meta: BookMeta = serde_json::from_str(&fs::read_to_string(meta_path)?)?;
             let notes_count = notes::count_notes(&entry.path())?;
+            let cover = meta
+                .cover
+                .clone()
+                .or_else(|| self.backfill_cover(&entry.path(), &meta));
+            let progress_percent = self.read_position(&meta.id).map(|p| p.percent);
             summaries.push(BookSummary {
                 id: meta.id,
                 title: meta.title,
@@ -78,6 +90,8 @@ impl Library {
                 added_at: meta.added_at,
                 chapter_count: meta.chapters.len(),
                 notes_count,
+                cover,
+                progress_percent,
             });
         }
 
@@ -91,7 +105,35 @@ impl Library {
         if !meta_path.exists() {
             return Err(LibraryError::Other(format!("book not found: {book_id}")));
         }
-        Ok(serde_json::from_str(&fs::read_to_string(meta_path)?)?)
+        let mut meta: BookMeta = serde_json::from_str(&fs::read_to_string(meta_path)?)?;
+        meta.progress_percent = self.read_position(book_id).map(|p| p.percent);
+        Ok(meta)
+    }
+
+    /// The book's saved reading position, or `None` when it was never
+    /// opened or the position file is missing/corrupt (a corrupt file must
+    /// not break the library — the reader falls back to chapter 1).
+    pub fn read_position(&self, book_id: &str) -> Option<ReadingPosition> {
+        let path = self.book_dir(book_id).join("position.json");
+        let raw = fs::read_to_string(path).ok()?;
+        serde_json::from_str(&raw).ok()
+    }
+
+    /// Saves the book's reading position. Percent is clamped to 0–100.
+    pub fn write_position(
+        &self,
+        book_id: &str,
+        mut position: ReadingPosition,
+    ) -> Result<(), LibraryError> {
+        let book_dir = self.book_dir(book_id);
+        if !book_dir.is_dir() {
+            return Err(LibraryError::Other(format!("book not found: {book_id}")));
+        }
+        position.percent = position.percent.clamp(0.0, 100.0);
+        position.updated_at = Utc::now();
+        let raw = serde_json::to_string_pretty(&position)?;
+        fs::write(book_dir.join("position.json"), raw)?;
+        Ok(())
     }
 
     pub fn read_epub_bytes(&self, book_id: &str) -> Result<Vec<u8>, LibraryError> {
@@ -156,14 +198,35 @@ impl Library {
             },
         )?;
 
+        let epub_meta::EpubInfo {
+            title,
+            author,
+            language,
+            chapters,
+            cover,
+        } = info;
+
+        let mut cover_name = cover
+            .as_ref()
+            .map(|cover| format!("cover.{}", cover.extension));
+        if let (Some(cover), Some(name)) = (&cover, &cover_name) {
+            // A cover is a nice-to-have: a failed write must not fail the
+            // import, so the meta records the name only on success.
+            if fs::write(staging.path.join(name), &cover.bytes).is_err() {
+                cover_name = None;
+            }
+        }
+
         let meta = BookMeta {
             id: book_id.clone(),
-            title: info.title,
-            author: info.author,
-            language: info.language,
+            title,
+            author,
+            language,
             added_at: Utc::now(),
             source_filename,
-            chapters: info.chapters,
+            chapters,
+            cover: cover_name,
+            progress_percent: None,
         };
 
         on_progress(95, "saving");
@@ -194,7 +257,45 @@ impl Library {
     }
 
     pub fn search_notes(&self, query: &str) -> Result<Vec<NoteSearchHit>, LibraryError> {
-        Ok(notes::search_notes(&self.root, query)?)
+        Ok(self.search_index()?.query(&self.root, query))
+    }
+
+    /// Locks the search index, recovering from poisoning (the index is
+    /// rebuildable, so a panicked query must not take search down).
+    fn search_index(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, crate::search::SearchEngine>, LibraryError> {
+        self.search_index
+            .lock()
+            .or_else(|poisoned| Ok(poisoned.into_inner()))
+            .map_err(|_: LibraryError| LibraryError::Other("search index unavailable".into()))
+    }
+    /// Updates the search index for one book in place after a core save.
+    pub fn refresh_note_index(&self, book_id: &str) {
+        if let Ok(mut index) = self.search_index() {
+            index.refresh_book(&self.root, book_id);
+        }
+    }
+
+    /// One-shot cover backfill for books imported before covers were
+    /// extracted: pulls the cover out of the retained `source.epub`, writes
+    /// it into the book directory, and records the file name in `meta.json`.
+    /// Books whose EPUB has no cover are re-probed on each scan (a cheap zip
+    /// central-directory read at personal-library scale).
+    fn backfill_cover(&self, book_dir: &Path, meta: &BookMeta) -> Option<String> {
+        let source = book_dir.join("source.epub");
+        if !source.is_file() {
+            return None;
+        }
+        let cover = epub_meta::extract_cover_from_epub(&source)?;
+        let name = format!("cover.{}", cover.extension);
+        fs::write(book_dir.join(&name), &cover.bytes).ok()?;
+        let mut updated = meta.clone();
+        updated.cover = Some(name.clone());
+        if let Ok(raw) = serde_json::to_string_pretty(&updated) {
+            let _ = fs::write(book_dir.join("meta.json"), raw);
+        }
+        Some(name)
     }
 
     fn write_index(&self, summaries: &[BookSummary]) -> Result<(), LibraryError> {
@@ -318,7 +419,168 @@ fn progress_between(start: u8, end: u8, processed: u64, total: u64) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_fixtures::write_sample_epub;
+    use crate::test_fixtures::{
+        write_sample_epub, write_sample_epub_covered, SampleCover, SAMPLE_COVER_PNG,
+    };
+
+    #[test]
+    fn import_stores_cover_and_reports_it_in_the_catalog() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub_covered(tmp.path(), "covered.epub", SampleCover::Epub3);
+
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+        assert_eq!(meta.cover.as_deref(), Some("cover.png"));
+
+        let cover_path = library.book_dir(&meta.id).join("cover.png");
+        assert_eq!(fs::read(&cover_path).unwrap(), SAMPLE_COVER_PNG);
+
+        let listed = library.list_books().unwrap();
+        assert_eq!(listed[0].cover.as_deref(), Some("cover.png"));
+
+        let index = fs::read_to_string(tmp.path().join("library/index.json")).unwrap();
+        assert!(
+            index.contains("\"cover\": \"cover.png\"") || index.contains("\"cover\":\"cover.png\"")
+        );
+
+        let fetched = library.get_book(&meta.id).unwrap();
+        assert_eq!(fetched.cover.as_deref(), Some("cover.png"));
+    }
+
+    #[test]
+    fn import_without_cover_succeeds_with_null_cover() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "plain.epub");
+
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+        assert!(meta.cover.is_none());
+        assert!(library.list_books().unwrap()[0].cover.is_none());
+    }
+
+    #[test]
+    fn scan_backfills_covers_for_legacy_books() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub_covered(tmp.path(), "legacy.epub", SampleCover::Epub3);
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+
+        // Simulate a book imported before cover extraction existed.
+        let book_dir = library.book_dir(&meta.id);
+        let mut meta_json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(book_dir.join("meta.json")).unwrap()).unwrap();
+        meta_json.as_object_mut().unwrap().remove("cover");
+        fs::write(
+            book_dir.join("meta.json"),
+            serde_json::to_string_pretty(&meta_json).unwrap(),
+        )
+        .unwrap();
+        fs::remove_file(book_dir.join("cover.png")).unwrap();
+
+        // The next scan extracts the cover again and persists it.
+        let listed = library.list_books().unwrap();
+        assert_eq!(listed[0].cover.as_deref(), Some("cover.png"));
+        assert_eq!(
+            fs::read(book_dir.join("cover.png")).unwrap(),
+            SAMPLE_COVER_PNG
+        );
+        let stored: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(book_dir.join("meta.json")).unwrap()).unwrap();
+        assert_eq!(stored["cover"], "cover.png");
+
+        // ... and a follow-up scan does not duplicate or drop it.
+        let listed_again = library.list_books().unwrap();
+        assert_eq!(listed_again[0].cover.as_deref(), Some("cover.png"));
+    }
+
+    #[test]
+    fn scan_tolerates_a_corrupt_source_when_backfilling() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "plain.epub");
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+
+        // Corrupt the source: the scan must still list the book, coverless.
+        fs::write(library.book_dir(&meta.id).join("source.epub"), b"junk").unwrap();
+        let listed = library.list_books().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].cover.is_none());
+    }
+
+    #[test]
+    fn reading_position_round_trips_and_clamps_percent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+
+        // Never opened: no position.
+        assert!(library.read_position(&meta.id).is_none());
+
+        let position = ReadingPosition {
+            chapter_key: "002".into(),
+            epub_cfi: Some("epubcfi(/6/4!/4/2)".into()),
+            percent: 42.5,
+            updated_at: Utc::now(),
+        };
+        library.write_position(&meta.id, position).unwrap();
+
+        let read = library.read_position(&meta.id).unwrap();
+        assert_eq!(read.chapter_key, "002");
+        assert_eq!(read.epub_cfi.as_deref(), Some("epubcfi(/6/4!/4/2)"));
+        assert!((read.percent - 42.5).abs() < f64::EPSILON);
+
+        // Percent clamps to 0–100.
+        library
+            .write_position(
+                &meta.id,
+                ReadingPosition {
+                    chapter_key: "002".into(),
+                    epub_cfi: None,
+                    percent: 150.0,
+                    updated_at: Utc::now(),
+                },
+            )
+            .unwrap();
+        assert_eq!(library.read_position(&meta.id).unwrap().percent, 100.0);
+
+        library
+            .write_position(
+                &meta.id,
+                ReadingPosition {
+                    chapter_key: "001".into(),
+                    epub_cfi: None,
+                    percent: -5.0,
+                    updated_at: Utc::now(),
+                },
+            )
+            .unwrap();
+        assert_eq!(library.read_position(&meta.id).unwrap().percent, 0.0);
+
+        // The catalog and the book detail join the percent through.
+        assert_eq!(library.list_books().unwrap()[0].progress_percent, Some(0.0));
+        assert_eq!(
+            library.get_book(&meta.id).unwrap().progress_percent,
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn corrupt_position_file_falls_back_to_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+
+        fs::write(
+            library.book_dir(&meta.id).join("position.json"),
+            b"not json",
+        )
+        .unwrap();
+        assert!(library.read_position(&meta.id).is_none());
+        assert_eq!(library.list_books().unwrap()[0].progress_percent, None);
+        assert_eq!(library.get_book(&meta.id).unwrap().progress_percent, None);
+    }
 
     #[test]
     fn import_list_get_remove_roundtrip() {
