@@ -1,6 +1,6 @@
 # Margins — agent guide
 
-EPUB reader (Tauri 2 + Rust + TypeScript). Annotations live on disk as markdown + JSON — see `docs/storage.md`.
+EPUB reader with two frontends over one Rust core: Tauri 2 + TypeScript (Linux/desktop) and a native SwiftUI app (macOS, `macos/`). Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`; macOS implementation plan: `docs/macos-plan.md`.
 
 ## Commit messages
 
@@ -26,17 +26,26 @@ DOCS Document library sync workflow
 ## Project map
 
 ```
-src-tauri/src/
-  config.rs      # data dir / library root from env
-  library.rs     # import EPUB, book catalog
-  notes.rs       # markdown + YAML frontmatter CRUD
-  sync.rs        # export/import library trees
-  epub_meta.rs   # EPUB spine/metadata parsing
-src/
-  app.ts         # UI orchestration
-  reader.ts      # epub.js wrapper
-  keymaps.ts     # vim-style bindings
-  api.ts         # Tauri invoke wrappers
+crates/margins-core/   # the domain core (no Tauri, no UI)
+  config.rs            # data dir / library root from env
+  library.rs           # import EPUB, book catalog
+  notes.rs             # markdown + YAML frontmatter CRUD
+  sync.rs              # export/import library trees
+  epub_meta.rs         # EPUB spine/metadata parsing
+crates/margins-ffi/    # UniFFI bridge for Swift (thin)
+src-tauri/src/         # Tauri command layer over the core
+src/                   # Tauri frontend
+  app.ts               # UI orchestration
+  reader.ts            # epub.js wrapper
+  keymaps.ts           # vim-style bindings
+  api.ts               # Tauri invoke wrappers
+macos/                 # macOS SwiftUI app (SwiftPM package)
+  Package.swift        # targets: margins_ffiFFI, MarginsCore, MarginsModel, Margins, MarginsTests
+  Sources/MarginsCore/ # generated bindings + CoreStore actor
+  Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap
+  Sources/Margins/     # SwiftUI views, reader webview glue, key routing
+  Sources/MarginsTests/# Swift Testing suite (runner executable)
+scripts/               # build-core.sh, make-app.sh
 ```
 
 ## Conventions
@@ -52,9 +61,18 @@ src/
 npm install
 npm run tauri dev
 npm run tauri build
-cd src-tauri && cargo test
+cargo test --workspace        # from the repo root (covers core + tauri)
+
+make core        # rebuild margins-ffi + regenerate Swift bindings
+make mac-build   # build the macOS Swift package
+make mac-test    # run the macOS Swift Testing suite
+make mac-run     # assemble + open build/Margins.app
 ```
+
+macOS tests use Swift Testing (`import Testing`) via the `MarginsTests`
+runner executable — `swift test` silently runs nothing on a CLT-only
+toolchain, so always verify with `make mac-test`.
 
 ## Agent tasks
 
-When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding keybindings, update README and the footer keybar in `index.html`.
+When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding keybindings, update the README (both frontends) and the footer keybar in `index.html` for the Tauri app. When changing the FFI surface, run `make core` so the Swift bindings regenerate.
