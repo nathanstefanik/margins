@@ -37,9 +37,14 @@ public enum ReaderAction: Equatable, Sendable {
 }
 
 /// A small vim-style state machine mirroring `src/keymaps.ts`: `j`/`k`
-/// scroll in the reader or move the library selection in the shell, `n`/`p`
+/// move through the book in the reader or move the library selection in the
+/// shell, arrows/space/PageUp/PageDown also page in the reader, `n`/`p`
 /// change chapter, `gg`/`G` jump top/bottom, `i` focuses notes, `/` opens
 /// search, `Esc`/`l` go back, `o` imports, `Enter` opens the selected book.
+///
+/// In the paginated flow `j`/`k`/arrows turn pages (the book has no vertical
+/// overflow to scroll); `reader.js` interprets the scroll actions as
+/// `rendition.next()`/`prev()` and top/bottom as first/last page.
 ///
 /// Differences from the Tauri keymap (intentional): the pending-`g` chord
 /// expires after one second, and the second `g` of the chord is handled
@@ -92,6 +97,10 @@ public final class ReaderKeymap {
             return []
         case "G":
             return [.scrollBottom]
+        case "ArrowRight", "PageDown", " ":
+            return mode == .reader ? [.scroll(delta: 80)] : []
+        case "ArrowLeft", "PageUp":
+            return mode == .reader ? [.scroll(delta: -80)] : []
         case "n":
             return [.nextChapter]
         case "p":

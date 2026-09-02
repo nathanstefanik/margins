@@ -38,7 +38,24 @@ async function readerOpen() {
   await readerRendition.display(readerStartHref || undefined);
 }
 
+const readerForwardableKeys = new Set([
+  "j", "k", "g", "G", "n", "p", "i", "/", "l", "o",
+  "Enter", "Escape", " ", "ArrowRight", "ArrowLeft", "PageDown", "PageUp",
+]);
+
 function readerForwardKey(event) {
+  // Keys typed into form fields stay native; only the vim-style set is
+  // forwarded (and preventDefault-ed so the webview doesn't double-handle).
+  const tag = event.target && event.target.tagName
+    ? String(event.target.tagName).toUpperCase()
+    : "";
+  if (tag === "INPUT" || tag === "TEXTAREA") {
+    return;
+  }
+  if (!readerForwardableKeys.has(event.key)) {
+    return;
+  }
+  event.preventDefault();
   window.webkit?.messageHandlers?.readerKeys?.postMessage({
     key: event.key,
     ctrl: event.ctrlKey,
@@ -64,20 +81,35 @@ function readerShowError(message) {
 }
 
 function readerScrollBy(delta) {
-  const pane = document.querySelector("iframe")?.contentDocument?.documentElement;
-  if (pane) {
-    pane.scrollBy({ top: delta, behavior: "auto" });
+  if (!readerRendition) {
     return;
   }
-  document.getElementById("viewer")?.scrollBy({ top: delta, behavior: "auto" });
+  // Paginated flow has no vertical overflow: j/k step between pages.
+  if (delta > 0) {
+    readerRendition.next().catch(readerShowError);
+  } else if (delta < 0) {
+    readerRendition.prev().catch(readerShowError);
+  }
 }
 
 function readerScrollTop() {
-  readerScrollBy(-1000000);
+  if (!readerRendition) {
+    return;
+  }
+  const location = readerRendition.currentLocation();
+  if (location && location.start && location.start.href) {
+    readerRendition.display(location.start.href).catch(readerShowError);
+  }
 }
 
 function readerScrollBottom() {
-  readerScrollBy(1000000);
+  if (!readerRendition) {
+    return;
+  }
+  const location = readerRendition.currentLocation();
+  if (location && location.end && location.end.cfi) {
+    readerRendition.display(location.end.cfi).catch(readerShowError);
+  }
 }
 
 window.readerOpen = readerOpen;
