@@ -197,8 +197,8 @@ The single biggest "prefer this over Books" retention feature.
 
 **Nathan verifies**
 
-- [ ] Quit mid-chapter, relaunch, open the book — same page.
-- [ ] Sidebar progress matches reality.
+- [x] Quit mid-chapter, relaunch, open the book — same page.
+- [x] Sidebar progress matches reality.
 
 ---
 
@@ -435,7 +435,7 @@ that finishes a phase, after Nathan's sign-off on the visual items).
 | 1 | Reader typography + progress footer | Done (3d0fb29) |
 | 2 | Cover extraction (Rust core + FFI) | Done (a3f9f81) |
 | 3 | Library & book detail redesign | Done (80b2d96) |
-| 4 | Reading-position persistence | Not started |
+| 4 | Reading-position persistence | Done (3a46d83) |
 | 5 | Notes pane polish | Not started |
 | 6 | Search engine rebuild + command palette (6a/6b/6c) | Not started |
 | 7 | Discoverability, menus, settings, icon | Not started |
