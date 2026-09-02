@@ -1,8 +1,12 @@
 name: Linux CI
 
 on:
-  push:
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -41,6 +45,11 @@ jobs:
 
       - name: Audit frontend dependencies
         run: npm audit
+
+      - name: Run frontend keyboard tests
+        run: |
+          npm run test:keymap
+          npm run test:reader-keymap
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable

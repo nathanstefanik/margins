@@ -56,7 +56,10 @@ export class Keymap {
       return;
     }
 
-    const tag = target instanceof HTMLElement ? target.tagName : "";
+    const tag =
+      target && typeof target === "object" && "tagName" in target
+        ? String((target as { tagName?: unknown }).tagName).toUpperCase()
+        : "";
     const typing = tag === "INPUT" || tag === "TEXTAREA";
 
     if (this.mode === "notes" && typing) {
