@@ -5,7 +5,10 @@ node_modules/
 dist/
 /target/
 src-tauri/target/
-macos/Sources/MarginsCoreFFI/Generated/
+macos/Sources/margins_ffiFFI/include/
+macos/Sources/MarginsCore/Generated/
+macos/.build/
+/build/
 
 # Environment and secrets
 .env
