@@ -1,6 +1,6 @@
 # Margins — agent guide
 
-EPUB reader with two frontends over one Rust core: Tauri 2 + TypeScript (Linux/desktop) and a native SwiftUI app (macOS, `macos/`). Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`; macOS implementation plan: `docs/macos-plan.md`.
+EPUB reader with two frontends over one Rust core: Tauri 2 + TypeScript (Linux/desktop) and a native SwiftUI app (macOS, `macos/`). Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`.
 
 ## Commit messages
 
