@@ -96,10 +96,10 @@ refine within it; theming is future work.
 
 **Nathan verifies**
 
-- [ ] Text column is comfortable at full-screen width (no 40cm-long lines).
-- [ ] Typography popover feels native and minimal.
-- [ ] Font size survives quit/relaunch.
-- [ ] Progress footer is legible but ignorable.
+- [x] Text column is comfortable at full-screen width (no 40cm-long lines).
+- [x] Typography popover feels native and minimal.
+- [x] Font size survives quit/relaunch.
+- [x] Progress footer is legible but ignorable.
 
 ---
 
@@ -432,7 +432,7 @@ that finishes a phase, after Nathan's sign-off on the visual items).
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 1 | Reader typography + progress footer | Not started |
+| 1 | Reader typography + progress footer | Done (3d0fb29) |
 | 2 | Cover extraction (Rust core + FFI) | Not started |
 | 3 | Library & book detail redesign | Not started |
 | 4 | Reading-position persistence | Not started |
