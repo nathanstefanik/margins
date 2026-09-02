@@ -47,8 +47,18 @@ public actor CoreStore {
         try core.readEpubBytes(id: id)
     }
 
+    public func setLibraryRoot(path: String) throws {
+        _ = try core.setLibraryRoot(path: path)
+    }
+
     public func getChapterNote(bookId: String, chapterKey: String) throws -> ChapterNote {
         try core.getChapterNote(bookId: bookId, chapterKey: chapterKey)
+    }
+
+    /// The book's notes index (`notes/_index.json`): which chapters have
+    /// notes, with word counts. Empty when the book has no notes.
+    public func notesIndex(bookId: String) throws -> [NoteIndexEntry] {
+        try core.getNotesIndex(bookId: bookId)
     }
 
     public func saveChapterNote(
