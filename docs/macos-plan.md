@@ -12,7 +12,7 @@ This plan is written to be executed by an AI agent phase by phase. Read
 | Phase | What | Status |
 |-------|------|--------|
 | 0 | Extract `margins-core` workspace crate | **done** — `728ab6c` |
-| 1 | Karamazov fixture + core import tests | **done** |
+| 1 | Real EPUB fixture + core import tests | **done** |
 | 2 | `margins-ffi` UniFFI bindings | not started |
 | 3 | SwiftPM app skeleton / bridge proof | not started |
 | 4 | Library UI and import | not started |
@@ -44,11 +44,9 @@ Next: **Phase 2**.
 - Existing frontend already renders with **epub.js fed whole-book bytes**
   (`src/reader.ts`: `ePub(bytes.buffer)` after `read_epub_bytes`). The macOS
   reader mirrors this exactly.
-- Test fixture: `fixtures/dostoyevsky_the_karamazov_brothers.epub` — Project
-  Gutenberg EPUB 28054 (Garnett; title `The Brothers Karamazov`, author
-  `Fyodor Dostoyevsky`, **100** spine items after `parse_epub` filtering).
-  The Downloads path in the original spec was an Oxford/Avsey edition (ISBN
-  9780199536375) and was not copied.
+- Real-book checks use whatever `*.epub` files are in `fixtures/` — any one
+  book is enough; none of the title, author, or chapter count is hardcoded.
+  A Karamazov file may sit there as an example. Do not special-case a book.
 - Commit conventions are in `AGENTS.md` (`FEAT`/`BUG`/`CHORE`/`REFACTOR`/`DOCS`
   prefix + imperative summary).
 
@@ -89,6 +87,9 @@ Next: **Phase 2**.
    phase in the same run unless explicitly told to keep going.
 6. If a tool is missing or an approach in this plan turns out wrong, say so at
    the stop point instead of silently substituting something else.
+7. Named books in this plan (Karamazov, etc.) are **examples for humans**,
+   not values to bake into tests or code. Fixture tests read `fixtures/*.epub`
+   and check parser/import agreement (non-empty metadata, spine item present).
 
 ## Target architecture
 
@@ -136,12 +137,12 @@ the Linux/desktop Tauri app still functions.
 
 ## Phase 1 — Fixture + core-level import tests — DONE
 
-1. `fixtures/dostoyevsky_the_karamazov_brothers.epub` is Gutenberg 28054, not
-   the Downloads OUP/Avsey file (copyrighted translation; see Ground truth).
-2. Integration test `crates/margins-core/tests/import_karamazov.rs` imports
-   into a `tempfile` library dir:
-   - title `The Brothers Karamazov`, author `Fyodor Dostoyevsky`;
-   - **100** chapters;
+1. `fixtures/*.epub` holds example real books (optional Karamazov file is
+   one such example, not a required identity).
+2. Integration test `crates/margins-core/tests/import_real_epub.rs` imports
+   every `fixtures/*.epub` into a `tempfile` library dir and checks, per file:
+   - title and author are non-empty and match `parse_epub` on the same file;
+   - chapter count matches `parse_epub` (not a hardcoded number);
    - first spine href exists in the imported `source.epub` ZIP.
 3. `bdbbfcd` only changed the sample fixture + XML parser — there was no
    named test. Added `parse_manifest_attributes_in_either_order` and mixed
@@ -214,8 +215,9 @@ cargo test --workspace
    - `make mac-test` → core + `swift test --package-path macos`
    - `make mac-run` → `make mac-app && open build/Margins.app`
 5. Swift Testing test: with `MARGINS_DATA_DIR` pointed at a temp dir, import
-   `fixtures/dostoyevsky_the_karamazov_brothers.epub` through the bridge;
-   assert title and the chapter count from Phase 1's test.
+   any `fixtures/*.epub` through the bridge; assert non-empty title/author
+   and that the chapter count matches the core parser (same contract as
+   Phase 1 — do not hardcode a book).
 
 **Verify:**
 ```bash
@@ -248,8 +250,8 @@ library (or an empty library) with the correct root path.
 
 **Commit:** `FEAT Add macOS library browser with EPUB import`
 
-**STOP POINT 5** — human: import the Karamazov EPUB via ⌘O; metadata and the
-full chapter list appear, sourced from Rust.
+**STOP POINT 5** — human: import any EPUB via ⌘O (e.g. a file from
+`fixtures/`); metadata and the full chapter list appear, sourced from Rust.
 
 ---
 
@@ -282,9 +284,9 @@ full chapter list appear, sourced from Rust.
 **Commit:** `FEAT Render EPUB chapters in WebKit via epub.js`
 
 **STOP POINT 6 — acceptance check for the vertical slice.** Human:
-open Karamazov → first chapter renders with correct CSS/images/fonts;
-chapter clicks navigate; an external link opens in the system browser, not
-in the reader.
+open a real EPUB (e.g. one from `fixtures/`) → first chapter renders with
+correct CSS/images/fonts; chapter clicks navigate; an external link opens
+in the system browser, not in the reader.
 
 ---
 
@@ -351,8 +353,8 @@ content, `j`/`k`/`n`/`p`/`gg`/`G` all work; menus still work.
 
 **Commit:** `DOCS Describe macOS frontend architecture and build workflow`
 
-**Done.** Acceptance criteria (all verified across stop points 6–8): Karamazov
-opens; metadata/chapters come from Rust; first chapter renders in WebKit with
-CSS/images/fonts; keybindings work with WebKit focused; notes remain
+**Done.** Acceptance criteria (all verified across stop points 6–8): a real
+EPUB opens; metadata/chapters come from Rust; first chapter renders in WebKit
+with CSS/images/fonts; keybindings work with WebKit focused; notes remain
 markdown/JSON on disk; Tauri tests/builds pass; no Tauri dependency in
 `margins-core`; existing frontend untouched.
