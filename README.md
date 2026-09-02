@@ -59,6 +59,7 @@ macOS keybindings:
 | `Enter` | Open selected book (library) |
 | `/` | Search notes (also ⌘F) |
 | ⌘S | Save note |
+| ⌘+ / ⌘− / ⌘0 | Bigger / smaller / reset text size |
 | Trackpad | Two-finger scroll turns pages |
 
 ## Configuration

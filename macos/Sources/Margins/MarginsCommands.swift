@@ -21,6 +21,20 @@ struct MarginsCommands: Commands {
             }
             .keyboardShortcut("s", modifiers: .command)
         }
+        CommandMenu("View") {
+            Button("Bigger Text") {
+                reader.preferences.stepFontSize(ReaderPreferences.fontSizeStep)
+            }
+            .keyboardShortcut("+", modifiers: .command)
+            Button("Smaller Text") {
+                reader.preferences.stepFontSize(-ReaderPreferences.fontSizeStep)
+            }
+            .keyboardShortcut("-", modifiers: .command)
+            Button("Reset Text Size") {
+                reader.preferences.resetFontSize()
+            }
+            .keyboardShortcut("0", modifiers: .command)
+        }
     }
 
     /// Same path as the `/` key: opens the note search overlay.
