@@ -13,7 +13,7 @@ This plan is written to be executed by an AI agent phase by phase. Read
 |-------|------|--------|
 | 0 | Extract `margins-core` workspace crate | **done** — `728ab6c` |
 | 1 | Real EPUB fixture + core import tests | **done** |
-| 2 | `margins-ffi` UniFFI bindings | not started |
+| 2 | `margins-ffi` UniFFI bindings | **done** |
 | 3 | SwiftPM app skeleton / bridge proof | not started |
 | 4 | Library UI and import | not started |
 | 5 | WebKit reader (epub.js) | not started |
@@ -21,7 +21,7 @@ This plan is written to be executed by an AI agent phase by phase. Read
 | 7 | Notes and search | not started |
 | 8 | Documentation | not started |
 
-Next: **Phase 2**.
+Next: **Phase 3**.
 
 ---
 
@@ -30,8 +30,10 @@ Next: **Phase 2**.
 - Core lives in `crates/margins-core`. Those modules have **no Tauri
   dependency**. `src-tauri` is a thin `#[tauri::command]` wrapper over
   `margins_core::{...}`.
-- Workspace root `Cargo.toml` members: `crates/margins-core`, `src-tauri`.
-  `Cargo.lock` is at the repo root; `cargo` output is `/target/`.
+- Workspace root `Cargo.toml` members: `crates/margins-core`,
+  `crates/margins-ffi`, `src-tauri`. `Cargo.lock` is at the repo root;
+  `cargo` output is `/target/`. Swift bindings are generated (gitignored)
+  under `macos/Sources/MarginsCoreFFI/Generated/` by `./scripts/build-core.sh`.
 - **This machine has Command Line Tools only, no full Xcode.** `xcodebuild`
   does not work. Therefore:
   - The macOS app is a **SwiftPM package** (`macos/Package.swift`), built with
@@ -156,30 +158,27 @@ the Linux/desktop Tauri app still functions.
 
 ---
 
-## Phase 2 — `margins-ffi`: UniFFI bindings for Swift
+## Phase 2 — `margins-ffi`: UniFFI bindings for Swift — DONE
 
-1. New crate `crates/margins-ffi` (workspace member), `crate-type =
-   ["staticlib", "cdylib"]`, depending on `margins-core` and `uniffi` (proc-
-   macro mode, **no UDL files**).
-2. API surface (mirror the Tauri commands; records mirror `models.rs`, errors
-   as a UniFFI error enum):
-   - `MarginsCore::new(data_dir: Option<String>)` — constructor object holding
-     config/state (respect `MARGINS_DATA_DIR` / `MARGINS_LIBRARY_ROOT`).
-   - `data_dir()`, `library_root()`, `set_library_root(path)`
-   - `list_books()`, `import_epub(path)`, `get_book(id)`, `remove_book(id)`
-   - `read_epub_bytes(id) -> Vec<u8>`
-   - `get_chapter_note(...)`, `save_chapter_note(...)`, `search_notes(query)`
-3. Add the standard bindgen binary so nothing needs installing:
-   `crates/margins-ffi/src/bin/uniffi-bindgen.rs` containing
-   `fn main() { uniffi::uniffi_bindgen_main() }`.
-4. `scripts/build-core.sh`:
-   - `cargo build --release -p margins-ffi`
-   - `cargo run -p margins-ffi --bin uniffi-bindgen -- generate --library
-     target/release/libmargins_ffi.dylib --language swift --out-dir
-     macos/Sources/MarginsCoreFFI/Generated`
-   - arrange the output for SwiftPM: the generated `.swift` file goes in a
-     `MarginsCore` Swift target; the header + modulemap form a C target the
-     Swift target depends on. Gitignore `Generated/` and `target/`.
+1. `crates/margins-ffi` is a workspace member. `crate-type` is
+   `["lib", "staticlib", "cdylib"]` — `lib` extra so `cargo test --workspace`
+   can compile it. Depends on `margins-core` and `uniffi` 0.29 proc-macro
+   mode (no UDL). `uniffi` 0.32 exists; 0.29 matches the docs used here.
+2. `MarginsCore` object: `new(data_dir: Option<String>)` uses
+   `AppConfig::load_with_data_dir` (added on core; `None` still honors
+   `MARGINS_DATA_DIR` / `MARGINS_LIBRARY_ROOT`). Methods: `data_dir`,
+   `library_root`, `set_library_root`, `list_books`, `import_epub`,
+   `get_book`, `remove_book`, `read_epub_bytes`, `get_chapter_note`,
+   `save_chapter_note`, `search_notes`. Records mirror `models.rs` with
+   RFC3339 date strings and `u32` counts (UniFFI has no `chrono`/`usize`).
+   Errors are a flat `CoreError`. Sync export/import is not on this surface
+   (UI deferred).
+3. `crates/margins-ffi/src/bin/uniffi-bindgen.rs` calls
+   `uniffi::uniffi_bindgen_main()`.
+4. `scripts/build-core.sh` release-builds the crate and generates Swift into
+   `macos/Sources/MarginsCoreFFI/Generated/` (`.swift`, header, modulemap).
+   That directory is gitignored. Phase 3 Package.swift will split C vs Swift
+   targets; generated files stay together until then.
 
 **Verify:**
 ```bash
