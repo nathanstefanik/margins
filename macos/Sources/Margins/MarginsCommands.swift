@@ -21,7 +21,7 @@ struct MarginsCommands: Commands {
             .keyboardShortcut("f", modifiers: .command)
             Divider()
             Button("Save Note") {
-                Task { await model.saveChapterNote(reader: reader) }
+                reader.flushNoteSave()
             }
             .keyboardShortcut("s", modifiers: .command)
         }

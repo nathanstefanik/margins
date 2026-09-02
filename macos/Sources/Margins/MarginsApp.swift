@@ -11,6 +11,9 @@ struct MarginsApp: App {
         reader.positionSaver = { [weak model] bookId, position in
             await model?.saveReadingPosition(bookId: bookId, position: position)
         }
+        reader.noteSaver = { [weak model] bookId, chapterKey, body in
+            await model?.saveChapterNoteText(bookId: bookId, chapterKey: chapterKey, body: body)
+        }
     }
 
     var body: some Scene {
