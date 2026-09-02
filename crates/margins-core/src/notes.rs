@@ -83,7 +83,7 @@ pub fn load_chapter_note(book_dir: &Path, chapter_key: &str) -> Result<ChapterNo
             created_at: None,
             updated_at: None,
         },
-        body: default_body(&chapter.title),
+        body: String::new(),
         path: String::new(),
     })
 }
@@ -166,10 +166,6 @@ fn split_frontmatter(raw: &str) -> Result<(String, String), NotesError> {
 fn render_note(frontmatter: &NoteFrontmatter, body: &str) -> Result<String, NotesError> {
     let yaml = serde_yaml::to_string(frontmatter)?;
     Ok(format!("---\n{yaml}---\n\n{body}"))
-}
-
-fn default_body(chapter_title: &str) -> String {
-    format!("# {chapter_title} — Summary\n\n")
 }
 
 pub fn count_words(text: &str) -> usize {
@@ -312,13 +308,13 @@ mod tests {
     }
 
     #[test]
-    fn load_missing_note_returns_default_body() {
+    fn load_missing_note_returns_blank_body() {
         let tmp = tempfile::tempdir().unwrap();
         let book_dir = tmp.path();
         seed_book(book_dir);
 
         let note = load_chapter_note(book_dir, "001").unwrap();
-        assert!(note.body.contains("Introduction"));
+        assert!(note.body.is_empty());
         assert_eq!(note.frontmatter.word_count, 0);
         assert!(note.path.is_empty());
     }
