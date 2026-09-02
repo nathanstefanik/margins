@@ -1,4 +1,4 @@
-name: Linux CI
+name: CI
 
 on:
   pull_request:
@@ -56,6 +56,9 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
@@ -77,3 +80,20 @@ jobs:
           name: marginalia-linux-bundles
           path: target/release/bundle/
           if-no-files-found: error
+
+  macos:
+    name: Build and test the macOS app
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build core and run the Swift Testing suite
+        run: make mac-test
