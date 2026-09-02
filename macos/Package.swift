@@ -48,7 +48,7 @@ let package = Package(
             name: "Margins",
             dependencies: ["MarginsCore", "MarginsModel"],
             resources: [
-                // Vendored epub.js renderer (see docs/macos-plan.md Part II).
+                // Vendored epub.js renderer (see docs/architecture.md).
                 .copy("Resources/reader")
             ]
         ),

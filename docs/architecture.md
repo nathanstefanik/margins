@@ -50,7 +50,8 @@ FFI surface.
 ## The macOS app (`macos/`)
 
 A SwiftPM package (no `.xcodeproj`; builds with Command Line Tools alone —
-see `docs/macos-plan.md` for the toolchain constraints). Targets:
+note that `swift test` never invokes test bundles on a CLT-only toolchain,
+so tests run through the `MarginsTests` runner executable). Targets:
 
 - `margins_ffiFFI` — C target carrying the generated FFI header/module map.
 - `MarginsCore` — generated bindings plus `CoreStore`, an actor wrapper that
