@@ -433,7 +433,7 @@ that finishes a phase, after Nathan's sign-off on the visual items).
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 1 | Reader typography + progress footer | Done (3d0fb29) |
-| 2 | Cover extraction (Rust core + FFI) | Not started |
+| 2 | Cover extraction (Rust core + FFI) | Done (a3f9f81) |
 | 3 | Library & book detail redesign | Not started |
 | 4 | Reading-position persistence | Not started |
 | 5 | Notes pane polish | Not started |
