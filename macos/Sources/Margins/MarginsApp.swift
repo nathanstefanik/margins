@@ -14,6 +14,9 @@ struct MarginsApp: App {
         reader.noteSaver = { [weak model] bookId, chapterKey, body in
             await model?.saveChapterNoteText(bookId: bookId, chapterKey: chapterKey, body: body)
         }
+        model.search.setExecutor { [weak model] text in
+            await model?.searchNotes(query: text) ?? []
+        }
     }
 
     var body: some Scene {
