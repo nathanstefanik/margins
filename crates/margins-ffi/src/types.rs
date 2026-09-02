@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use margins_core::library::Library;
 use margins_core::models;
 
 #[derive(uniffi::Record)]
@@ -9,6 +10,11 @@ pub struct BookSummary {
     pub added_at: String,
     pub chapter_count: u32,
     pub notes_count: u32,
+    /// Absolute path of the cover image file, or `None` when the book has
+    /// none. Resolved from the library root at call time.
+    pub cover_path: Option<String>,
+    /// Percent complete (0–100), or `None` when the book was never opened.
+    pub progress_percent: Option<f64>,
 }
 
 #[derive(uniffi::Record)]
@@ -28,6 +34,48 @@ pub struct BookMeta {
     pub added_at: String,
     pub source_filename: String,
     pub chapters: Vec<ChapterMeta>,
+    /// Absolute path of the cover image file, or `None` when the book has
+    /// none. Resolved from the library root at call time.
+    pub cover_path: Option<String>,
+    /// Percent complete (0–100), or `None` when the book was never opened.
+    pub progress_percent: Option<f64>,
+}
+
+/// Where a reader left off in a book. Saved through the core into the
+/// library tree (`books/{book_id}/position.json`) so it syncs like
+/// everything else; `updated_at` is set by the core on save.
+#[derive(uniffi::Record)]
+pub struct ReadingPosition {
+    pub chapter_key: String,
+    pub epub_cfi: Option<String>,
+    pub percent: f64,
+    pub updated_at: Option<String>,
+}
+
+impl ReadingPosition {
+    pub fn from_core(value: models::ReadingPosition) -> Self {
+        Self {
+            chapter_key: value.chapter_key,
+            epub_cfi: value.epub_cfi,
+            percent: value.percent,
+            updated_at: Some(rfc3339(value.updated_at)),
+        }
+    }
+
+    pub fn into_core(self) -> models::ReadingPosition {
+        models::ReadingPosition {
+            chapter_key: self.chapter_key,
+            epub_cfi: self.epub_cfi,
+            percent: self.percent,
+            // The core stamps the save time itself; any caller value is
+            // advisory only.
+            updated_at: self
+                .updated_at
+                .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
+                .map(|t| t.with_timezone(&Utc))
+                .unwrap_or_else(Utc::now),
+        }
+    }
 }
 
 #[derive(uniffi::Record)]
@@ -57,24 +105,60 @@ pub struct ChapterNote {
     pub path: String,
 }
 
+/// One entry of a book's `notes/_index.json`: which chapters have notes.
+#[derive(uniffi::Record)]
+pub struct NoteIndexEntry {
+    pub chapter_key: String,
+    pub chapter_index: u32,
+    pub chapter_title: String,
+    pub word_count: u32,
+    pub updated_at: Option<String>,
+}
+
+/// Kind of search hit; mirrors the core's `SearchHitKind`.
+#[derive(uniffi::Enum)]
+pub enum SearchHitKind {
+    NoteContent,
+    ChapterTitle,
+    BookTarget,
+}
+
+/// Half-open match range in UTF-16 code units of the string it points into.
+#[derive(uniffi::Record)]
+pub struct MatchRange {
+    pub start: u32,
+    pub end: u32,
+}
+
 #[derive(uniffi::Record)]
 pub struct NoteSearchHit {
     pub book_id: String,
     pub book_title: String,
     pub book_author: String,
+    /// Empty for book-level targets.
     pub chapter_key: String,
     pub chapter_index: u32,
     pub chapter_title: String,
     pub snippet: String,
     pub word_count: u32,
+    pub kind: SearchHitKind,
+    /// Deterministic relevance score; higher is better.
+    pub score: f64,
+    /// Matched ranges within `snippet` (UTF-16, half-open).
+    pub snippet_ranges: Vec<MatchRange>,
+    /// Matched ranges within the displayed title (UTF-16, half-open).
+    pub title_ranges: Vec<MatchRange>,
 }
 
 fn rfc3339(dt: DateTime<Utc>) -> String {
     dt.to_rfc3339()
 }
 
-impl From<models::BookSummary> for BookSummary {
-    fn from(value: models::BookSummary) -> Self {
+impl BookSummary {
+    /// Converts a core summary, resolving the cover to an absolute path via
+    /// the library root.
+    pub fn from_core(value: models::BookSummary, library: &Library) -> Self {
+        let cover_path = resolve_cover(library, &value.id, value.cover);
         Self {
             id: value.id,
             title: value.title,
@@ -82,6 +166,8 @@ impl From<models::BookSummary> for BookSummary {
             added_at: rfc3339(value.added_at),
             chapter_count: value.chapter_count as u32,
             notes_count: value.notes_count as u32,
+            cover_path,
+            progress_percent: value.progress_percent,
         }
     }
 }
@@ -97,8 +183,11 @@ impl From<models::ChapterMeta> for ChapterMeta {
     }
 }
 
-impl From<models::BookMeta> for BookMeta {
-    fn from(value: models::BookMeta) -> Self {
+impl BookMeta {
+    /// Converts a core record, resolving the cover to an absolute path via
+    /// the library root.
+    pub fn from_core(value: models::BookMeta, library: &Library) -> Self {
+        let cover_path = resolve_cover(library, &value.id, value.cover);
         Self {
             id: value.id,
             title: value.title,
@@ -107,8 +196,14 @@ impl From<models::BookMeta> for BookMeta {
             added_at: rfc3339(value.added_at),
             source_filename: value.source_filename,
             chapters: value.chapters.into_iter().map(Into::into).collect(),
+            cover_path,
+            progress_percent: value.progress_percent,
         }
     }
+}
+
+fn resolve_cover(library: &Library, book_id: &str, cover: Option<String>) -> Option<String> {
+    cover.map(|name| library.book_dir(book_id).join(name).display().to_string())
 }
 
 impl From<models::NoteFrontmatter> for NoteFrontmatter {
@@ -149,6 +244,40 @@ impl From<models::NoteSearchHit> for NoteSearchHit {
             chapter_title: value.chapter_title,
             snippet: value.snippet,
             word_count: value.word_count as u32,
+            kind: match value.kind {
+                models::SearchHitKind::NoteContent => SearchHitKind::NoteContent,
+                models::SearchHitKind::ChapterTitle => SearchHitKind::ChapterTitle,
+                models::SearchHitKind::BookTarget => SearchHitKind::BookTarget,
+            },
+            score: value.score,
+            snippet_ranges: value
+                .snippet_ranges
+                .into_iter()
+                .map(|r| MatchRange {
+                    start: r.start as u32,
+                    end: r.end as u32,
+                })
+                .collect(),
+            title_ranges: value
+                .title_ranges
+                .into_iter()
+                .map(|r| MatchRange {
+                    start: r.start as u32,
+                    end: r.end as u32,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<models::NotesIndexEntry> for NoteIndexEntry {
+    fn from(value: models::NotesIndexEntry) -> Self {
+        Self {
+            chapter_key: value.chapter_key,
+            chapter_index: value.chapter_index as u32,
+            chapter_title: value.chapter_title,
+            word_count: value.word_count as u32,
+            updated_at: value.updated_at.map(rfc3339),
         }
     }
 }

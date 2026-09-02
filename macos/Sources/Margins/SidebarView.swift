@@ -9,25 +9,40 @@ struct SidebarView: View {
 
     var body: some View {
         @Bindable var model = model
-        List(selection: $model.selectedBookID) {
-            ForEach(model.books) { book in
-                BookRowView(book: book)
-                    .tag(book.id)
-                    .contextMenu {
-                        Button("Remove…", role: .destructive) {
-                            requestRemoval(of: book)
+        VStack(spacing: 0) {
+            List(selection: $model.selectedBookID) {
+                ForEach(model.books) { book in
+                    BookRowView(book: book)
+                        .tag(book.id)
+                        .onTapGesture(count: 2) {
+                            Task { await model.openBookResuming(id: book.id) }
                         }
-                    }
+                        .contextMenu {
+                            Button("Remove…", role: .destructive) {
+                                requestRemoval(of: book)
+                            }
+                        }
+                }
             }
+            .listStyle(.sidebar)
+            if let status = model.importStatus {
+                Divider()
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+            Divider()
+            libraryRootBar
         }
-        .listStyle(.sidebar)
         .navigationTitle("Library")
-        .overlay(alignment: .bottom) {
-            Text(model.libraryRoot)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 4)
-        }
         .confirmationDialog(
             "Remove Book?",
             isPresented: $showingRemovalDialog,
@@ -43,6 +58,34 @@ struct SidebarView: View {
         .onChange(of: model.selectedBookID) {
             Task { await model.loadSelectedBook() }
         }
+    }
+
+    /// Pinned under the list, outside the scroll content: the library root
+    /// and the directory picker. Replaces the old floating overlay that sat
+    /// on top of the last row.
+    private var libraryRootBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "folder")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(model.libraryRoot)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(model.libraryRoot)
+            Spacer(minLength: 0)
+            Button {
+                Task { await RootPanel.run(model: model) }
+            } label: {
+                Image(systemName: "folder.badge.ellipsis")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Choose Library Directory…")
+            .help("Choose Library Directory…")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private func requestRemoval(of book: BookSummary) {

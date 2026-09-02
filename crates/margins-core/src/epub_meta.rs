@@ -26,6 +26,15 @@ pub struct EpubInfo {
     pub author: String,
     pub language: Option<String>,
     pub chapters: Vec<ChapterMeta>,
+    pub cover: Option<CoverImage>,
+}
+
+/// A cover image extracted from the EPUB: raw bytes plus the file extension
+/// to store it under.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoverImage {
+    pub bytes: Vec<u8>,
+    pub extension: &'static str,
 }
 
 pub fn parse_epub(path: &Path) -> Result<EpubInfo, EpubError> {
@@ -44,6 +53,7 @@ pub fn parse_epub(path: &Path) -> Result<EpubInfo, EpubError> {
     let metadata = parse_opf_metadata(&opf)?;
     let manifest = parse_manifest(&opf)?;
     let spine = parse_spine(&opf)?;
+    let cover = extract_cover(&mut archive, &opf, &opf_dir);
 
     let mut chapters = Vec::new();
     for (index, idref) in spine.iter().enumerate() {
@@ -74,6 +84,103 @@ pub fn parse_epub(path: &Path) -> Result<EpubInfo, EpubError> {
         author: metadata.author,
         language: metadata.language,
         chapters,
+        cover,
+    })
+}
+
+/// Extracts a cover image from an EPUB file on disk without parsing the full
+/// spine. Used by the library backfill for books imported before covers were
+/// extracted. Returns `None` when the book has no (readable) cover.
+pub fn extract_cover_from_epub(path: &Path) -> Option<CoverImage> {
+    let file = File::open(path).ok()?;
+    let mut archive = ZipArchive::new(BufReader::new(file)).ok()?;
+    let container = read_zip_text(&mut archive, "META-INF/container.xml").ok()?;
+    let opf_path = find_opf_path(&container).ok()?;
+    let opf = read_zip_text(&mut archive, &opf_path).ok()?;
+    let opf_dir = Path::new(&opf_path)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    extract_cover(&mut archive, &opf, &opf_dir)
+}
+
+/// Cover resolution order: EPUB3 `properties="cover-image"`, EPUB2
+/// `<meta name="cover" content="id">`, then the first manifest item with an
+/// image media type. Absent or unreadable covers yield `None` — extraction
+/// must never fail an import.
+fn extract_cover(
+    archive: &mut ZipArchive<BufReader<File>>,
+    opf: &str,
+    opf_dir: &str,
+) -> Option<CoverImage> {
+    let items = parse_manifest_items(opf).ok()?;
+    let mut candidates: Vec<&ManifestItem> = Vec::new();
+
+    if let Some(item) = items.iter().find(|item| {
+        item.properties
+            .as_deref()
+            .is_some_and(|properties| properties.split_whitespace().any(|p| p == "cover-image"))
+    }) {
+        candidates.push(item);
+    }
+
+    if let Some(id) = cover_meta_id(opf) {
+        if let Some(item) = items.iter().find(|item| item.id == id) {
+            candidates.push(item);
+        }
+    }
+
+    if let Some(item) = items.iter().find(|item| {
+        item.media_type
+            .as_deref()
+            .is_some_and(|m| m.starts_with("image/"))
+    }) {
+        candidates.push(item);
+    }
+
+    for item in candidates {
+        let Some(media_type) = item.media_type.as_deref() else {
+            continue;
+        };
+        let Some(extension) = extension_for_media_type(media_type) else {
+            continue;
+        };
+        let full_href = join_href(opf_dir, &item.href);
+        if let Ok(mut file) = archive.by_name(&full_href) {
+            let mut bytes = Vec::new();
+            if file.read_to_end(&mut bytes).is_ok() && !bytes.is_empty() {
+                return Some(CoverImage { bytes, extension });
+            }
+        }
+    }
+
+    None
+}
+
+fn extension_for_media_type(media_type: &str) -> Option<&'static str> {
+    match media_type.to_lowercase().as_str() {
+        "image/jpeg" | "image/jpg" => Some("jpg"),
+        "image/png" => Some("png"),
+        "image/gif" => Some("gif"),
+        "image/svg+xml" => Some("svg"),
+        "image/webp" => Some("webp"),
+        _ => None,
+    }
+}
+
+/// EPUB2 cover pointer: `<meta name="cover" content="manifest-id"/>`. The
+/// attributes may appear in either order.
+fn cover_meta_id(opf: &str) -> Option<String> {
+    let re = Regex::new(
+        r#"<meta\s+[^>]*?(?:name="cover"[^>]*?content="([^"]*)"|content="([^"]*)"[^>]*?name="cover")"#,
+    )
+    .ok()?;
+    re.captures(opf).and_then(|captures| {
+        captures
+            .get(1)
+            .or_else(|| captures.get(2))
+            .map(|m| m.as_str().to_string())
+            .filter(|s| !s.is_empty())
     })
 }
 
@@ -157,8 +264,15 @@ fn parse_opf_metadata(opf: &str) -> Result<Metadata, EpubError> {
     })
 }
 
-fn parse_manifest(opf: &str) -> Result<std::collections::HashMap<String, String>, EpubError> {
-    let mut map = std::collections::HashMap::new();
+struct ManifestItem {
+    id: String,
+    href: String,
+    media_type: Option<String>,
+    properties: Option<String>,
+}
+
+fn parse_manifest_items(opf: &str) -> Result<Vec<ManifestItem>, EpubError> {
+    let mut items = Vec::new();
 
     let mut reader = Reader::from_str(opf);
     reader.config_mut().trim_text(true);
@@ -169,6 +283,8 @@ fn parse_manifest(opf: &str) -> Result<std::collections::HashMap<String, String>
             {
                 let mut id = None;
                 let mut href = None;
+                let mut media_type = None;
+                let mut properties = None;
 
                 for attribute in element.attributes() {
                     let attribute = attribute.map_err(|err| EpubError::Xml(err.to_string()))?;
@@ -180,12 +296,19 @@ fn parse_manifest(opf: &str) -> Result<std::collections::HashMap<String, String>
                     match attribute.key.local_name().as_ref() {
                         b"id" => id = Some(value),
                         b"href" => href = Some(value),
+                        b"media-type" => media_type = Some(value),
+                        b"properties" => properties = Some(value),
                         _ => {}
                     }
                 }
 
                 if let (Some(id), Some(href)) = (id, href) {
-                    map.insert(id, href);
+                    items.push(ManifestItem {
+                        id,
+                        href,
+                        media_type,
+                        properties,
+                    });
                 }
             }
             Ok(Event::Eof) => break,
@@ -194,7 +317,14 @@ fn parse_manifest(opf: &str) -> Result<std::collections::HashMap<String, String>
         }
     }
 
-    Ok(map)
+    Ok(items)
+}
+
+fn parse_manifest(opf: &str) -> Result<std::collections::HashMap<String, String>, EpubError> {
+    Ok(parse_manifest_items(opf)?
+        .into_iter()
+        .map(|item| (item.id, item.href))
+        .collect())
 }
 
 fn parse_spine(opf: &str) -> Result<Vec<String>, EpubError> {
@@ -241,7 +371,7 @@ fn title_from_href(archive: &mut ZipArchive<BufReader<File>>, href: &str) -> Opt
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_fixtures::write_sample_epub;
+    use crate::test_fixtures::{write_sample_epub, write_sample_epub_covered, SampleCover};
 
     #[test]
     fn parse_sample_epub_metadata_and_chapters() {
@@ -258,6 +388,33 @@ mod tests {
         assert_eq!(info.chapters[0].href, "OEBPS/chapter1.xhtml");
         assert_eq!(info.chapters[1].key, "002");
         assert_eq!(info.chapters[1].title, "The Market");
+        assert!(info.cover.is_none());
+    }
+
+    #[test]
+    fn extracts_epub3_property_cover() {
+        let tmp = tempfile::tempdir().unwrap();
+        let epub = write_sample_epub_covered(tmp.path(), "epub3.epub", SampleCover::Epub3);
+        let info = parse_epub(&epub).expect("parse epub");
+        let cover = info.cover.expect("epub3 cover");
+        assert_eq!(cover.extension, "png");
+        assert_eq!(cover.bytes, crate::test_fixtures::SAMPLE_COVER_PNG);
+    }
+
+    #[test]
+    fn extracts_epub2_meta_cover() {
+        let tmp = tempfile::tempdir().unwrap();
+        let epub = write_sample_epub_covered(tmp.path(), "epub2.epub", SampleCover::Epub2);
+        let info = parse_epub(&epub).expect("parse epub");
+        assert!(info.cover.is_some());
+    }
+
+    #[test]
+    fn falls_back_to_first_manifest_image() {
+        let tmp = tempfile::tempdir().unwrap();
+        let epub = write_sample_epub_covered(tmp.path(), "bare.epub", SampleCover::BareImage);
+        let info = parse_epub(&epub).expect("parse epub");
+        assert!(info.cover.is_some());
     }
 
     #[test]

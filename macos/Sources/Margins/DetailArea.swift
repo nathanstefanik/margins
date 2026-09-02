@@ -11,11 +11,16 @@ struct DetailArea: View {
         } else if let book = model.selectedBook {
             BookDetailView(book: book)
         } else if model.books.isEmpty {
-            ContentUnavailableView(
-                "No books yet",
-                systemImage: "book",
-                description: Text("Import an EPUB with File ▸ Import EPUB… (⌘O).")
-            )
+            ContentUnavailableView {
+                Label("No books yet", systemImage: "book")
+            } description: {
+                Text("Import an EPUB to start your library.")
+            } actions: {
+                Button("Import EPUB…") {
+                    Task { await ImportPanel.run(model: model) }
+                }
+                .buttonStyle(.borderedProminent)
+            }
         } else {
             ContentUnavailableView(
                 "No book selected",

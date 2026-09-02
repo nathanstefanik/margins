@@ -61,11 +61,16 @@ final class ShellKeyboardController {
             return event
         }
 
-        // The search overlay owns Esc: its field editor would otherwise
-        // consume the key before any SwiftUI handler, so the monitor
-        // closes it directly (see LibraryModel.searchOpen).
+        // The search palette and the cheat sheet own Esc: their field
+        // editor would otherwise consume the key before any SwiftUI
+        // handler, so the monitor closes them directly (see
+        // LibraryModel.searchOpen / helpOpen).
         if model.searchOpen, event.keyCode == 53 {
             model.requestSearchDismissal()
+            return nil
+        }
+        if model.helpOpen, event.keyCode == 53 {
+            model.requestHelpDismissal()
             return nil
         }
 
@@ -84,6 +89,14 @@ final class ShellKeyboardController {
             return event
         }
 
+        // Reader Esc backs out one layer at a time: the editor case above
+        // returns focus to the book, this one closes the notes pane, and
+        // the keymap's .backToLibrary below exits to the library.
+        if reader.isOpen, reader.notesVisible, event.keyCode == 53, !modalPanelUp {
+            reader.closeNotes()
+            return nil
+        }
+
         guard let characters = event.characters, let character = characters.first else {
             return event
         }
@@ -100,7 +113,11 @@ final class ShellKeyboardController {
         default: key = String(character)
         }
 
-        keymap.setMode(model.searchOpen || modalPanelUp ? .modal : (reader.isOpen ? .reader : .library))
+        keymap.setMode(
+            model.searchOpen || model.helpOpen || modalPanelUp
+                ? .modal
+                : (reader.isOpen ? .reader : .library)
+        )
         let keyEvent = ReaderKeyEvent(
             key: key,
             ctrl: flags.contains(.control),
@@ -119,7 +136,9 @@ final class ShellKeyboardController {
     private func handleScroll(_ event: NSEvent) -> NSEvent? {
         guard reader.isOpen else { return event }
         // Ignore momentum: inertia should not flip through many pages.
-        guard event.momentumPhase == .none else { return event }
+        // (Phase is an OptionSet; compare via isEmpty so `.none` doesn't
+        // resolve to Optional.none, which never matches.)
+        guard event.momentumPhase.isEmpty else { return event }
         // Only page when the cursor is actually over the book; scrolling the
         // sidebar or notes pane keeps its native behavior.
         guard isCursorOverWebView(event) else { return event }
@@ -170,11 +189,11 @@ final class ShellKeyboardController {
             Task { await ImportPanel.run(model: model) }
             return true
         case .scroll(let delta):
-            return evaluate("readerScrollBy(\(delta > 0 ? 1 : -1))")
+            return ReaderController.evaluateInReader("readerScrollBy(\(delta > 0 ? 1 : -1))")
         case .scrollTop:
-            return evaluate("readerScrollTop()")
+            return ReaderController.evaluateInReader("readerScrollTop()")
         case .scrollBottom:
-            return evaluate("readerScrollBottom()")
+            return ReaderController.evaluateInReader("readerScrollBottom()")
         case .nextChapter:
             guard reader.nextChapter() != nil else { return false }
             return displayCurrentChapter()
@@ -188,46 +207,25 @@ final class ShellKeyboardController {
         case .search:
             model.requestSearch()
             return true
+        case .help:
+            model.requestHelp()
+            return true
         }
     }
 
     private func displayCurrentChapter() -> Bool {
         guard let href = reader.chapter?.href else { return false }
-        return evaluate("readerDisplay(\(ReaderController.javaScriptLiteral(href)))")
+        return ReaderController.evaluateInReader(
+            "readerDisplay(\(ReaderController.javaScriptLiteral(href)))"
+        )
     }
 
     private func turnPage(_ direction: Int) {
-        evaluate("readerScrollBy(\(direction))")
-    }
-
-    private func evaluate(_ script: String) -> Bool {
-        guard let webView = readerWebView() else { return false }
-        webView.evaluateJavaScript(script, completionHandler: nil)
-        return true
-    }
-
-    private func readerWebView() -> WKWebView? {
-        guard let contentView = NSApp.keyWindow?.contentView else { return nil }
-        return findWebView(in: contentView)
-    }
-
-    private func findWebView(in view: NSView) -> WKWebView? {
-        if let webView = view as? WKWebView {
-            return webView
-        }
-        for subview in view.subviews {
-            if let found = findWebView(in: subview) {
-                return found
-            }
-        }
-        return nil
+        ReaderController.evaluateInReader("readerScrollBy(\(direction))")
     }
 
     private func openSelectedBook() {
-        Task {
-            await model.loadSelectedBook()
-            guard let book = model.selectedBook, let first = book.chapters.first else { return }
-            reader.open(book: book, chapter: first)
-        }
+        guard let id = model.selectedBookID else { return }
+        Task { await model.openBookResuming(id: id) }
     }
 }

@@ -39,6 +39,16 @@ public actor CoreStore {
         try core.removeBook(id: id)
     }
 
+    /// The book's saved reading position, or `nil` when it was never opened.
+    public func readingPosition(bookId: String) throws -> ReadingPosition? {
+        core.getReadingPosition(id: bookId)
+    }
+
+    /// Persists the book's reading position into the library tree.
+    public func saveReadingPosition(bookId: String, position: ReadingPosition) throws {
+        try core.saveReadingPosition(id: bookId, position: position)
+    }
+
     /// Synchronous, thread-safe EPUB byte access for the reader's scheme
     /// handler, which runs on WebKit-owned threads. `MarginsCore` is
     /// `@unchecked Sendable` and internally `Mutex`-guarded, so calling it
@@ -47,8 +57,18 @@ public actor CoreStore {
         try core.readEpubBytes(id: id)
     }
 
+    public func setLibraryRoot(path: String) throws {
+        _ = try core.setLibraryRoot(path: path)
+    }
+
     public func getChapterNote(bookId: String, chapterKey: String) throws -> ChapterNote {
         try core.getChapterNote(bookId: bookId, chapterKey: chapterKey)
+    }
+
+    /// The book's notes index (`notes/_index.json`): which chapters have
+    /// notes, with word counts. Empty when the book has no notes.
+    public func notesIndex(bookId: String) throws -> [NoteIndexEntry] {
+        try core.getNotesIndex(bookId: bookId)
     }
 
     public func saveChapterNote(
