@@ -1,0 +1,25 @@
+[package]
+name = "margins-core"
+version = "0.1.0"
+description = "EPUB library, notes, and sync core for Margins"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
+hex = "0.4"
+zip = "2"
+quick-xml = { version = "0.37", features = ["serialize"] }
+regex = "1"
+dirs = "6"
+thiserror = "2"
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
+zip = "2"

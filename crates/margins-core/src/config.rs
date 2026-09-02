@@ -25,7 +25,11 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn load() -> Result<Self, ConfigError> {
-        let data_dir = resolve_data_dir();
+        Self::load_with_data_dir(None)
+    }
+
+    pub fn load_with_data_dir(data_dir: Option<PathBuf>) -> Result<Self, ConfigError> {
+        let data_dir = data_dir.unwrap_or_else(resolve_data_dir);
         fs::create_dir_all(&data_dir)?;
 
         let config_path = data_dir.join("config.json");
