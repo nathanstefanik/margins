@@ -110,6 +110,17 @@ public final class LibraryModel {
         }
     }
 
+    /// Moves the sidebar selection by `delta` books (shell keyboard j/k).
+    public func moveLibrarySelection(_ delta: Int) {
+        guard !books.isEmpty else { return }
+        let ids = books.map(\.id)
+        let currentIndex = selectedBookID.flatMap { ids.firstIndex(of: $0) } ?? (delta > 0 ? -1 : 0)
+        let next = min(max(currentIndex + delta, 0), ids.count - 1)
+        guard ids[next] != selectedBookID else { return }
+        selectedBookID = ids[next]
+        Task { await loadSelectedBook() }
+    }
+
     /// Dismisses the currently displayed error.
     public func clearError() {
         errorMessage = nil

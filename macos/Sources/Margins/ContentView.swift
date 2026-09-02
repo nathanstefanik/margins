@@ -3,7 +3,9 @@ import MarginsModel
 
 struct ContentView: View {
     @Environment(LibraryModel.self) private var model
+    @Environment(ReaderModel.self) private var reader
     @State private var showingError = false
+    @State private var keyboardController: ShellKeyboardController?
 
     var body: some View {
         NavigationSplitView {
@@ -20,5 +22,12 @@ struct ContentView: View {
             Text(model.errorMessage ?? "")
         }
         .task { await model.activate() }
+        .onAppear {
+            if keyboardController == nil {
+                let controller = ShellKeyboardController(model: model, reader: reader)
+                controller.start()
+                keyboardController = controller
+            }
+        }
     }
 }
