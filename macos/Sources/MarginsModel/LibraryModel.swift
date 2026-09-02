@@ -191,6 +191,9 @@ public final class LibraryModel {
         Task { await loadSelectedBook() }
     }
 
+    /// The palette's query lifecycle (debounce, cap, recents).
+    public let search = SearchController()
+
     /// Dismisses the currently displayed error.
     public func clearError() {
         errorMessage = nil

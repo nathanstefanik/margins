@@ -11,8 +11,8 @@ struct SearchOverlay: View {
     @Environment(LibraryModel.self) private var model
     @Environment(ReaderModel.self) private var reader
     @FocusState private var fieldFocused: Bool
-    @State private var query = ""
-    @State private var hits: [NoteSearchHit] = []
+    // The query lifecycle (debounce, latest-wins, cap) lives in the model.
+    private var controller: SearchController { model.search }
 
     var body: some View {
         ZStack {
@@ -25,13 +25,16 @@ struct SearchOverlay: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
-                    TextField("Search notes…", text: $query)
-                        .textFieldStyle(.plain)
-                        .font(.title3)
-                        .focused($fieldFocused)
-                        .onSubmit {
-                            openFirstHit()
-                        }
+                    TextField("Search notes…", text: Binding(
+                        get: { controller.query },
+                        set: { controller.setQuery($0) }
+                    ))
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .focused($fieldFocused)
+                    .onSubmit {
+                        openFirstHit()
+                    }
                     Text("esc")
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
@@ -54,19 +57,12 @@ struct SearchOverlay: View {
             .contentShape(.rect)
             .onTapGesture {}
         }
-        .task(id: query) {
-            // Rapid typing can complete tasks out of order; discard stale ones.
-            let searched = query
-            let results = await model.searchNotes(searched)
-            if searched == query {
-                hits = results
-            }
-        }
         .onAppear {
             fieldFocused = true
         }
         .onDisappear {
             fieldFocused = false
+            controller.reset()
         }
         .onExitCommand {
             model.requestSearchDismissal()
@@ -75,14 +71,14 @@ struct SearchOverlay: View {
 
     @ViewBuilder
     private var results: some View {
-        if query.isEmpty {
+        if controller.query.isEmpty {
             hint("Type to search across every chapter note.")
-        } else if hits.isEmpty {
-            hint("No matches for “\(query)”.")
+        } else if controller.results.isEmpty {
+            hint(controller.isSearching ? "Searching…" : "No matches for “\(controller.query)”.")
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(hits) { hit in
+                    ForEach(controller.results) { hit in
                         Button {
                             open(hit)
                         } label: {
@@ -101,6 +97,12 @@ struct SearchOverlay: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    if controller.isTruncated {
+                        Text("More matches omitted…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(8)
+                    }
                 }
             }
             .frame(maxHeight: 340)
@@ -115,16 +117,23 @@ struct SearchOverlay: View {
     }
 
     private func openFirstHit() {
-        guard let hit = hits.first else { return }
+        guard let hit = controller.results.first else { return }
         open(hit)
     }
 
     private func open(_ hit: NoteSearchHit) {
+        controller.commitRecent(controller.query)
         Task {
-            guard let book = await model.getBook(id: hit.bookId),
-                  let chapter = book.chapters.first(where: { $0.key == hit.chapterKey })
-            else { return }
-            reader.open(book: book, chapter: chapter)
+            guard let book = await model.getBook(id: hit.bookId) else { return }
+            if hit.chapterKey.isEmpty {
+                // Book-level target: land on its first chapter.
+                guard let chapter = book.chapters.first else { return }
+                reader.open(book: book, chapter: chapter)
+            } else if let chapter = book.chapters.first(where: { $0.key == hit.chapterKey }) {
+                reader.open(book: book, chapter: chapter)
+            } else {
+                return
+            }
             model.requestSearchDismissal()
         }
     }
