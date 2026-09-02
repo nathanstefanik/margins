@@ -100,12 +100,183 @@ struct NotesTests {
 
         reader.noteLoaded(body: "loaded text", path: "/tmp/n.md", wordCount: 2, updatedAt: nil)
         #expect(!reader.isNoteDirty)
+        #expect(reader.noteSaveStatus == .idle)
 
         reader.noteBody = "loaded text edited"
         #expect(reader.isNoteDirty)
 
-        reader.noteSaved(path: "/tmp/n.md", wordCount: 3, updatedAt: "2026-09-02T00:00:00+00:00")
+        reader.noteSaved(
+            path: "/tmp/n.md",
+            wordCount: 3,
+            updatedAt: "2026-09-02T00:00:00+00:00",
+            savedBody: "loaded text edited"
+        )
         #expect(!reader.isNoteDirty)
         #expect(reader.noteBody == "loaded text edited")
+    }
+
+    private final class SaveSpy: @unchecked Sendable {
+        private let lock = NSLock()
+        private var saved: [(String, String, String)] = []
+
+        func record(_ bookId: String, _ chapterKey: String, _ body: String) {
+            lock.lock()
+            saved.append((bookId, chapterKey, body))
+            lock.unlock()
+        }
+
+        var all: [(String, String, String)] {
+            lock.lock()
+            defer { lock.unlock() }
+            return saved
+        }
+    }
+
+    @Test("notes autosave debounces typing bursts to one latest-wins save")
+    @MainActor
+    func autosaveDebounce() async throws {
+        let spy = SaveSpy()
+        let reader = ReaderModel()
+        reader.noteSaveDebounce = 0.02
+        reader.noteSaver = { bookId, chapterKey, body in
+            spy.record(bookId, chapterKey, body)
+        }
+
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteLoaded(body: "", path: nil, wordCount: 0, updatedAt: nil)
+
+        reader.noteBody = "first burst"
+        reader.noteEdited()
+        reader.noteBody = "first burst plus more"
+        reader.noteEdited()
+        reader.noteBody = "final text after the burst"
+        reader.noteEdited()
+
+        try await Task.sleep(for: .milliseconds(250))
+        let saved = spy.all
+        #expect(saved.count == 1)
+        #expect(saved.first?.1 == "ch1")
+        #expect(saved.first?.2 == "final text after the burst")
+        #expect(reader.noteSaveStatus == .saving || reader.noteSaveStatus == .edited)
+    }
+
+    @Test("switching chapters flushes the note for the old chapter")
+    @MainActor
+    func chapterChangeFlushesNote() async throws {
+        let spy = SaveSpy()
+        let reader = ReaderModel()
+        reader.noteSaveDebounce = 10 // nothing debounced can fire in this test
+        reader.noteSaver = { bookId, chapterKey, body in
+            spy.record(bookId, chapterKey, body)
+        }
+
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteLoaded(body: "", path: nil, wordCount: 0, updatedAt: nil)
+        reader.noteBody = "chapter one summary in progress"
+        reader.noteEdited()
+
+        // n → next chapter: the pending edit flushes against chapter one.
+        reader.nextChapter()
+        try await Task.sleep(for: .milliseconds(100))
+
+        let saved = spy.all
+        #expect(saved.count == 1)
+        #expect(saved.first?.1 == "ch1")
+        #expect(saved.first?.2 == "chapter one summary in progress")
+    }
+
+    @Test("closing the reader flushes a pending note edit")
+    @MainActor
+    func closeFlushesNote() async throws {
+        let spy = SaveSpy()
+        let reader = ReaderModel()
+        reader.noteSaveDebounce = 10
+        reader.noteSaver = { bookId, chapterKey, body in
+            spy.record(bookId, chapterKey, body)
+        }
+
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteLoaded(body: "", path: nil, wordCount: 0, updatedAt: nil)
+        reader.noteBody = "almost done typing"
+        reader.noteEdited()
+        reader.close()
+
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(spy.all.count == 1)
+    }
+
+    @Test("typing during a save keeps the editor marked edited")
+    @MainActor
+    func typingDuringSaveStaysEdited() async throws {
+        let spy = SaveSpy()
+        let reader = ReaderModel()
+        reader.noteSaver = { bookId, chapterKey, body in
+            spy.record(bookId, chapterKey, body)
+        }
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteLoaded(body: "", path: nil, wordCount: 0, updatedAt: nil)
+
+        reader.noteBody = "saved snapshot"
+        reader.flushNoteSave()
+        #expect(reader.noteSaveStatus == .saving)
+
+        // The user keeps typing while the save is in flight.
+        reader.noteBody = "saved snapshot and more"
+        reader.noteSaved(
+            path: "/tmp/n.md", wordCount: 4, updatedAt: nil, savedBody: "saved snapshot"
+        )
+        #expect(reader.isNoteDirty, "newer edits must not be swallowed as saved")
+        #expect(reader.noteSaveStatus == .edited)
+
+        // Completing a save that matches the current body marks it saved.
+        reader.noteSaved(
+            path: "/tmp/n.md", wordCount: 4, updatedAt: nil,
+            savedBody: "saved snapshot and more"
+        )
+        #expect(!reader.isNoteDirty)
+        #expect(reader.noteSaveStatus == .saved)
+        try await Task.sleep(for: .milliseconds(50)) // let the detached save land
+    }
+
+    @Test("notes header formats chapter number and title")
+    func notesHeaderFormatting() {
+        #expect(
+            ReaderModel.noteHeaderText(chapterIndex: 2, chapterTitle: "The Market")
+                == "Ch. 3 · The Market"
+        )
+        #expect(ReaderModel.noteHeaderText(chapterIndex: 0, chapterTitle: "One") == "Ch. 1 · One")
+
+        // Missing, empty, or whitespace-only titles fall back to the number.
+        #expect(ReaderModel.noteHeaderText(chapterIndex: 4, chapterTitle: nil) == "Ch. 5")
+        #expect(ReaderModel.noteHeaderText(chapterIndex: 4, chapterTitle: "") == "Ch. 5")
+        #expect(ReaderModel.noteHeaderText(chapterIndex: 4, chapterTitle: "   ") == "Ch. 5")
+
+        // Long titles are returned whole; the view truncates them.
+        let long = String(repeating: "A very long chapter title,", count: 10)
+        #expect(
+            ReaderModel.noteHeaderText(chapterIndex: 0, chapterTitle: long)
+                == "Ch. 1 · \(long)"
+        )
+    }
+
+    private func makeBook() -> BookMeta {
+        BookMeta(
+            id: "book-1",
+            title: "Test Book",
+            author: "Author",
+            language: "en",
+            addedAt: "2026-01-01",
+            sourceFilename: "test.epub",
+            chapters: [
+                ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml"),
+                ChapterMeta(key: "ch2", index: 1, title: "Two", href: "two.xhtml"),
+            ],
+            coverPath: nil,
+            progressPercent: nil
+        )
     }
 }

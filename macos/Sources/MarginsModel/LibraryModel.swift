@@ -245,21 +245,48 @@ public final class LibraryModel {
     /// Saves the reader's current note body (markdown + YAML frontmatter).
     public func saveChapterNote(reader: ReaderModel) async {
         guard let store, let book = reader.book, let chapter = reader.chapter else { return }
+        let body = reader.noteBody
         let ref = ChapterRef(key: chapter.key, epubCfi: nil)
         do {
             let note = try await store.saveChapterNote(
                 bookId: book.id,
                 chapter: ref,
-                body: reader.noteBody,
+                body: body,
                 kind: nil
             )
             reader.noteSaved(
                 path: note.path,
                 wordCount: note.frontmatter.wordCount,
-                updatedAt: note.frontmatter.updatedAt
+                updatedAt: note.frontmatter.updatedAt,
+                savedBody: body
             )
         } catch {
             reader.noteFailed(String(describing: error))
+        }
+    }
+
+    /// Autosave target: persists an editor snapshot for a specific chapter,
+    /// independent of the reader's *current* chapter (which may already have
+    /// moved on by the time a debounced save fires).
+    public func saveChapterNoteText(bookId: String, chapterKey: String, body: String) async {
+        guard let store else { return }
+        do {
+            let book = try await store.getBook(id: bookId)
+            guard let chapter = book.chapters.first(where: { $0.key == chapterKey }) else { return }
+            let note = try await store.saveChapterNote(
+                bookId: bookId,
+                chapter: ChapterRef(key: chapter.key, epubCfi: nil),
+                body: body,
+                kind: nil
+            )
+            reader?.noteSaved(
+                path: note.path,
+                wordCount: note.frontmatter.wordCount,
+                updatedAt: note.frontmatter.updatedAt,
+                savedBody: body
+            )
+        } catch {
+            reader?.noteFailed(String(describing: error))
         }
     }
 

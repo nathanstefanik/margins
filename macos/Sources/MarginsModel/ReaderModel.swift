@@ -63,6 +63,7 @@ public final class ReaderModel {
     }
 
     public func close() {
+        flushNoteSave()
         flushPositionSave()
         book = nil
         chapter = nil
@@ -75,6 +76,7 @@ public final class ReaderModel {
         noteWordCount = nil
         noteUpdatedAt = nil
         notesError = nil
+        noteSaveStatus = .idle
     }
 
     /// Advances to the next chapter, if any; returns it.
@@ -95,6 +97,7 @@ public final class ReaderModel {
         else { return nil }
         let target = index + delta
         guard book.chapters.indices.contains(target) else { return nil }
+        flushNoteSave()
         self.chapter = book.chapters[target]
         return self.chapter
     }
@@ -112,6 +115,7 @@ public final class ReaderModel {
         if let href, let book,
            let match = book.chapters.first(where: { $0.href == href }),
            match.key != chapter?.key {
+            flushNoteSave()
             chapter = match
         }
         schedulePositionSave(cfi: cfi)
@@ -170,6 +174,14 @@ public final class ReaderModel {
 
     // MARK: Notes pane state (Part III)
 
+    /// How the notes editor's content relates to the last save.
+    public enum NoteSaveStatus: Equatable, Sendable {
+        case idle
+        case edited
+        case saving
+        case saved
+    }
+
     public private(set) var notesVisible = false
     public private(set) var notesFocusRequest = 0
     public private(set) var readerFocusRequest = 0
@@ -179,6 +191,43 @@ public final class ReaderModel {
     public private(set) var noteWordCount: UInt32?
     public private(set) var noteUpdatedAt: String?
     public private(set) var notesError: String?
+    public private(set) var noteSaveStatus: NoteSaveStatus = .idle
+
+    /// Called (off the main actor) with book id, chapter key, and body once
+    /// the editor content settled. Wired at app startup to the library.
+    public var noteSaver: (@Sendable (String, String, String) async -> Void)?
+
+    /// Debounce window after typing stops; injectable for tests.
+    public var noteSaveDebounce: TimeInterval = 1.0
+    private var noteSaveTask: Task<Void, Never>?
+
+    /// Live word count of the editor content (the ~100-word target signal).
+    public var liveNoteWordCount: Int {
+        noteBody
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .count
+    }
+
+    /// Subtle save-state caption; empty while idle so the space stays fixed.
+    public var noteStatusText: String {
+        switch noteSaveStatus {
+        case .idle: ""
+        case .edited: "Edited"
+        case .saving: "Saving…"
+        case .saved: "Saved"
+        }
+    }
+
+    /// Chapter-contextual notes header: "Ch. 3 · The Market". Pure so tests
+    /// can cover missing and long titles; the view truncates display.
+    public nonisolated static func noteHeaderText(chapterIndex: Int, chapterTitle: String?) -> String {
+        let prefix = "Ch. \(chapterIndex + 1)"
+        guard let title = chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty
+        else { return prefix }
+        return "\(prefix) · \(title)"
+    }
 
     /// The editor differs from what was loaded/saved.
     public var isNoteDirty: Bool {
@@ -186,6 +235,10 @@ public final class ReaderModel {
     }
 
     public func toggleNotes() {
+        // Closing the pane hands the editor's content to the autosave.
+        if notesVisible {
+            flushNoteSave()
+        }
         notesVisible.toggle()
         if notesVisible {
             notesFocusRequest += 1
@@ -204,24 +257,76 @@ public final class ReaderModel {
 
     /// Installs a freshly loaded note as the editor baseline.
     public func noteLoaded(body: String, path: String?, wordCount: UInt32?, updatedAt: String?) {
+        noteSaveTask?.cancel()
+        noteSaveTask = nil
         noteBody = body
         noteBaseline = body
         notePath = path
         noteWordCount = wordCount
         noteUpdatedAt = updatedAt
         notesError = nil
+        noteSaveStatus = .idle
     }
 
-    /// Marks the current editor content as saved.
-    public func noteSaved(path: String, wordCount: UInt32, updatedAt: String?) {
-        noteBaseline = noteBody
+    /// Marks the current editor content as saved. `savedBody` is the text
+    /// that was written: if the user kept typing during the save, the
+    /// baseline must not swallow the newer edits.
+    public func noteSaved(
+        path: String,
+        wordCount: UInt32,
+        updatedAt: String?,
+        savedBody: String
+    ) {
         notePath = path
         noteWordCount = wordCount
         noteUpdatedAt = updatedAt
         notesError = nil
+        if noteBody == savedBody {
+            noteBaseline = savedBody
+            noteSaveStatus = .saved
+        } else if noteSaveStatus == .saving {
+            noteSaveStatus = .edited
+        }
     }
 
     public func noteFailed(_ message: String) {
         notesError = message
+        if noteSaveStatus == .saving {
+            noteSaveStatus = .edited
+        }
+    }
+
+    // MARK: Notes autosave
+
+    /// Called by the view whenever the editor text changes. Debounces the
+    /// save so a typing burst produces one write; no-op when clean (e.g.
+    /// programmatic loads).
+    public func noteEdited() {
+        guard isOpen, isNoteDirty else { return }
+        noteSaveStatus = .edited
+        noteSaveTask?.cancel()
+        let delay = noteSaveDebounce
+        noteSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.commitNoteSave()
+        }
+    }
+
+    /// Cancels the debounce and saves immediately (chapter change, pane
+    /// close, reader close, ⌘S).
+    public func flushNoteSave() {
+        noteSaveTask?.cancel()
+        noteSaveTask = nil
+        commitNoteSave()
+    }
+
+    private func commitNoteSave() {
+        guard isNoteDirty, let book, let chapter, let saver = noteSaver else { return }
+        let body = noteBody
+        noteSaveStatus = .saving
+        Task.detached {
+            await saver(book.id, chapter.key, body)
+        }
     }
 }
