@@ -4,28 +4,23 @@ Goal: a native macOS SwiftUI app for Margins that imports, inspects, and reads
 EPUBs, reusing the existing Rust core. Incremental — the Tauri/Linux app keeps
 working at every stop point. No big-bang rewrite.
 
-This plan is written to be executed by an AI agent phase by phase. Read
-**Ground truth** and **Rules** before starting any phase.
+This plan is written to be executed by an AI agent part by part (each part has
+1–2 shippable steps). Read **Ground truth** and **Rules** before starting any
+part.
 
 ## Status (2026-09-02)
 
-| Phase | What | Status |
-|-------|------|--------|
-| 0 | Extract `margins-core` workspace crate | **done** — `728ab6c` |
-| 1 | Real EPUB fixture + core import tests | **done** |
-| 2 | `margins-ffi` UniFFI bindings | **done** |
-| 3 | SwiftPM app skeleton / bridge proof | **done** |
-| 4 | Library UI and import | **done** |
-| 5 | WebKit reader (epub.js) | not started |
-| 6 | Keyboard routing | not started |
-| 7 | Notes and search | not started |
-| 8 | Documentation | not started |
+| Part | What | Steps | Status |
+|------|------|-------|--------|
+| I | Core extraction, bindings, app shell, library UI (was phases 0–4) | 5 | **done** |
+| II | WebKit reader (epub.js) + keyboard routing (was phases 5–6) | 2 | **in progress** — step 1 next |
+| III | Notes and search + documentation (was phases 7–8) | 2 | not started |
 
-Next: **Phase 5**.
+Next: **Part II, step 1** (WebKit reader).
 
 ---
 
-## Ground truth (re-verified 2026-09-02 after Phase 0)
+## Ground truth (re-verified 2026-09-02 after Part I)
 
 - Core lives in `crates/margins-core`. Those modules have **no Tauri
   dependency**. `src-tauri` is a thin `#[tauri::command]` wrapper over
@@ -52,8 +47,12 @@ Next: **Phase 5**.
   - The `.app` bundle is assembled by a shell script (Info.plist + binary +
     resources + ad-hoc `codesign -s -`).
 - Existing frontend already renders with **epub.js fed whole-book bytes**
-  (`src/reader.ts`: `ePub(bytes.buffer)` after `read_epub_bytes`). The macOS
-  reader mirrors this exactly.
+  (`src/reader.ts`: `ePub(bytes.buffer)` after `read_epub_bytes`; paginated
+  flow, `spread: "none"`; `j`/`k` scroll the iframe by ±80px; chapters are
+  shown as `index + 1`). The macOS reader mirrors these semantics exactly.
+- `epubjs` `^0.3.93` and its transitive `jszip` (3.10.1) are the renderer
+  versions pinned in `package.json`; the reader vendors `epub.min.js` +
+  `jszip.min.js` from `node_modules` (`npm install` populates them).
 - Real-book checks use whatever `*.epub` files are in `fixtures/` — any one
   book is enough; none of the title, author, or chapter count is hardcoded.
   A Karamazov file may sit there as an example. Do not special-case a book.
@@ -68,33 +67,36 @@ Next: **Phase 5**.
 - **Per-resource scheme handler** (`margins-book://<id>/<path>` with path
   validation into the ZIP) — unnecessary. epub.js unzips in JS from whole-book
   bytes, same as the Tauri app. The scheme handler serves only five fixed
-  resources (see Phase 5), so the arbitrary-path attack surface never exists.
+  resources (see Part II), so the arbitrary-path attack surface never exists.
 - **`extractText` bridge API** — only needed for future in-book full-text
   search. Deferred.
 - **SwiftUI `WebView`/`WebPage` (macOS 26 API)** — one code path only:
   `WKWebView` in an `NSViewRepresentable`. Less risk, works everywhere.
 - **XCUITest UI tests** — impossible without Xcode. Replaced by pure-logic
-  Swift Testing tests + human verification at stop points.
+  Swift Testing tests + human verification at part boundaries.
 - **Export/import/sync UI on macOS** — core keeps the capability; UI deferred
   past this plan.
 - **No database** — storage stays plain-text markdown/JSON, unchanged.
 
 ## Rules for the executing agent
 
-1. **One phase at a time, in order.** Finish the phase's verification before
-   touching the next phase.
-2. **Verify, then commit.** Every phase ends with verification commands. All
-   must pass before the phase's commit. If verification fails, fix it —
-   never commit a red phase, never skip ahead.
-3. **Commit granularity:** at minimum one commit per phase (message given
-   below). Additional intermediate commits are fine if a sub-step is green.
+1. **One step at a time, in order, within a part.** Finish a step's
+   verification before touching the next step. An agent run may complete a
+   whole part, but never leave a step half-done.
+2. **Verify, then commit.** Every step ends with verification commands. All
+   must pass before the step's commit. If verification fails, fix it — never
+   commit a red step, never skip ahead.
+3. **Commit granularity:** at minimum one commit per shipped step (messages
+   given below). Additional intermediate commits are fine if a sub-step is
+   green.
 4. **Never break Tauri.** `cargo test --workspace` and
    `cargo check -p margins` must pass at every stop point. Do not delete or
-   modify the existing frontend (`src/`, `index.html`) except where a phase
+   modify the existing frontend (`src/`, `index.html`) except where the plan
    explicitly says so.
 5. **STOP POINT** means: commit, then stop and report what works, how the
-   human can verify it, and any deviations. Do not continue into the next
-   phase in the same run unless explicitly told to keep going.
+   human can verify it, and any deviations. Human checks happen at part
+   boundaries; an agent may be told to continue through intermediate steps in
+   the same run (record that the intermediate human check was skipped).
 6. If a tool is missing or an approach in this plan turns out wrong, say so at
    the stop point instead of silently substituting something else.
 7. Named books in this plan (Karamazov, etc.) are **examples for humans**,
@@ -113,241 +115,130 @@ macOS SwiftUI app ── crates/margins-ffi (UniFFI, thin)
              (plain-text storage, no Tauri, no UI)
 ```
 
----
-
-## Phase 0 — Extract `margins-core` (workspace split) — DONE
-
-Shipped in `728ab6c` (`REFACTOR Extract margins-core into Cargo workspace crate`).
-
-1. Root `Cargo.toml` workspace with members `crates/margins-core` and
-   `src-tauri`. `src-tauri/Cargo.lock` moved to the workspace root.
-2. Moved `config.rs`, `epub_meta.rs`, `library.rs`, `models.rs`, `notes.rs`,
-   `sync.rs`, `test_fixtures.rs` into `crates/margins-core`. Core deps moved
-   with them; `dotenvy` stayed in `src-tauri` (only the Tauri `run()` entry
-   used it).
-3. `src-tauri/src/lib.rs` is a thin wrapper: `use margins_core::{...}` + the
-   existing `#[tauri::command]` functions. No logic changes.
-4. Extra (required by the workspace move): CI cargo steps run from the repo
-   root (`--workspace`); Linux bundle artifact path is `target/release/bundle/`;
-   root `.gitignore` ignores `/target/`.
-
-**Verify:**
-```bash
-cargo test --workspace
-cargo check -p margins        # the tauri crate still compiles
-npm run build                 # frontend TS still builds
-```
-
-**Commit:** `REFACTOR Extract Tauri-free margins-core crate into a workspace`
-
-**STOP POINT 1** — human may additionally run `npm run tauri dev` to confirm
-the Linux/desktop Tauri app still functions.
+SwiftPM targets: `margins_ffiFFI` (C header) → `MarginsCore` (generated
+bindings + `CoreStore` actor) → `MarginsModel` (UI-agnostic model layer:
+`LibraryModel`, `ReaderModel`, `ReaderResource`, `ReaderKeymap`) → `Margins`
+executable (SwiftUI + WKWebView glue) → `MarginsTests` (Swift Testing runner
+executable).
 
 ---
 
-## Phase 1 — Fixture + core-level import tests — DONE
+## Part I — Core extraction, bindings, app shell, library UI — DONE
 
-1. `fixtures/*.epub` holds example real books (optional Karamazov file is
-   one such example, not a required identity).
-2. Integration test `crates/margins-core/tests/import_real_epub.rs` imports
-   every `fixtures/*.epub` into a `tempfile` library dir and checks, per file:
-   - title and author are non-empty and match `parse_epub` on the same file;
-   - chapter count matches `parse_epub` (not a hardcoded number);
-   - first spine href exists in the imported `source.epub` ZIP.
-3. `bdbbfcd` only changed the sample fixture + XML parser — there was no
-   named test. Added `parse_manifest_attributes_in_either_order` and mixed
-   `href`/`id` order on the two sample manifest items.
+### Step 1 — Extract `margins-core` (workspace split)
 
-**Verify:** `cargo test --workspace`
+Shipped in `728ab6c` (`REFACTOR Extract margins-core into Cargo workspace
+crate`). Root `Cargo.toml` workspace with `crates/margins-core`, `crates/
+margins-ffi`, `src-tauri`; `src-tauri` became a thin `#[tauri::command]`
+wrapper; CI cargo steps run from the repo root.
 
-**Commit:** `CHORE Add Karamazov fixture and core import integration tests`
+### Step 2 — Fixture + core-level import tests
 
-**STOP POINT 2** (cheap — fine to bundle with Stop 1 in one session).
+`fixtures/*.epub` example books; `crates/margins-core/tests/import_real_epub.rs`
+imports every fixture into a `tempfile` library dir and checks title/author/
+chapter-count agreement with `parse_epub` (no hardcoded book).
 
----
+### Step 3 — `margins-ffi`: UniFFI bindings for Swift
 
-## Phase 2 — `margins-ffi`: UniFFI bindings for Swift — DONE
+`crates/margins-ffi` (UniFFI 0.29 proc-macro mode): `MarginsCore` object with
+`data_dir`, `library_root`, `set_library_root`, `list_books`, `import_epub`,
+`get_book`, `remove_book`, `read_epub_bytes`, `get_chapter_note`,
+`save_chapter_note`, `search_notes`; records mirror `models.rs` with RFC3339
+strings and `u32` counts; flat `CoreError`. `scripts/build-core.sh` builds the
+staticlib/dylib and generates Swift into the SwiftPM layout.
 
-1. `crates/margins-ffi` is a workspace member. `crate-type` is
-   `["lib", "staticlib", "cdylib"]` — `lib` extra so `cargo test --workspace`
-   can compile it. Depends on `margins-core` and `uniffi` 0.29 proc-macro
-   mode (no UDL). `uniffi` 0.32 exists; 0.29 matches the docs used here.
-2. `MarginsCore` object: `new(data_dir: Option<String>)` uses
-   `AppConfig::load_with_data_dir` (added on core; `None` still honors
-   `MARGINS_DATA_DIR` / `MARGINS_LIBRARY_ROOT`). Methods: `data_dir`,
-   `library_root`, `set_library_root`, `list_books`, `import_epub`,
-   `get_book`, `remove_book`, `read_epub_bytes`, `get_chapter_note`,
-   `save_chapter_note`, `search_notes`. Records mirror `models.rs` with
-   RFC3339 date strings and `u32` counts (UniFFI has no `chrono`/`usize`).
-   Errors are a flat `CoreError`. Sync export/import is not on this surface
-   (UI deferred).
-3. `crates/margins-ffi/src/bin/uniffi-bindgen.rs` calls
-   `uniffi::uniffi_bindgen_main()`.
-4. `scripts/build-core.sh` release-builds the crate and generates Swift into
-   `macos/Sources/MarginsCoreFFI/Generated/` (`.swift`, header, modulemap).
-   That directory is gitignored. Phase 3 Package.swift will split C vs Swift
-   targets; generated files stay together until then.
+### Step 4 — SwiftPM app skeleton, end-to-end bridge proof
 
-**Verify:**
-```bash
-./scripts/build-core.sh
-ls target/release/libmargins_ffi.a macos/Sources/MarginsCoreFFI/Generated/*.swift
-cargo test --workspace
-```
+Shipped in `078504c`. `macos/Package.swift` (Swift 6 tools, `.macOS(.v14)`);
+targets `margins_ffiFFI` (C target — named for the FFI module the generated
+Swift `canImport`s), `MarginsCore` (generated Swift + `CoreStore` actor;
+Swift 5 language mode for UniFFI output; statically linked against
+`target/release/libmargins_ffi.a` by path, plus `-llzma -lbz2`), `Margins`
+executable, `MarginsTests` executable. `make-app.sh` + root `Makefile`
+(`core`, `mac-build`, `mac-test`, `mac-app`, `mac-run`). Toolchain workarounds
+documented in `Package.swift` (`-F` for the CLT Testing framework; rpaths for
+`lib_TestingInterop.dylib`; `swift test` never invokes its runner on this
+CLT — see ground truth).
 
-**Commit:** `FEAT Add margins-ffi UniFFI crate and Swift binding generation`
+### Step 5 — Library UI and import
 
-**STOP POINT 3**
+Shipped in `ebd1668`. `MarginsModel` target with UI-agnostic `LibraryModel`
+(`@MainActor @Observable`): book list, selection, import, remove, single
+`errorMessage` channel. `NavigationSplitView` library browser (sidebar +
+detail with metadata and `index + 1` chapter list), `NSOpenPanel` import
+(`UTType.epub`, ⌘O via `Commands`), remove with confirmation dialog,
+`Identifiable` conformance on the bridge records. Model-layer tests:
+activate, import → selection → chapters, remove, failure surfaces an error.
+Human checks (stop points 4 and 5) passed.
 
 ---
 
-## Phase 3 — SwiftPM app skeleton, end-to-end bridge proof — DONE
+## Part II — Reader: WebKit (epub.js) + keyboard routing — *the vertical slice*
 
-1. `macos/Package.swift` — Swift 6 tools, platform `.macOS(.v14)`, targets:
-   - `margins_ffiFFI` (C target: generated header + module map). Named after
-     the FFI module, not `MarginsCoreFFI`: the generated bindings do
-     `#if canImport(margins_ffiFFI)` and SwiftPM requires a custom module
-     map's module name to match its target name.
-   - `MarginsCore` (generated Swift in `Generated/` + hand-written
-     `CoreStore` actor wrapper). Compiled in Swift 5 language mode (UniFFI
-     0.29 output is not strict-concurrency clean); the app targets use
-     Swift 6 mode. Linking: the static archive
-     `target/release/libmargins_ffi.a` is passed **by path** (ld prefers a
-     dylib when both exist, which would make binaries depend on
-     `target/release/deps/`), plus `-llzma -lbz2` for zip's xz2/bzip2 deps
-     (both ship in the macOS SDK; zstd is vendored into the archive).
-   - `Margins` executable (SwiftUI `@main`, `@Observable LibraryModel`,
-     `ContentView`; bridge calls go through the `CoreStore` actor so they
-     run off the main actor).
-   - `MarginsTests` executable (Swift Testing, see ground truth).
-2. Minimal SwiftUI app: one window shows the library root path and book
-   titles/authors from `list_books()` — proves Swift→Rust end to end.
-3. `scripts/make-app.sh`: assembles `build/Margins.app` (Contents/MacOS
-   binary, Info.plist with bundle id `app.margins.Margins` +
-   `NSPrincipalClass NSApplication`), ad-hoc signs with `codesign -s -`.
-   The binary statically links the Rust core — self-contained.
-4. Root `Makefile`: `core`, `mac-build`, `mac-test`, `mac-app`, `mac-run`.
-5. Swift Testing tests (`MarginsTests`): for every `fixtures/*.epub`, import
-   through the bridge into an explicit temp data dir (passed to the
-   constructor — parallel-safe, instead of the `MARGINS_DATA_DIR` env var);
-   assert non-empty title/author, non-empty chapters, and that re-reading
-   via `get_book`/`list_books` agrees with the import-time parse (same
-   contract as Phase 1 — no hardcoded book). Plus a data-dir round-trip
-   test.
-6. Toolchain workarounds baked into `Package.swift` (documented there): the
-   CLT's Swift Testing framework must be added via `-F` (SwiftPM only passes
-   `-I`, which cannot resolve framework modules) and linked with rpaths to
-   `Library/Developer/Frameworks` and `Library/Developer/usr/lib` (home of
-   `lib_TestingInterop.dylib`).
+### Step 1 — WebKit reader (epub.js)
 
-**Verify:**
-```bash
-make mac-build
-make mac-test
-make mac-app && ls build/Margins.app/Contents/MacOS
-cargo test --workspace
-```
-
-All four pass. Note: `swift test` remains intentionally unused (silently
-runs nothing on this toolchain — see ground truth).
-
-**Commit:** `FEAT Add SwiftPM macOS app shell wired to Rust core`
-
-**STOP POINT 4** — human: `make mac-run`, confirm a window appears listing the
-library (or an empty library) with the correct root path.
-
----
-
-## Phase 4 — Library UI and import — DONE
-
-1. New `MarginsModel` SwiftPM target (depends on `MarginsCore`): UI-agnostic
-   `LibraryModel` (`@MainActor @Observable`) owning the bridge store, book
-   list, selection (`selectedBookID` + `selectedBook: BookMeta?`), import,
-   remove, and a single `errorMessage` channel. Kept free of
-   SwiftUI/AppKit so `MarginsTests` can unit-test it directly.
-2. `NavigationSplitView` (`SidebarView` + `DetailArea`/`BookDetailView`):
-   sidebar = books (title, author) with list selection bound through
-   `@Bindable`; detail = metadata (author, language, source file, added
-   date) + chapter list (`index + 1`, matching the Tauri frontend).
-   `BookSummary`/`ChapterMeta` gained `Identifiable` extensions.
-3. Import: `NSOpenPanel` limited to `UTType.epub` → `importEpub(atPath:)` →
-   refresh + select the new book. Import/bridge errors surface through
-   `errorMessage` into one alert. Remove: sidebar context menu →
-   `confirmationDialog` (the core deletes the book's library dir, including
-   notes; the original EPUB file is untouched — stated in the dialog).
-4. SwiftUI `Commands` (`MarginsCommands`): File ▸ Import EPUB… (⌘O);
-   standard Close/Quit menus untouched.
-5. Model-layer tests (`MarginsTests`): activate-starts-empty, import →
-   selection → chapters (all fixtures, no hardcoded book), remove clears
-   selection, import failure surfaces `errorMessage`. Fixture helpers
-   moved to a shared `Fixtures.swift`.
-6. SwiftUI code reviewed against the swiftui-pro skill checklist: modern
-   `Date(_:strategy:)`-style parsing replaced `ISO8601DateFormatter`
-   (verified against chrono RFC3339 output), button actions extracted from
-   bodies, zero-parameter `onChange`, `@Bindable` selection instead of
-   `Binding(get:set:)`.
-
-**Verify:** `make mac-build && make mac-test && cargo test --workspace`
-
-All pass (6 Swift Testing tests, 9 Rust result blocks).
-
-**Commit:** `FEAT Add macOS library browser with EPUB import`
-
-**STOP POINT 5** — human: import any EPUB via ⌘O (e.g. a file from
-`fixtures/`); metadata and the full chapter list appear, sourced from Rust.
-
----
-
-## Phase 5 — WebKit reader (epub.js) — *the vertical slice*
-
-1. Vendor the renderer into
-   `macos/Sources/Margins/Resources/reader/`:
+1. Vendor the renderer into `macos/Sources/Margins/Resources/reader/`:
    `epub.min.js` + `jszip.min.js` (copy from `node_modules` at the versions
    pinned in `package.json`), plus hand-written `reader.html` and `reader.js`
-   modeled directly on `src/reader.ts` (paginated flow, `spread: "none"`).
+   modeled directly on `src/reader.ts` (paginated flow, `spread: "none"`,
+   paper-toned pane like `.reader-pane`).
 2. `WKWebView` in an `NSViewRepresentable`. Configuration:
-   - non-persistent `WKWebsiteDataStore`
+   - non-persistent `WKWebsiteDataStore`;
    - custom `WKURLSchemeHandler` for `margins-reader://` serving **exactly**:
      `reader.html`, `reader.js`, `epub.min.js`, `jszip.min.js`, and
-     `book.epub` (bytes from `read_epub_bytes`). Any other path → error.
-     Factor the path→resource resolution into a pure `ReaderResource` enum so
-     it is unit-testable without a webview.
+     `book.epub` (bytes from `read_epub_bytes` via a thread-safe
+     `CoreStore` nonisolated passthrough). Any other path → error. The
+     path→resource resolution lives in a pure `ReaderResource` enum in
+     `MarginsModel` so it is unit-testable without a webview;
    - navigation policy: any `http(s)` navigation → cancel and
-     `NSWorkspace.shared.open`; only `margins-reader://` loads internally.
-   - JS stays enabled (epub.js needs it); the EPUB's own scripts are not
-     given any native message handlers besides the ones defined in Phase 6.
-3. Reader loads `margins-reader://app/reader.html?book=<id>`; `reader.js`
-   fetches `book.epub`, opens with epub.js, displays the chapter chosen in
-   the sidebar (`evaluateJavaScript` for chapter jumps).
-4. Tests: `ReaderResource` resolution — the five valid paths resolve, and
+     `NSWorkspace.shared.open` (same for `createWebViewWith`, i.e.
+     `target=_blank`); only `margins-reader://` loads internally;
+   - JS stays enabled (epub.js needs it); the EPUB's own scripts get no
+     native message handlers in this step (the `readerKeys` handler arrives
+     in step 2).
+3. Clicking a chapter in the detail view opens the reader:
+   `ReaderModel` (`@MainActor @Observable`, in `MarginsModel`) holds the open
+   book/chapter; the webview loads
+   `margins-reader://app/reader.html?book=<id>&chapter=<href>`; `reader.js`
+   fetches `book.epub`, opens it with epub.js, displays that chapter;
+   chapter jumps go through `evaluateJavaScript`
+   (`readerDisplay(<json-quoted href>)`).
+4. `make-app.sh` copies the SwiftPM resource bundle into `Contents/Resources`
+   so `Bundle.module` resolves inside the `.app`.
+5. Tests: `ReaderResource` resolution — the five valid paths resolve, and
    traversal / unknown / absolute-path requests are rejected.
 
 **Verify:** `make mac-build && make mac-test && cargo test --workspace`
 
 **Commit:** `FEAT Render EPUB chapters in WebKit via epub.js`
 
-**STOP POINT 6 — acceptance check for the vertical slice.** Human:
-open a real EPUB (e.g. one from `fixtures/`) → first chapter renders with
-correct CSS/images/fonts; chapter clicks navigate; an external link opens
-in the system browser, not in the reader.
+**Human check (may be deferred to the end of the part):** open a real EPUB
+(e.g. one from `fixtures/`) → the chapter renders with correct CSS/images/
+fonts; chapter clicks navigate; an external link opens in the system browser,
+not in the reader.
 
----
-
-## Phase 6 — Keyboard routing
+### Step 2 — Keyboard routing
 
 1. In `reader.js`, hook epub.js's rendition `keydown` (fires for keys inside
    EPUB iframes — same hook `src/reader.ts` uses) **and** document-level
    keydown; forward `{key, ctrl, meta, shift}` to Swift via
-   `webkit.messageHandlers.readerKeys`.
-2. Swift `ReaderKeymap` — a small state machine mirroring `src/keymaps.ts`
-   semantics: `j`/`k` scroll, `n`/`p` chapter, `gg`/`G` top/bottom (with the
-   pending-`g` chord + timeout), `i` focus notes, `/` search, `Esc` back.
-   Actions dispatch to the reader model; scrolling/paging goes back into the
-   webview via `evaluateJavaScript`.
+   `webkit.messageHandlers.readerKeys` (registered through a weak proxy so
+   the controller does not leak).
+2. Swift `ReaderKeymap` (in `MarginsModel`) — a small state machine mirroring
+   `src/keymaps.ts` semantics: `j`/`k` scroll (±80px) in reader, move library
+   selection in shell; `n`/`p` chapter; `gg`/`G` top/bottom (pending-`g`
+   chord with a 1s timeout — the Tauri version has no timeout and a chord
+   bug; the Swift version implements the intended behavior); `i` focus notes
+   and `/` search are dispatched but wired up in Part III; `Esc`/`l` back;
+   `o` import; `Enter` opens the selected book. Actions dispatch to
+   `ReaderModel`/`LibraryModel`; scrolling/paging goes back into the webview
+   via `evaluateJavaScript`.
 3. Native side: the same keymap handles key events when focus is in the
    SwiftUI shell (library list: `j`/`k`/`Enter`, `o` import, `l` library),
-   via `onKeyPress` or a local `NSEvent` monitor — whichever proves reliable;
-   note the choice at the stop point.
+   via a **local `NSEvent` monitor** (chosen over `onKeyPress`: one choke
+   point that sees all key events regardless of SwiftUI focus, can skip
+   events headed for the WKWebView or a text field, and can swallow only
+   handled keys). ⌘/⌃/⌥ combos pass through to menus.
 4. App-level `Commands` stay in menus: Import (⌘O), Find (⌘F → `/`),
    Settings (⌘,) placeholder.
 5. Swift Testing tests for `ReaderKeymap`: chord handling (`g` then `g`,
@@ -357,12 +248,15 @@ in the system browser, not in the reader.
 
 **Commit:** `FEAT Add vim-style reader keybindings on macOS`
 
-**STOP POINT 7** — human: with click focus *inside* the rendered EPUB
-content, `j`/`k`/`n`/`p`/`gg`/`G` all work; menus still work.
+**STOP POINT (Part II)** — human: with click focus *inside* the rendered EPUB
+content, `j`/`k`/`n`/`p`/`gg`/`G` all work; menus still work; `Esc` returns
+to the library.
 
 ---
 
-## Phase 7 — Notes and search
+## Part III — Notes and search + documentation
+
+### Step 1 — Notes and search
 
 1. Notes pane in the reader (split or inspector): Markdown editor bound to
    `get_chapter_note`/`save_chapter_note`. `i` focuses it, `Esc` returns to
@@ -378,11 +272,7 @@ content, `j`/`k`/`n`/`p`/`gg`/`G` all work; menus still work.
 
 **Commit:** `FEAT Add chapter notes and note search to macOS app`
 
-**STOP POINT 8**
-
----
-
-## Phase 8 — Documentation
+### Step 2 — Documentation
 
 1. `docs/architecture.md`: core vs frontend responsibilities, the UniFFI
    bridge, the `margins-reader://` scheme and its security model (fixed
@@ -396,8 +286,10 @@ content, `j`/`k`/`n`/`p`/`gg`/`G` all work; menus still work.
 
 **Commit:** `DOCS Describe macOS frontend architecture and build workflow`
 
-**Done.** Acceptance criteria (all verified across stop points 6–8): a real
-EPUB opens; metadata/chapters come from Rust; first chapter renders in WebKit
-with CSS/images/fonts; keybindings work with WebKit focused; notes remain
-markdown/JSON on disk; Tauri tests/builds pass; no Tauri dependency in
+**STOP POINT (Part III)** — final acceptance review.
+
+**Done.** Acceptance criteria (all verified across the part-boundary checks):
+a real EPUB opens; metadata/chapters come from Rust; the chapter renders in
+WebKit with CSS/images/fonts; keybindings work with WebKit focused; notes
+remain markdown/JSON on disk; Tauri tests/builds pass; no Tauri dependency in
 `margins-core`; existing frontend untouched.

@@ -3,9 +3,12 @@ import MarginsModel
 
 struct DetailArea: View {
     @Environment(LibraryModel.self) private var model
+    @Environment(ReaderModel.self) private var reader
 
     var body: some View {
-        if let book = model.selectedBook {
+        if reader.isOpen {
+            ReaderView()
+        } else if let book = model.selectedBook {
             BookDetailView(book: book)
         } else if model.books.isEmpty {
             ContentUnavailableView(

@@ -114,4 +114,15 @@ public final class LibraryModel {
     public func clearError() {
         errorMessage = nil
     }
+
+    /// A thread-safe provider of raw EPUB bytes for the reader's scheme
+    /// handler. Call once on the main actor when creating the reader.
+    public func makeReaderBytesProvider() throws -> @Sendable (String) throws -> Data {
+        guard let store else {
+            throw CoreError.Message(message: "library is not open yet")
+        }
+        return { bookID in
+            try store.readEpubBytesSync(id: bookID)
+        }
+    }
 }
