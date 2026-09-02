@@ -14,14 +14,14 @@ This plan is written to be executed by an AI agent phase by phase. Read
 | 0 | Extract `margins-core` workspace crate | **done** — `728ab6c` |
 | 1 | Real EPUB fixture + core import tests | **done** |
 | 2 | `margins-ffi` UniFFI bindings | **done** |
-| 3 | SwiftPM app skeleton / bridge proof | not started |
+| 3 | SwiftPM app skeleton / bridge proof | **done** |
 | 4 | Library UI and import | not started |
 | 5 | WebKit reader (epub.js) | not started |
 | 6 | Keyboard routing | not started |
 | 7 | Notes and search | not started |
 | 8 | Documentation | not started |
 
-Next: **Phase 3**.
+Next: **Phase 4**.
 
 ---
 
@@ -33,14 +33,22 @@ Next: **Phase 3**.
 - Workspace root `Cargo.toml` members: `crates/margins-core`,
   `crates/margins-ffi`, `src-tauri`. `Cargo.lock` is at the repo root;
   `cargo` output is `/target/`. Swift bindings are generated (gitignored)
-  under `macos/Sources/MarginsCoreFFI/Generated/` by `./scripts/build-core.sh`.
+  by `./scripts/build-core.sh` into the SwiftPM layout:
+  `macos/Sources/margins_ffiFFI/include/` (C header + module map) and
+  `macos/Sources/MarginsCore/Generated/` (Swift bindings).
 - **This machine has Command Line Tools only, no full Xcode.** `xcodebuild`
   does not work. Therefore:
   - The macOS app is a **SwiftPM package** (`macos/Package.swift`), built with
     `swift build`. No `.xcodeproj`, no XcodeGen.
-  - Tests use **Swift Testing** (`import Testing`, `@Test`), which ships with
-    the CLT toolchain. **Do not use XCTest** — it requires full Xcode and will
-    fail here. No XCUITest UI tests; human stop points cover that.
+  - Tests use **Swift Testing** (`import Testing`, `@Test`), but as a
+    **runnable executable target** (`MarginsTests`), not a `.testTarget`:
+    SwiftPM 6.3.2 on this CLT links test bundles but **never invokes the
+    runner** — `swift test` silently exits 0 without running anything, and
+    `swiftpm-testing-helper` completes without output. The executable calls
+    `Testing.__swiftPMEntryPoint()` itself; `make mac-test` runs it with
+    `swift run`. Revisit if the toolchain is fixed or full Xcode lands.
+    **Do not use XCTest** — it is not present in CLT. No XCUITest UI tests;
+    human stop points cover that.
   - The `.app` bundle is assembled by a shell script (Info.plist + binary +
     resources + ad-hoc `codesign -s -`).
 - Existing frontend already renders with **epub.js fed whole-book bytes**
@@ -193,30 +201,44 @@ cargo test --workspace
 
 ---
 
-## Phase 3 — SwiftPM app skeleton, end-to-end bridge proof
+## Phase 3 — SwiftPM app skeleton, end-to-end bridge proof — DONE
 
 1. `macos/Package.swift` — Swift 6 tools, platform `.macOS(.v14)`, targets:
-   - `MarginsCoreFFI` (C target: header + modulemap from Phase 2)
-   - `MarginsCore` (generated Swift + hand-written ergonomic wrappers,
-     `linkerSettings` pointing at `target/release` and `-lmargins_ffi`)
-   - `Margins` executable (SwiftUI app, `@main`)
-   - `MarginsTests` (Swift Testing)
-2. Minimal SwiftUI app: one window showing the library root path and the list
-   of book titles from `list_books()` — proves Swift→Rust end to end.
-   Use `@Observable` models and Swift concurrency; bridge calls off the main
-   actor.
-3. `scripts/make-app.sh`: assemble `build/Margins.app` (Contents/MacOS binary,
-   Info.plist with bundle id + `NSPrincipalClass NSApplication`, Resources),
-   ad-hoc sign with `codesign -s -`.
-4. Root `Makefile`:
-   - `make core` → `scripts/build-core.sh`
-   - `make mac-build` → core + `swift build --package-path macos`
-   - `make mac-test` → core + `swift test --package-path macos`
-   - `make mac-run` → `make mac-app && open build/Margins.app`
-5. Swift Testing test: with `MARGINS_DATA_DIR` pointed at a temp dir, import
-   any `fixtures/*.epub` through the bridge; assert non-empty title/author
-   and that the chapter count matches the core parser (same contract as
-   Phase 1 — do not hardcode a book).
+   - `margins_ffiFFI` (C target: generated header + module map). Named after
+     the FFI module, not `MarginsCoreFFI`: the generated bindings do
+     `#if canImport(margins_ffiFFI)` and SwiftPM requires a custom module
+     map's module name to match its target name.
+   - `MarginsCore` (generated Swift in `Generated/` + hand-written
+     `CoreStore` actor wrapper). Compiled in Swift 5 language mode (UniFFI
+     0.29 output is not strict-concurrency clean); the app targets use
+     Swift 6 mode. Linking: the static archive
+     `target/release/libmargins_ffi.a` is passed **by path** (ld prefers a
+     dylib when both exist, which would make binaries depend on
+     `target/release/deps/`), plus `-llzma -lbz2` for zip's xz2/bzip2 deps
+     (both ship in the macOS SDK; zstd is vendored into the archive).
+   - `Margins` executable (SwiftUI `@main`, `@Observable LibraryModel`,
+     `ContentView`; bridge calls go through the `CoreStore` actor so they
+     run off the main actor).
+   - `MarginsTests` executable (Swift Testing, see ground truth).
+2. Minimal SwiftUI app: one window shows the library root path and book
+   titles/authors from `list_books()` — proves Swift→Rust end to end.
+3. `scripts/make-app.sh`: assembles `build/Margins.app` (Contents/MacOS
+   binary, Info.plist with bundle id `app.margins.Margins` +
+   `NSPrincipalClass NSApplication`), ad-hoc signs with `codesign -s -`.
+   The binary statically links the Rust core — self-contained.
+4. Root `Makefile`: `core`, `mac-build`, `mac-test`, `mac-app`, `mac-run`.
+5. Swift Testing tests (`MarginsTests`): for every `fixtures/*.epub`, import
+   through the bridge into an explicit temp data dir (passed to the
+   constructor — parallel-safe, instead of the `MARGINS_DATA_DIR` env var);
+   assert non-empty title/author, non-empty chapters, and that re-reading
+   via `get_book`/`list_books` agrees with the import-time parse (same
+   contract as Phase 1 — no hardcoded book). Plus a data-dir round-trip
+   test.
+6. Toolchain workarounds baked into `Package.swift` (documented there): the
+   CLT's Swift Testing framework must be added via `-F` (SwiftPM only passes
+   `-I`, which cannot resolve framework modules) and linked with rpaths to
+   `Library/Developer/Frameworks` and `Library/Developer/usr/lib` (home of
+   `lib_TestingInterop.dylib`).
 
 **Verify:**
 ```bash
@@ -225,6 +247,9 @@ make mac-test
 make mac-app && ls build/Margins.app/Contents/MacOS
 cargo test --workspace
 ```
+
+All four pass. Note: `swift test` remains intentionally unused (silently
+runs nothing on this toolchain — see ground truth).
 
 **Commit:** `FEAT Add SwiftPM macOS app shell wired to Rust core`
 
