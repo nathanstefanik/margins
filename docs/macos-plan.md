@@ -221,11 +221,15 @@ not in the reader.
 
 ### Step 2 — Keyboard routing — DONE
 
-1. In `reader.js`, epub.js's rendition `keydown` (fires for keys inside EPUB
-   iframes — same hook `src/reader.ts` uses) **and** document-level keydown
-   forward `{key, ctrl, meta, shift}` to Swift via
-   `webkit.messageHandlers.readerKeys` (registered through a weak
-   `ReaderMessageProxy` so the controller does not leak).
+1. Keyboard routing is **native end to end**: a single local `NSEvent`
+   monitor (`ShellKeyboardController`) sees every keyDown before dispatch —
+   including keys headed for the reader webview — and feeds them through the
+   shared `ReaderKeymap`; reader actions are injected into the page via
+   `evaluateJavaScript` (`window.reader*` API in `reader.js`). An earlier
+   attempt forwarded keys from `reader.js` via
+   `webkit.messageHandlers.readerKeys`, but keys typed inside the epub.js
+   iframe never surfaced reliably (the relay depends on epub.js internals),
+   so the JS path was removed in `91dbb9e`.
 2. Swift `ReaderKeymap` (in `MarginsModel`) — a small state machine mirroring
    `src/keymaps.ts` semantics: `j`/`k` scroll (±80px) in reader, move library
    selection in shell; `n`/`p` chapter; `gg`/`G` top/bottom (pending-`g`
@@ -235,12 +239,15 @@ not in the reader.
    `o` import; `Enter` opens the selected book. Actions dispatch to
    `ReaderModel`/`LibraryModel`; scrolling/paging goes back into the webview
    via `evaluateJavaScript`.
-3. Native side: the same keymap handles key events when focus is in the
-   SwiftUI shell (library list: `j`/`k`/`Enter`, `o` import, `l` library),
-   via a **local `NSEvent` monitor** (`ShellKeyboardController`; chosen over
-   `onKeyPress`: one choke point that sees all key events regardless of
-   SwiftUI focus, can skip events headed for the WKWebView or a text field,
-   and can swallow only handled keys). ⌘/⌃/⌥ combos pass through to menus.
+3. Native side: the same keymap handles key events in **both** modes via the
+   monitor — with the reader open, `j`/`k`, arrows/space/PgUp/PgDn turn
+   pages and `gg`/`G` jump first/last page (paginated flow has no vertical
+   overflow, so page turns are `rendition.next()/prev()` through the
+   injected calls); in the shell, `j`/`k` move the library selection,
+   `Enter` opens, `o` imports, `l`/`Esc` close the reader. Trackpad
+   two-finger scrolling also turns pages while reading (scroll-wheel
+   monitor; momentum ignored; 50pt threshold). ⌘/⌃/⌥ combos and text-field
+   typing pass through to menus/inputs.
 4. App-level `Commands` stay in menus: Import (⌘O), Find (⌘F → `/`),
    Settings (⌘,) placeholder.
 5. Swift Testing tests for `ReaderKeymap`: chord handling (`g` then `g`,
