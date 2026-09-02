@@ -16,7 +16,8 @@ struct ReaderModelTests {
             chapters: [
                 ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml"),
                 ChapterMeta(key: "ch2", index: 1, title: "Two", href: "two.xhtml"),
-            ]
+            ],
+            coverPath: nil
         )
     }
 

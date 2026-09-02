@@ -110,27 +110,25 @@ impl MarginsCore {
     }
 
     pub fn list_books(&self) -> Result<Vec<BookSummary>, CoreError> {
-        Ok(self
-            .library
-            .lock()
-            .map_err(poisoned)?
+        let library = self.library.lock().map_err(poisoned)?;
+        Ok(library
             .list_books()?
             .into_iter()
-            .map(Into::into)
+            .map(|summary| BookSummary::from_core(summary, &library))
             .collect())
     }
 
     pub fn import_epub(&self, path: String) -> Result<BookMeta, CoreError> {
-        Ok(self
-            .library
-            .lock()
-            .map_err(poisoned)?
-            .import_epub_with_progress(PathBuf::from(path), |_, _| {})?
-            .into())
+        let library = self.library.lock().map_err(poisoned)?;
+        Ok(BookMeta::from_core(
+            library.import_epub_with_progress(PathBuf::from(path), |_, _| {})?,
+            &library,
+        ))
     }
 
     pub fn get_book(&self, id: String) -> Result<BookMeta, CoreError> {
-        Ok(self.library.lock().map_err(poisoned)?.get_book(&id)?.into())
+        let library = self.library.lock().map_err(poisoned)?;
+        Ok(BookMeta::from_core(library.get_book(&id)?, &library))
     }
 
     pub fn remove_book(&self, id: String) -> Result<(), CoreError> {
