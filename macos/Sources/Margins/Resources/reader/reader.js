@@ -32,7 +32,29 @@ async function readerOpen() {
     spread: "none",
   });
 
+  readerRendition.hooks.content.register(readerPreserveAspectRatio);
+
   await readerRendition.display(readerStartHref || undefined);
+}
+
+// Keep images at their intrinsic aspect ratio: the paginated columns would
+// otherwise stretch content to fill the window's shape, and Gutenberg-style
+// covers use SVGs with preserveAspectRatio="none".
+function readerPreserveAspectRatio(contents) {
+  contents.addStylesheetRules({
+    "img, svg, image": {
+      "max-width": "100% !important",
+      "max-height": "100vh !important",
+      "width": "auto !important",
+      "height": "auto !important",
+      "object-fit": "contain !important",
+    },
+  });
+  contents.document
+    .querySelectorAll("svg[preserveAspectRatio='none'], svg[preserveAspectRatio='None']")
+    .forEach((svg) => {
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    });
 }
 
 function readerDisplay(href) {
