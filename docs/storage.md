@@ -28,6 +28,7 @@ both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
       meta.json              # title, author, chapter spine, cover file name
       source.epub            # imported copy
       cover.jpg              # extracted cover (extension follows the image type)
+      position.json          # reading position (chapter, CFI, percent)
       README.md              # human/agent orientation
       notes/
         _index.json          # machine index of chapter notes
@@ -57,6 +58,25 @@ The library scan backfills covers for books imported before extraction existed: 
 `meta.json` has no `cover`, the retained `source.epub` is re-probed and any cover found
 is written and recorded. A missing or corrupt `source.epub` never fails the scan — the
 book just stays coverless.
+
+## Reading position
+
+`books/{book_id}/position.json` records where the reader left off, debounced while
+reading and written on chapter/book changes:
+
+```json
+{
+  "chapter_key": "002",
+  "epub_cfi": "epubcfi(/6/6!/4/2/1:0)",
+  "percent": 42.5,
+  "updated_at": "2026-09-02T10:00:00Z"
+}
+```
+
+- `epub_cfi` locates the exact page within the chapter (omitted if unknown)
+- `percent` is the whole-book completion, clamped to 0–100
+- Opening a book normally resumes here; opening a specific chapter jumps explicitly
+- A missing or corrupt file is treated as "never opened" — the reader starts at chapter 1
 
 ## Chapter note format
 

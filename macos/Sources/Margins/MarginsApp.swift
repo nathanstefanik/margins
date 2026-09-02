@@ -8,6 +8,9 @@ struct MarginsApp: App {
 
     init() {
         model.reader = reader
+        reader.positionSaver = { [weak model] bookId, position in
+            await model?.saveReadingPosition(bookId: bookId, position: position)
+        }
     }
 
     var body: some Scene {

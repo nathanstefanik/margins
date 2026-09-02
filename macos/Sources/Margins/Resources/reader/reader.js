@@ -8,6 +8,9 @@
 const readerParams = new URLSearchParams(window.location.search);
 const readerBookId = readerParams.get("book");
 const readerStartHref = readerParams.get("chapter");
+// Saved reading position: an epub.js CFI takes precedence over the chapter
+// href so a resumed book opens on the same page.
+const readerStartCfi = readerParams.get("cfi");
 
 let readerBook = null;
 let readerRendition = null;
@@ -45,7 +48,7 @@ async function readerOpen() {
   // Preferences may have arrived before the book finished opening.
   readerApplyViewerWidth();
 
-  await readerRendition.display(readerStartHref || undefined);
+  await readerRendition.display(readerStartCfi || readerStartHref || undefined);
   readerOpened = true;
 }
 
@@ -138,8 +141,9 @@ function readerStyleContents(contents) {
 }
 
 // Forward relocation to the shell: page position within the chapter for the
-// progress footer, plus the section href so the shell can follow chapter
-// changes made by paging across section boundaries.
+// progress footer, plus the section href and the exact CFI so the shell can
+// follow chapter changes made by paging across boundaries and save the
+// reading position.
 function readerReportRelocated(location) {
   const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.reader;
   if (!handler) {
@@ -150,6 +154,7 @@ function readerReportRelocated(location) {
   handler.postMessage({
     type: "relocated",
     href: start && start.href ? start.href : null,
+    cfi: start && start.cfi ? start.cfi : null,
     page: displayed.page || 1,
     totalPages: displayed.total || 0,
   });

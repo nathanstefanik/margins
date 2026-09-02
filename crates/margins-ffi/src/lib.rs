@@ -8,7 +8,9 @@ use margins_core::models::NoteFrontmatter;
 use margins_core::notes;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use types::{BookMeta, BookSummary, ChapterNote, ChapterRef, NoteIndexEntry, NoteSearchHit};
+use types::{
+    BookMeta, BookSummary, ChapterNote, ChapterRef, NoteIndexEntry, NoteSearchHit, ReadingPosition,
+};
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -141,6 +143,26 @@ impl MarginsCore {
             .lock()
             .map_err(poisoned)?
             .read_epub_bytes(&id)?)
+    }
+
+    /// The book's saved reading position, or `None` when it was never
+    /// opened (or the position file is missing/corrupt).
+    pub fn get_reading_position(&self, id: String) -> Option<ReadingPosition> {
+        let library = self.library.lock().map_err(poisoned).ok()?;
+        library.read_position(&id).map(ReadingPosition::from_core)
+    }
+
+    /// Persists the book's reading position into the library tree.
+    pub fn save_reading_position(
+        &self,
+        id: String,
+        position: ReadingPosition,
+    ) -> Result<(), CoreError> {
+        Ok(self
+            .library
+            .lock()
+            .map_err(poisoned)?
+            .write_position(&id, position.into_core())?)
     }
 
     pub fn get_chapter_note(

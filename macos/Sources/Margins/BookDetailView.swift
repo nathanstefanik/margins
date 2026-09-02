@@ -42,12 +42,13 @@ struct BookDetailView: View {
                     .foregroundStyle(.secondary)
                 if !book.chapters.isEmpty {
                     Button {
-                        openReader(book.chapters[0])
+                        Task { await model.openBookResuming(id: book.id) }
                     } label: {
                         Label("Read", systemImage: "book.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
+                    .help("Resume reading (Enter)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -61,6 +62,9 @@ struct BookDetailView: View {
         }
         parts.append("Added \(addedText)")
         parts.append("\(book.chapters.count) chapters")
+        if let percent = book.progressPercent {
+            parts.append("\(Int(percent.rounded()))% read")
+        }
         return parts.joined(separator: " · ")
     }
 

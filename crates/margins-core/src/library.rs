@@ -1,5 +1,5 @@
 use crate::epub_meta;
-use crate::models::{BookMeta, BookSummary, LibraryIndex, NoteSearchHit};
+use crate::models::{BookMeta, BookSummary, LibraryIndex, NoteSearchHit, ReadingPosition};
 use crate::notes;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
@@ -75,6 +75,7 @@ impl Library {
                 .cover
                 .clone()
                 .or_else(|| self.backfill_cover(&entry.path(), &meta));
+            let progress_percent = self.read_position(&meta.id).map(|p| p.percent);
             summaries.push(BookSummary {
                 id: meta.id,
                 title: meta.title,
@@ -83,6 +84,7 @@ impl Library {
                 chapter_count: meta.chapters.len(),
                 notes_count,
                 cover,
+                progress_percent,
             });
         }
 
@@ -96,7 +98,35 @@ impl Library {
         if !meta_path.exists() {
             return Err(LibraryError::Other(format!("book not found: {book_id}")));
         }
-        Ok(serde_json::from_str(&fs::read_to_string(meta_path)?)?)
+        let mut meta: BookMeta = serde_json::from_str(&fs::read_to_string(meta_path)?)?;
+        meta.progress_percent = self.read_position(book_id).map(|p| p.percent);
+        Ok(meta)
+    }
+
+    /// The book's saved reading position, or `None` when it was never
+    /// opened or the position file is missing/corrupt (a corrupt file must
+    /// not break the library — the reader falls back to chapter 1).
+    pub fn read_position(&self, book_id: &str) -> Option<ReadingPosition> {
+        let path = self.book_dir(book_id).join("position.json");
+        let raw = fs::read_to_string(path).ok()?;
+        serde_json::from_str(&raw).ok()
+    }
+
+    /// Saves the book's reading position. Percent is clamped to 0–100.
+    pub fn write_position(
+        &self,
+        book_id: &str,
+        mut position: ReadingPosition,
+    ) -> Result<(), LibraryError> {
+        let book_dir = self.book_dir(book_id);
+        if !book_dir.is_dir() {
+            return Err(LibraryError::Other(format!("book not found: {book_id}")));
+        }
+        position.percent = position.percent.clamp(0.0, 100.0);
+        position.updated_at = Utc::now();
+        let raw = serde_json::to_string_pretty(&position)?;
+        fs::write(book_dir.join("position.json"), raw)?;
+        Ok(())
     }
 
     pub fn read_epub_bytes(&self, book_id: &str) -> Result<Vec<u8>, LibraryError> {
@@ -189,6 +219,7 @@ impl Library {
             source_filename,
             chapters,
             cover: cover_name,
+            progress_percent: None,
         };
 
         on_progress(95, "saving");
@@ -450,6 +481,81 @@ mod tests {
         let listed = library.list_books().unwrap();
         assert_eq!(listed.len(), 1);
         assert!(listed[0].cover.is_none());
+    }
+
+    #[test]
+    fn reading_position_round_trips_and_clamps_percent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+
+        // Never opened: no position.
+        assert!(library.read_position(&meta.id).is_none());
+
+        let position = ReadingPosition {
+            chapter_key: "002".into(),
+            epub_cfi: Some("epubcfi(/6/4!/4/2)".into()),
+            percent: 42.5,
+            updated_at: Utc::now(),
+        };
+        library.write_position(&meta.id, position).unwrap();
+
+        let read = library.read_position(&meta.id).unwrap();
+        assert_eq!(read.chapter_key, "002");
+        assert_eq!(read.epub_cfi.as_deref(), Some("epubcfi(/6/4!/4/2)"));
+        assert!((read.percent - 42.5).abs() < f64::EPSILON);
+
+        // Percent clamps to 0–100.
+        library
+            .write_position(
+                &meta.id,
+                ReadingPosition {
+                    chapter_key: "002".into(),
+                    epub_cfi: None,
+                    percent: 150.0,
+                    updated_at: Utc::now(),
+                },
+            )
+            .unwrap();
+        assert_eq!(library.read_position(&meta.id).unwrap().percent, 100.0);
+
+        library
+            .write_position(
+                &meta.id,
+                ReadingPosition {
+                    chapter_key: "001".into(),
+                    epub_cfi: None,
+                    percent: -5.0,
+                    updated_at: Utc::now(),
+                },
+            )
+            .unwrap();
+        assert_eq!(library.read_position(&meta.id).unwrap().percent, 0.0);
+
+        // The catalog and the book detail join the percent through.
+        assert_eq!(library.list_books().unwrap()[0].progress_percent, Some(0.0));
+        assert_eq!(
+            library.get_book(&meta.id).unwrap().progress_percent,
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn corrupt_position_file_falls_back_to_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub(tmp.path(), "sample.epub");
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+
+        fs::write(
+            library.book_dir(&meta.id).join("position.json"),
+            b"not json",
+        )
+        .unwrap();
+        assert!(library.read_position(&meta.id).is_none());
+        assert_eq!(library.list_books().unwrap()[0].progress_percent, None);
+        assert_eq!(library.get_book(&meta.id).unwrap().progress_percent, None);
     }
 
     #[test]

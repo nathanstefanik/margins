@@ -13,6 +13,8 @@ pub struct BookSummary {
     /// Absolute path of the cover image file, or `None` when the book has
     /// none. Resolved from the library root at call time.
     pub cover_path: Option<String>,
+    /// Percent complete (0–100), or `None` when the book was never opened.
+    pub progress_percent: Option<f64>,
 }
 
 #[derive(uniffi::Record)]
@@ -35,6 +37,45 @@ pub struct BookMeta {
     /// Absolute path of the cover image file, or `None` when the book has
     /// none. Resolved from the library root at call time.
     pub cover_path: Option<String>,
+    /// Percent complete (0–100), or `None` when the book was never opened.
+    pub progress_percent: Option<f64>,
+}
+
+/// Where a reader left off in a book. Saved through the core into the
+/// library tree (`books/{book_id}/position.json`) so it syncs like
+/// everything else; `updated_at` is set by the core on save.
+#[derive(uniffi::Record)]
+pub struct ReadingPosition {
+    pub chapter_key: String,
+    pub epub_cfi: Option<String>,
+    pub percent: f64,
+    pub updated_at: Option<String>,
+}
+
+impl ReadingPosition {
+    pub fn from_core(value: models::ReadingPosition) -> Self {
+        Self {
+            chapter_key: value.chapter_key,
+            epub_cfi: value.epub_cfi,
+            percent: value.percent,
+            updated_at: Some(rfc3339(value.updated_at)),
+        }
+    }
+
+    pub fn into_core(self) -> models::ReadingPosition {
+        models::ReadingPosition {
+            chapter_key: self.chapter_key,
+            epub_cfi: self.epub_cfi,
+            percent: self.percent,
+            // The core stamps the save time itself; any caller value is
+            // advisory only.
+            updated_at: self
+                .updated_at
+                .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
+                .map(|t| t.with_timezone(&Utc))
+                .unwrap_or_else(Utc::now),
+        }
+    }
 }
 
 #[derive(uniffi::Record)]
@@ -103,6 +144,7 @@ impl BookSummary {
             chapter_count: value.chapter_count as u32,
             notes_count: value.notes_count as u32,
             cover_path,
+            progress_percent: value.progress_percent,
         }
     }
 }
@@ -132,6 +174,7 @@ impl BookMeta {
             source_filename: value.source_filename,
             chapters: value.chapters.into_iter().map(Into::into).collect(),
             cover_path,
+            progress_percent: value.progress_percent,
         }
     }
 }
