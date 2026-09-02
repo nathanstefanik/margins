@@ -437,8 +437,8 @@ that finishes a phase, after Nathan's sign-off on the visual items).
 | 3 | Library & book detail redesign | Done (80b2d96) |
 | 4 | Reading-position persistence | Done (3a46d83) |
 | 5 | Notes pane polish | Done (2e96ef4) |
-| 6 | Search engine rebuild + command palette (6a/6b/6c) | Not started |
-| 7 | Discoverability, menus, settings, icon | Not started |
+| 6 | Search engine rebuild + command palette (6a/6b/6c) | Done (6a81607) |
+| 7 | Discoverability, menus, settings, icon | Done (26add30) |
 
 ## Future work (explicitly out of scope for now)
 
