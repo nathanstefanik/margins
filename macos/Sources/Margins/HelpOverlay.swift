@@ -17,37 +17,37 @@ struct HelpOverlay: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("Keyboard Shortcuts")
-                        .font(.headline)
+                        .font(.title3)
                     Spacer()
                     Text("esc")
-                        .font(.caption2.monospaced())
+                        .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.quaternary))
                 }
-                .padding(16)
+                .padding(18)
 
                 Divider()
 
                 ScrollView {
                     LazyVGrid(
-                        columns: [GridItem(.flexible(), spacing: 24), GridItem(.flexible())],
+                        columns: [GridItem(.flexible(), spacing: 28), GridItem(.flexible())],
                         alignment: .leading,
-                        spacing: 20
+                        spacing: 26
                     ) {
                         ForEach(ReaderKeymap.helpGroups(), id: \.name) { group in
                             keyGroup(group)
                         }
                     }
-                    .padding(16)
+                    .padding(20)
                 }
-                .frame(maxHeight: 440)
+                .frame(maxHeight: 500)
             }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
             .shadow(color: .black.opacity(0.35), radius: 18, y: 6)
-            .frame(width: 640)
+            .frame(width: 720)
             .padding(.top, 40)
             .contentShape(.rect)
             .onTapGesture {}
@@ -55,19 +55,29 @@ struct HelpOverlay: View {
     }
 
     private func keyGroup(_ group: KeyHelpGroup) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(group.name)
-                .font(.caption)
+                .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
             ForEach(Array(group.entries.enumerated()), id: \.offset) { _, entry in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(prettified(entry.keys))
-                        .font(.caption.monospaced())
-                    Spacer(minLength: 8)
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    HStack(spacing: 5) {
+                        ForEach(entry.keys, id: \.self) { key in
+                            Text(prettified(key))
+                                .font(.callout.monospaced())
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    .quaternary.opacity(0.7),
+                                    in: RoundedRectangle(cornerRadius: 6)
+                                )
+                        }
+                    }
+                    Spacer(minLength: 12)
                     Text(entry.description)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.trailing)
                 }
@@ -76,30 +86,26 @@ struct HelpOverlay: View {
     }
 
     /// Raw keymap names become keycap-ish labels: "Space", "Esc", "→".
-    private func prettified(_ keys: [String]) -> String {
-        keys
-            .map { key -> String in
-                switch key {
-                case " ":
-                    return "Space"
-                case "Escape":
-                    return "Esc"
-                case "ArrowRight":
-                    return "→"
-                case "ArrowLeft":
-                    return "←"
-                case "ArrowUp":
-                    return "↑"
-                case "ArrowDown":
-                    return "↓"
-                case "PageUp":
-                    return "PgUp"
-                case "PageDown":
-                    return "PgDn"
-                default:
-                    return key
-                }
-            }
-            .joined(separator: " / ")
+    private func prettified(_ key: String) -> String {
+        switch key {
+        case " ":
+            return "Space"
+        case "Escape":
+            return "Esc"
+        case "ArrowRight":
+            return "→"
+        case "ArrowLeft":
+            return "←"
+        case "ArrowUp":
+            return "↑"
+        case "ArrowDown":
+            return "↓"
+        case "PageUp":
+            return "PgUp"
+        case "PageDown":
+            return "PgDn"
+        default:
+            return key
+        }
     }
 }
