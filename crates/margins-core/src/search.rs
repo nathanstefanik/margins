@@ -153,6 +153,12 @@ fn parse_terms(query: &str) -> Vec<String> {
         .collect()
 }
 
+impl Default for SearchEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SearchEngine {
     pub fn new() -> Self {
         Self {
@@ -463,7 +469,7 @@ fn build_snippet(body: &str, terms: &[String], ranges: &mut Vec<MatchRange>) -> 
     };
     let mut snippet = body[start_byte..end_byte].to_string();
     if start_char > 0 {
-        snippet.insert_str(0, "…");
+        snippet.insert(0, '…');
     }
     if end_char < chars.len() {
         snippet.push('…');
