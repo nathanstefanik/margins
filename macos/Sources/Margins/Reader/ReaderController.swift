@@ -64,6 +64,30 @@ final class ReaderController: NSObject {
         return literal
     }
 
+    /// Evaluates a script in the open reader's page, whatever view is on
+    /// top (the key monitor and menu commands both drive the webview this
+    /// way). Returns false when no reader webview is on screen.
+    @discardableResult
+    static func evaluateInReader(_ script: String) -> Bool {
+        guard let contentView = NSApp.keyWindow?.contentView,
+              let webView = findWebView(in: contentView)
+        else { return false }
+        webView.evaluateJavaScript(script, completionHandler: nil)
+        return true
+    }
+
+    static func findWebView(in view: NSView) -> WKWebView? {
+        if let webView = view as? WKWebView {
+            return webView
+        }
+        for subview in view.subviews {
+            if let found = findWebView(in: subview) {
+                return found
+            }
+        }
+        return nil
+    }
+
     // MARK: Typography
 
     /// Applies the current preferences to the page; the page stores the spec

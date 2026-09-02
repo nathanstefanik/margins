@@ -29,8 +29,7 @@ struct MarginsApp: App {
             MarginsCommands(model: model, reader: reader)
         }
         Settings {
-            Text("Nothing to configure yet.")
-                .frame(minWidth: 280, minHeight: 120)
+            SettingsView(model: model, reader: reader)
         }
     }
 }

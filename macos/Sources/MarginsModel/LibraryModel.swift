@@ -136,6 +136,23 @@ public final class LibraryModel {
         }
     }
 
+    /// Human-readable progress for a running import, e.g.
+    /// "Importing 2 of 3: karamazov.epub" — nil when idle.
+    public private(set) var importStatus: String?
+
+    /// Imports several EPUBs in turn, surfacing per-file progress for the
+    /// sidebar. One failed file does not stop the rest.
+    public func importEpubs(atPaths paths: [String]) async {
+        for (offset, path) in paths.enumerated() {
+            let name = URL(fileURLWithPath: path).lastPathComponent
+            importStatus = paths.count > 1
+                ? "Importing \(offset + 1) of \(paths.count): \(name)"
+                : "Importing \(name)…"
+            _ = await importEpub(atPath: path)
+        }
+        importStatus = nil
+    }
+
     /// The reader state this library drives. Wired once at app startup so
     /// removals can close the reader when its book disappears.
     public weak var reader: ReaderModel?
@@ -217,7 +234,19 @@ public final class LibraryModel {
     /// same flag: the monitor closes the overlay on Esc because the search
     /// field's AppKit field editor consumes the key before any SwiftUI
     /// handler can see it.
-    public var searchOpen = false
+    public var searchOpen = false {
+        didSet {
+            if searchOpen { helpOpen = false }
+        }
+    }
+
+    /// Whether the keyboard-shortcuts cheat sheet is presented; mutually
+    /// exclusive with the search palette.
+    public var helpOpen = false {
+        didSet {
+            if helpOpen { searchOpen = false }
+        }
+    }
 
     /// Presents the note search overlay (`/`, ⌘F).
     public func requestSearch() {
@@ -227,6 +256,16 @@ public final class LibraryModel {
     /// Dismisses the note search overlay (Esc, click outside, opening a hit).
     public func requestSearchDismissal() {
         searchOpen = false
+    }
+
+    /// Presents the keyboard-shortcuts cheat sheet (`?`, Help menu).
+    public func requestHelp() {
+        helpOpen = true
+    }
+
+    /// Dismisses the cheat sheet (Esc, click outside).
+    public func requestHelpDismissal() {
+        helpOpen = false
     }
 
     /// Loads the note for the reader's current chapter into its state.

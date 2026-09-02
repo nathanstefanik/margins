@@ -58,8 +58,10 @@ macOS keybindings:
 | `o` | Import EPUB (also ⌘O) |
 | `Enter` | Open selected book (library) |
 | `/` | Search notes (also ⌘F) |
+| `?` | Keyboard shortcuts cheat sheet (also ⌘/) |
 | ⌘S | Save note |
 | ⌘+ / ⌘− / ⌘0 | Bigger / smaller / reset text size |
+| ⌘, | Settings (typography, library directory) |
 | Trackpad | Two-finger scroll turns pages |
 
 ## Configuration

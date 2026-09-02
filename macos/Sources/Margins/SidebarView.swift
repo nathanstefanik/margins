@@ -25,6 +25,20 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
+            if let status = model.importStatus {
+                Divider()
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
             Divider()
             libraryRootBar
         }
