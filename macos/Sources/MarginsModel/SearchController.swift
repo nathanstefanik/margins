@@ -26,10 +26,15 @@ public final class SearchController {
 
     public private(set) var query = ""
     public private(set) var results: [NoteSearchHit] = []
+    /// Total hits found by the backend before the cap was applied.
+    public private(set) var totalResults = 0
     /// True when the backend found more matches than `resultCap`.
     public private(set) var isTruncated = false
     public private(set) var isSearching = false
     public private(set) var recents: [String] = []
+    /// Virtual selection over the display order (sections flattened, or the
+    /// recents list while the query is empty). `nil` = nothing selected.
+    public private(set) var selection: Int?
 
     private var task: Task<Void, Never>?
     private var generation = 0
@@ -55,8 +60,10 @@ public final class SearchController {
 
         guard !text.trimmingCharacters(in: .whitespaces).isEmpty else {
             results = []
+            totalResults = 0
             isTruncated = false
             isSearching = false
+            selection = nil
             return
         }
         isSearching = true
@@ -99,8 +106,10 @@ public final class SearchController {
         generation += 1
         query = ""
         results = []
+        totalResults = 0
         isTruncated = false
         isSearching = false
+        selection = nil
     }
 
     private func execute(_ text: String) async -> [NoteSearchHit] {
@@ -109,9 +118,58 @@ public final class SearchController {
     }
 
     private func apply(_ hits: [NoteSearchHit], for text: String) {
-        guard text == query, generation > 0 else { return }
+        guard text == query else { return }
+        totalResults = hits.count
         results = Array(hits.prefix(Self.resultCap))
         isTruncated = hits.count > Self.resultCap
         isSearching = false
+        selection = nil
+    }
+
+    // MARK: Virtual selection (↑/↓/⌃N/⌃P)
+
+    /// The display order the palette navigates: sections flattened.
+    public var orderedResults: [NoteSearchHit] {
+        SearchResultsOrganizer.flatOrder(for: results)
+    }
+
+    public var selectedHit: NoteSearchHit? {
+        guard let selection, orderedResults.indices.contains(selection) else { return nil }
+        return orderedResults[selection]
+    }
+
+    public var selectedRecent: String? {
+        guard isQueryEmpty, let selection, recents.indices.contains(selection) else { return nil }
+        return recents[selection]
+    }
+
+    public var isQueryEmpty: Bool {
+        query.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// The row the selection highlights; keep in sync with the view.
+    public func select(index: Int) {
+        let count = isQueryEmpty ? recents.count : orderedResults.count
+        guard index >= 0, index < count else { return }
+        selection = index
+    }
+
+    /// Moves the virtual selection, wrapping at both ends (nvim/browsers).
+    public func moveSelection(_ delta: Int) {
+        let count = isQueryEmpty ? recents.count : orderedResults.count
+        selection = Self.movedSelection(current: selection, count: count, delta: delta)
+    }
+
+    /// Wrapping navigation math: nil + down selects the first row, nil + up
+    /// the last; out-of-range indices wrap. Pure for tests.
+    public static func movedSelection(current: Int?, count: Int, delta: Int) -> Int? {
+        guard count > 0, delta != 0 else { return nil }
+        let effective: Int
+        if let current {
+            effective = current + delta
+        } else {
+            effective = delta > 0 ? 0 : count - 1
+        }
+        return ((effective % count) + count) % count
     }
 }
