@@ -71,13 +71,25 @@ final class ShellKeyboardController {
             return event
         }
 
-        guard let characters = event.characters, !characters.isEmpty,
-              let key = characters.first
-        else { return event }
+        guard let characters = event.characters, let character = characters.first else {
+            return event
+        }
+
+        // Function keys report private-use glyphs in `characters`; map the
+        // ones we care about by key code so arrows and page keys route like
+        // their keymap names.
+        let key: String
+        switch event.keyCode {
+        case 123: key = "ArrowLeft"
+        case 124: key = "ArrowRight"
+        case 125, 121: key = "PageDown"
+        case 126, 116: key = "PageUp"
+        default: key = String(character)
+        }
 
         keymap.setMode(reader.isOpen ? .reader : .library)
         let keyEvent = ReaderKeyEvent(
-            key: String(key),
+            key: key,
             ctrl: flags.contains(.control),
             meta: flags.contains(.command),
             shift: flags.contains(.shift)
@@ -95,6 +107,9 @@ final class ShellKeyboardController {
         guard reader.isOpen else { return event }
         // Ignore momentum: inertia should not flip through many pages.
         guard event.momentumPhase == .none else { return event }
+        // Only page when the cursor is actually over the book; scrolling the
+        // sidebar or notes pane keeps its native behavior.
+        guard isCursorOverWebView(event) else { return event }
 
         let dx = event.scrollingDeltaX
         let dy = event.scrollingDeltaY
@@ -110,6 +125,20 @@ final class ShellKeyboardController {
         return event
     }
 
+    private func isCursorOverWebView(_ event: NSEvent) -> Bool {
+        guard let window = event.window, let contentView = window.contentView else { return false }
+        let location = event.locationInWindow
+        guard let hit = contentView.hitTest(contentView.convert(location, from: nil)) else { return false }
+        var view: NSView? = hit
+        while let current = view {
+            if current is WKWebView {
+                return true
+            }
+            view = current.superview
+        }
+        return false
+    }
+
     @discardableResult
     private func perform(_ action: ReaderAction) -> Bool {
         switch action {
@@ -117,6 +146,7 @@ final class ShellKeyboardController {
             model.moveLibrarySelection(delta)
             return true
         case .openSelectedBook:
+            guard model.selectedBookID != nil else { return false }
             openSelectedBook()
             return true
         case .backToLibrary:

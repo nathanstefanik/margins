@@ -21,6 +21,13 @@ public final class ReaderModel {
     public func close() {
         book = nil
         chapter = nil
+        notesVisible = false
+        noteBody = ""
+        noteBaseline = nil
+        notePath = nil
+        noteWordCount = nil
+        noteUpdatedAt = nil
+        notesError = nil
     }
 
     /// Advances to the next chapter, if any; returns it.

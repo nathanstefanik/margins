@@ -6,6 +6,10 @@ struct MarginsApp: App {
     @State private var model = LibraryModel()
     @State private var reader = ReaderModel()
 
+    init() {
+        model.reader = reader
+    }
+
     var body: some Scene {
         WindowGroup("Margins") {
             ContentView()
