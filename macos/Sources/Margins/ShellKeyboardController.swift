@@ -61,10 +61,23 @@ final class ShellKeyboardController {
             return event
         }
 
+        // The search overlay owns Esc: its field editor would otherwise
+        // consume the key before any SwiftUI handler, so the monitor
+        // closes it directly (see LibraryModel.searchOpen).
+        if model.searchOpen, event.keyCode == 53 {
+            model.requestSearchDismissal()
+            return nil
+        }
+
+        // While a modal panel (e.g. the import open panel) runs, every key
+        // belongs to it: typing must stay native and the keymap must not
+        // act behind it.
+        let modalPanelUp = NSApp.modalWindow != nil
+
         if let firstResponder = NSApp.keyWindow?.firstResponder, firstResponder is NSTextView {
             // Typing in a text field stays native — except Esc while writing
             // a note, which hands focus back to the book (Tauri semantics).
-            if reader.isOpen, event.keyCode == 53 {
+            if reader.isOpen, event.keyCode == 53, !modalPanelUp {
                 reader.requestReaderFocus()
                 return nil
             }
@@ -87,7 +100,7 @@ final class ShellKeyboardController {
         default: key = String(character)
         }
 
-        keymap.setMode(reader.isOpen ? .reader : .library)
+        keymap.setMode(model.searchOpen || modalPanelUp ? .modal : (reader.isOpen ? .reader : .library))
         let keyEvent = ReaderKeyEvent(
             key: key,
             ctrl: flags.contains(.control),

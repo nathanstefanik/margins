@@ -146,11 +146,21 @@ public final class LibraryModel {
 
     // MARK: Notes (Part III)
 
-    public private(set) var searchRequest = 0
+    /// Whether the note search overlay is presented. Owned here rather
+    /// than in view state so the UI and the shell key monitor drive the
+    /// same flag: the monitor closes the overlay on Esc because the search
+    /// field's AppKit field editor consumes the key before any SwiftUI
+    /// handler can see it.
+    public var searchOpen = false
 
-    /// Asks the UI to present the note search sheet.
+    /// Presents the note search overlay (`/`, ⌘F).
     public func requestSearch() {
-        searchRequest += 1
+        searchOpen = true
+    }
+
+    /// Dismisses the note search overlay (Esc, click outside, opening a hit).
+    public func requestSearchDismissal() {
+        searchOpen = false
     }
 
     /// Loads the note for the reader's current chapter into its state.

@@ -19,6 +19,10 @@ public struct ReaderKeyEvent: Equatable, Sendable {
 public enum ReaderKeymapMode: Equatable, Sendable {
     case library
     case reader
+    /// A modal surface owns the keyboard (note search overlay, import
+    /// panel): every key passes through untouched so Esc dismisses it and
+    /// typing stays native, and the keymap must not act behind it.
+    case modal
 }
 
 /// Actions the keymap produces; callers map them to UI behavior.
@@ -73,6 +77,10 @@ public final class ReaderKeymap {
     /// monotonic timestamp in seconds (injectable for tests).
     public func handle(_ event: ReaderKeyEvent, now: TimeInterval) -> [ReaderAction] {
         if event.ctrl || event.meta {
+            return []
+        }
+
+        if mode == .modal {
             return []
         }
 

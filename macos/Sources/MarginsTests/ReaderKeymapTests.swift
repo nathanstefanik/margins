@@ -86,6 +86,15 @@ struct ReaderKeymapTests {
         #expect(keymap.handle(ReaderKeyEvent(key: "o"), now: 0) == [.importBook])
     }
 
+    @Test("modal mode: every key passes through so the overlay handles Esc and typing")
+    func modalModePassthrough() {
+        let keymap = ReaderKeymap(mode: .modal)
+        for key in ["j", "k", "Escape", "l", "/", "o", " ", "Enter", "g", "n"] {
+            #expect(keymap.handle(ReaderKeyEvent(key: key), now: 0).isEmpty)
+        }
+        #expect(keymap.handle(ReaderKeyEvent(key: "G"), now: 0).isEmpty)
+    }
+
     @Test("ctrl and meta combos are ignored so menus keep working")
     func modifierCombosAreIgnored() {
         let keymap = ReaderKeymap(mode: .reader)
