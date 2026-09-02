@@ -1,12 +1,32 @@
 import Foundation
 import MarginsCore
 
+/// Position within the current chapter, as reported by the renderer's
+/// `relocated` events. Page counts are the paginated section's own, so they
+/// change with typography and window size — they are display state, not
+/// persisted data.
+public struct ReaderProgress: Equatable, Sendable {
+    public var page: Int
+    public var totalPages: Int
+
+    public init(page: Int, totalPages: Int) {
+        self.page = page
+        self.totalPages = totalPages
+    }
+}
+
 /// State of the open reader: which book and chapter are being displayed.
 @MainActor
 @Observable
 public final class ReaderModel {
+    /// Typography preferences applied to the reading surface. Owned here so
+    /// the shell and the reader webview drive the same instance; survives
+    /// `close()` (chrome state, persisted separately).
+    public let preferences = ReaderPreferences()
+
     public private(set) var book: BookMeta?
     public private(set) var chapter: ChapterMeta?
+    public private(set) var progress: ReaderProgress?
 
     public init() {}
 
@@ -16,11 +36,13 @@ public final class ReaderModel {
     public func open(book: BookMeta, chapter: ChapterMeta) {
         self.book = book
         self.chapter = chapter
+        progress = nil
     }
 
     public func close() {
         book = nil
         chapter = nil
+        progress = nil
         notesVisible = false
         noteBody = ""
         noteBaseline = nil
@@ -50,6 +72,24 @@ public final class ReaderModel {
         guard book.chapters.indices.contains(target) else { return nil }
         self.chapter = book.chapters[target]
         return self.chapter
+    }
+
+    /// Called from the renderer bridge when epub.js reports a relocated
+    /// event: updates the progress footer and follows the chapter when the
+    /// renderer moved across a section boundary (e.g. paging past the end
+    /// of a chapter with j/k), keeping the notes pane on the right chapter.
+    public func relocated(page: Int, totalPages: Int, href: String?) {
+        let safeTotal = max(totalPages, 0)
+        progress = ReaderProgress(
+            page: min(max(page, 1), max(safeTotal, 1)),
+            totalPages: safeTotal
+        )
+        guard let href, let book,
+              let match = book.chapters.first(where: { $0.href == href })
+        else { return }
+        if match.key != chapter?.key {
+            chapter = match
+        }
     }
 
     // MARK: Notes pane state (Part III)
