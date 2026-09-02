@@ -13,7 +13,7 @@ struct MarginsApp: App {
                 .environment(reader)
         }
         .commands {
-            MarginsCommands(model: model)
+            MarginsCommands(model: model, reader: reader)
         }
         Settings {
             Text("Nothing to configure yet.")

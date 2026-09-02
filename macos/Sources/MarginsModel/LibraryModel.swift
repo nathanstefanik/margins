@@ -136,4 +136,60 @@ public final class LibraryModel {
             try store.readEpubBytesSync(id: bookID)
         }
     }
+
+    // MARK: Notes (Part III)
+
+    public private(set) var searchRequest = 0
+
+    /// Asks the UI to present the note search sheet.
+    public func requestSearch() {
+        searchRequest += 1
+    }
+
+    /// Loads the note for the reader's current chapter into its state.
+    public func loadChapterNote(reader: ReaderModel) async {
+        guard let store, let book = reader.book, let chapter = reader.chapter else { return }
+        do {
+            let note = try await store.getChapterNote(bookId: book.id, chapterKey: chapter.key)
+            reader.noteLoaded(
+                body: note.body,
+                path: note.path.isEmpty ? nil : note.path,
+                wordCount: note.frontmatter.wordCount,
+                updatedAt: note.frontmatter.updatedAt
+            )
+        } catch {
+            reader.noteFailed(String(describing: error))
+        }
+    }
+
+    /// Saves the reader's current note body (markdown + YAML frontmatter).
+    public func saveChapterNote(reader: ReaderModel) async {
+        guard let store, let book = reader.book, let chapter = reader.chapter else { return }
+        let ref = ChapterRef(key: chapter.key, epubCfi: nil)
+        do {
+            let note = try await store.saveChapterNote(
+                bookId: book.id,
+                chapter: ref,
+                body: reader.noteBody,
+                kind: nil
+            )
+            reader.noteSaved(
+                path: note.path,
+                wordCount: note.frontmatter.wordCount,
+                updatedAt: note.frontmatter.updatedAt
+            )
+        } catch {
+            reader.noteFailed(String(describing: error))
+        }
+    }
+
+    public func searchNotes(_ query: String) async -> [NoteSearchHit] {
+        guard let store, !query.isEmpty else { return [] }
+        return (try? await store.searchNotes(query: query)) ?? []
+    }
+
+    public func getBook(id: String) async -> BookMeta? {
+        guard let store else { return nil }
+        return try? await store.getBook(id: id)
+    }
 }

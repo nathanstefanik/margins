@@ -46,4 +46,21 @@ public actor CoreStore {
     public nonisolated func readEpubBytesSync(id: String) throws -> Data {
         try core.readEpubBytes(id: id)
     }
+
+    public func getChapterNote(bookId: String, chapterKey: String) throws -> ChapterNote {
+        try core.getChapterNote(bookId: bookId, chapterKey: chapterKey)
+    }
+
+    public func saveChapterNote(
+        bookId: String,
+        chapter: ChapterRef,
+        body: String,
+        kind: String?
+    ) throws -> ChapterNote {
+        try core.saveChapterNote(bookId: bookId, chapter: chapter, body: body, kind: kind)
+    }
+
+    public func searchNotes(query: String) throws -> [NoteSearchHit] {
+        try core.searchNotes(query: query)
+    }
 }
