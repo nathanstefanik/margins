@@ -6,12 +6,23 @@ struct ReaderView: View {
     @Environment(ReaderModel.self) private var reader
 
     var body: some View {
-        ReaderWebView(model: model, reader: reader)
-            .navigationTitle(reader.book?.title ?? "Reader")
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Button("Library", systemImage: "sidebar.left", action: reader.close)
+        HSplitView {
+            ReaderWebView(model: model, reader: reader)
+                .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
+            if reader.notesVisible {
+                NotesPane()
+            }
+        }
+        .navigationTitle(reader.book?.title ?? "Reader")
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button("Library", systemImage: "sidebar.left", action: reader.close)
+            }
+            ToolbarItem(placement: .navigation) {
+                Button("Notes", systemImage: "square.and.pencil") {
+                    reader.toggleNotes()
                 }
             }
+        }
     }
 }

@@ -62,6 +62,12 @@ final class ShellKeyboardController {
         }
 
         if let firstResponder = NSApp.keyWindow?.firstResponder, firstResponder is NSTextView {
+            // Typing in a text field stays native — except Esc while writing
+            // a note, which hands focus back to the book (Tauri semantics).
+            if reader.isOpen, event.keyCode == 53 {
+                reader.requestReaderFocus()
+                return nil
+            }
             return event
         }
 
@@ -132,9 +138,13 @@ final class ShellKeyboardController {
         case .previousChapter:
             guard reader.previousChapter() != nil else { return false }
             return displayCurrentChapter()
-        case .focusNotes, .search:
-            // Notes and search arrive in Part III.
-            return false
+        case .focusNotes:
+            guard reader.isOpen else { return false }
+            reader.openNotes()
+            return true
+        case .search:
+            model.requestSearch()
+            return true
         }
     }
 
