@@ -84,6 +84,14 @@ final class ShellKeyboardController {
             return event
         }
 
+        // Reader Esc backs out one layer at a time: the editor case above
+        // returns focus to the book, this one closes the notes pane, and
+        // the keymap's .backToLibrary below exits to the library.
+        if reader.isOpen, reader.notesVisible, event.keyCode == 53, !modalPanelUp {
+            reader.closeNotes()
+            return nil
+        }
+
         guard let characters = event.characters, let character = characters.first else {
             return event
         }

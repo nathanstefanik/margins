@@ -242,6 +242,36 @@ struct NotesTests {
         try await Task.sleep(for: .milliseconds(50)) // let the detached save land
     }
 
+    @Test("closeNotes flushes pending edits and hides the pane")
+    @MainActor
+    func closeNotesFlushesAndHides() async throws {
+        let spy = SaveSpy()
+        let reader = ReaderModel()
+        reader.noteSaveDebounce = 10
+        reader.noteSaver = { bookId, chapterKey, body in
+            spy.record(bookId, chapterKey, body)
+        }
+
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteLoaded(body: "", path: nil, wordCount: 0, updatedAt: nil)
+        reader.openNotes()
+        #expect(reader.notesVisible)
+
+        reader.noteBody = "esc cascade draft"
+        reader.noteEdited()
+        reader.closeNotes()
+
+        #expect(!reader.notesVisible)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(spy.all.count == 1)
+        #expect(spy.all.first?.2 == "esc cascade draft")
+
+        // Esc on an already-closed pane is a no-op.
+        reader.closeNotes()
+        #expect(spy.all.count == 1)
+    }
+
     @Test("notes header formats chapter number and title")
     func notesHeaderFormatting() {
         #expect(

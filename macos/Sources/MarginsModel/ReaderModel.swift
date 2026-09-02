@@ -245,6 +245,15 @@ public final class ReaderModel {
         }
     }
 
+    /// Closes the notes pane (Esc's outward cascade); any pending edit is
+    /// autosaved first.
+    public func closeNotes() {
+        guard notesVisible else { return }
+        flushNoteSave()
+        notesVisible = false
+        readerFocusRequest += 1
+    }
+
     public func openNotes() {
         notesVisible = true
         notesFocusRequest += 1

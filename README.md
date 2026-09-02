@@ -52,8 +52,8 @@ macOS keybindings:
 | Space / arrows / PgDn / PgUp | Turn pages (reader) |
 | `gg` / `G` | First / last page of chapter |
 | `n` / `p` | Next / previous chapter |
-| `i` | Open and focus the notes pane |
-| `Esc` | Notes editor → reader; reader → library |
+| `i` / `Enter` | Open and focus the notes pane (reader) |
+| `Esc` | Notes editor → reader; reader → close notes pane; pane closed → library |
 | `l` | Library |
 | `o` | Import EPUB (also ⌘O) |
 | `Enter` | Open selected book (library) |
