@@ -98,12 +98,19 @@ public final class LibraryModel {
         }
     }
 
+    /// The reader state this library drives. Wired once at app startup so
+    /// removals can close the reader when its book disappears.
+    public weak var reader: ReaderModel?
+
     /// Removes a book (its library directory, including notes) and
     /// refreshes; the user's original EPUB file is untouched.
     public func removeBook(id: String) async {
         guard let store else { return }
         do {
             try await store.removeBook(id: id)
+            if reader?.book?.id == id {
+                reader?.close()
+            }
             await refresh()
         } catch {
             errorMessage = String(describing: error)
@@ -185,7 +192,12 @@ public final class LibraryModel {
 
     public func searchNotes(_ query: String) async -> [NoteSearchHit] {
         guard let store, !query.isEmpty else { return [] }
-        return (try? await store.searchNotes(query: query)) ?? []
+        do {
+            return try await store.searchNotes(query: query)
+        } catch {
+            errorMessage = String(describing: error)
+            return []
+        }
     }
 
     public func getBook(id: String) async -> BookMeta? {

@@ -54,7 +54,12 @@ struct SearchSheet: View {
         .padding()
         .frame(minWidth: 520, idealWidth: 640, minHeight: 360, idealHeight: 460)
         .task(id: query) {
-            hits = await model.searchNotes(query)
+            // Rapid typing can complete tasks out of order; discard stale ones.
+            let searched = query
+            let results = await model.searchNotes(searched)
+            if searched == query {
+                hits = results
+            }
         }
         .onAppear {
             fieldFocused = true
