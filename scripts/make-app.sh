@@ -17,6 +17,13 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/Margins"
 
+icon="$root/scripts/assets/Margins.icns"
+if [ -f "$icon" ]; then
+  cp "$icon" "$app/Contents/Resources/Margins.icns"
+else
+  echo "warning: Margins.icns not found at $icon (run scripts/make-icon.swift)" >&2
+fi
+
 resources_bundle="macos/.build/release/Margins_Margins.bundle"
 if [ -d "$resources_bundle" ]; then
   cp -R "$resources_bundle" "$app/Contents/Resources/"
@@ -30,6 +37,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
+    <string>Margins</string>
+    <key>CFBundleIconFile</key>
     <string>Margins</string>
     <key>CFBundleIdentifier</key>
     <string>app.margins.Margins</string>
