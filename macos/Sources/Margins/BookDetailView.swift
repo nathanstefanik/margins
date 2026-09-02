@@ -18,6 +18,11 @@ struct BookDetailView: View {
             .padding(28)
         }
         .navigationTitle(book.title)
+        .task(id: book.id) {
+            // Coming back from the reader: percent and note indicators were
+            // captured before the reading session; refresh them.
+            await model.loadSelectedBook()
+        }
     }
 
     // MARK: Hero header

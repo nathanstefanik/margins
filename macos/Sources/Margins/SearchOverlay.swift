@@ -11,6 +11,10 @@ struct SearchOverlay: View {
     @Environment(LibraryModel.self) private var model
     @Environment(ReaderModel.self) private var reader
     @FocusState private var fieldFocused: Bool
+    // Keyboard navigation scrolls the selected row into view; hover-driven
+    // selection must not (scrolling under the cursor would select row after
+    // row — a feedback loop).
+    @State private var keyboardScrollTarget: Int?
     // The query lifecycle (debounce, latest-wins, cap) lives in the model.
     private var controller: SearchController { model.search }
 
@@ -64,19 +68,25 @@ struct SearchOverlay: View {
             .onSubmit { submit() }
             .onKeyPress(.upArrow) {
                 controller.moveSelection(-1)
+                keyboardScrollTarget = controller.selection
                 return .handled
             }
             .onKeyPress(.downArrow) {
                 controller.moveSelection(1)
+                keyboardScrollTarget = controller.selection
                 return .handled
             }
             .onKeyPress { press in
                 // Vim hands: ⌃N/⌃P move the selection like ↓/↑.
                 guard press.modifiers == .control else { return .ignored }
                 switch press.key {
-                case "n": controller.moveSelection(1)
+                case "n":
+                    controller.moveSelection(1)
+                    keyboardScrollTarget = controller.selection
                     return .handled
-                case "p": controller.moveSelection(-1)
+                case "p":
+                    controller.moveSelection(-1)
+                    keyboardScrollTarget = controller.selection
                     return .handled
                 default: return .ignored
                 }
@@ -197,10 +207,10 @@ struct SearchOverlay: View {
                 }
             }
             .frame(maxHeight: 360)
-            .onChange(of: controller.selection) {
-                guard let selected = controller.selection else { return }
+            .onChange(of: keyboardScrollTarget) {
+                guard let target = keyboardScrollTarget else { return }
                 withAnimation(.easeOut(duration: 0.1)) {
-                    proxy.scrollTo(selected, anchor: .center)
+                    proxy.scrollTo(target, anchor: .center)
                 }
             }
         }
