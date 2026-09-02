@@ -17,6 +17,13 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/Margins"
 
+resources_bundle="macos/.build/release/Margins_Margins.bundle"
+if [ -d "$resources_bundle" ]; then
+  cp -R "$resources_bundle" "$app/Contents/Resources/"
+else
+  echo "warning: SwiftPM resource bundle not found at $resources_bundle" >&2
+fi
+
 cat > "$app/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

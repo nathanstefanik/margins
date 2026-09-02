@@ -46,7 +46,11 @@ let package = Package(
         ),
         .executableTarget(
             name: "Margins",
-            dependencies: ["MarginsCore", "MarginsModel"]
+            dependencies: ["MarginsCore", "MarginsModel"],
+            resources: [
+                // Vendored epub.js renderer (see docs/macos-plan.md Part II).
+                .copy("Resources/reader")
+            ]
         ),
         // UI-agnostic model layer for the library browser (import, remove,
         // selection, errors). Separate target so MarginsTests can unit-test

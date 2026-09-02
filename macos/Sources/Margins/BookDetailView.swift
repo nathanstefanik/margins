@@ -1,7 +1,9 @@
 import SwiftUI
 import MarginsCore
+import MarginsModel
 
 struct BookDetailView: View {
+    @Environment(ReaderModel.self) private var reader
     let book: BookMeta
 
     var body: some View {
@@ -16,17 +18,30 @@ struct BookDetailView: View {
             }
             Section("Chapters (\(book.chapters.count))") {
                 ForEach(book.chapters) { chapter in
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("\(chapter.index + 1)")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .frame(minWidth: 28, alignment: .trailing)
-                        Text(chapter.title)
+                    Button {
+                        openReader(chapter)
+                    } label: {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("\(chapter.index + 1)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: 28, alignment: .trailing)
+                            Text(chapter.title)
+                            Spacer()
+                            Image(systemName: "book")
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(.rect)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
         .navigationTitle(book.title)
+    }
+
+    private func openReader(_ chapter: ChapterMeta) {
+        reader.open(book: book, chapter: chapter)
     }
 
     private var addedText: String {
