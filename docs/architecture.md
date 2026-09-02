@@ -61,7 +61,7 @@ so tests run through the `MarginsTests` runner executable). Targets:
   state), `ReaderResource` (scheme-handler routing), `ReaderKeymap`
   (vim-style key state machine). Unit-tested via `MarginsTests`.
 - `Margins` — SwiftUI app: library browser, reader (WKWebView + epub.js),
-  notes pane, search sheet, keyboard/trackpad routing.
+  notes pane, search overlay, keyboard/trackpad routing.
 - `MarginsTests` — a Swift Testing **runner executable** (SwiftPM's test
   runner never invokes test bundles on the CLT toolchain; see the plan doc).
 
@@ -105,8 +105,11 @@ reading. ⌘-combos and text-field typing pass through to menus and inputs.
 
 The notes pane edits the chapter note from `get_chapter_note`; ⌘S / `i`-pane
 Save go through `save_chapter_note`, writing the same markdown+frontmatter
-files as the Tauri app. `/` (or ⌘F) opens the search sheet over
-`search_notes`; opening a hit jumps straight to that book/chapter.
+files as the Tauri app. `/` (or ⌘F) opens the search overlay over
+`search_notes`; opening a hit jumps straight to that book/chapter. The
+overlay is non-modal (no sheet window) and `LibraryModel.searchOpen` is the
+single source of truth: the shell key monitor closes it on Esc and clicks
+outside the panel dismiss it.
 
 ## Building and running (macOS)
 
