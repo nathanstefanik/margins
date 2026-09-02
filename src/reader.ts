@@ -10,6 +10,7 @@ export class EpubReader {
   constructor(
     private container: HTMLElement,
     private onChapterChange: (chapter: ChapterMeta, cfi?: string) => void,
+    private onKeyDown: (event: KeyboardEvent) => void,
   ) {}
 
   async open(bytes: Uint8Array, chapters: ChapterMeta[], startIndex = 0): Promise<void> {
@@ -26,6 +27,7 @@ export class EpubReader {
       flow: "paginated",
       spread: "none",
     });
+    this.rendition.on("keydown", this.onKeyDown);
 
     this.rendition.on("relocated", (location: { start: { cfi: string } }) => {
       const cfi = location.start.cfi;
@@ -86,6 +88,7 @@ export class EpubReader {
   }
 
   destroy(): void {
+    this.rendition?.off("keydown", this.onKeyDown);
     this.rendition?.destroy();
     this.book?.destroy();
     this.rendition = null;
