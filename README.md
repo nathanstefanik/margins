@@ -28,6 +28,39 @@ Build a release binary:
 npm run tauri build
 ```
 
+## macOS app
+
+A native SwiftUI frontend sharing the same Rust core (see
+[docs/architecture.md](docs/architecture.md)).
+
+Requirements: Rust (stable) and Apple Command Line Tools (`xcode-select
+--install`). Full Xcode is not required.
+
+```bash
+make core        # build margins-ffi + generate Swift bindings
+make mac-build   # build the Swift package
+make mac-test    # run the Swift Testing suite
+make mac-app     # assemble build/Margins.app (ad-hoc signed)
+make mac-run     # mac-app + open it
+```
+
+macOS keybindings:
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Next / previous page (reader) or move selection (library) |
+| Space / arrows / PgDn / PgUp | Turn pages (reader) |
+| `gg` / `G` | First / last page of chapter |
+| `n` / `p` | Next / previous chapter |
+| `i` | Open and focus the notes pane |
+| `Esc` | Notes editor → reader; reader → library |
+| `l` | Library |
+| `o` | Import EPUB (also ⌘O) |
+| `Enter` | Open selected book (library) |
+| `/` | Search notes (also ⌘F) |
+| ⌘S | Save note |
+| Trackpad | Two-finger scroll turns pages |
+
 ## Configuration
 
 | Variable | Purpose |
