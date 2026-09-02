@@ -158,8 +158,13 @@ public final class ReaderModel {
     private func commitPendingPosition() {
         guard let pending = pendingPosition else { return }
         pendingPosition = nil
+        // Serialize writes: a flush can commit while an earlier debounce
+        // write is still in flight, and an older position must never land
+        // after a newer one.
+        let previous = positionSaveChain
         let saver = positionSaver
-        Task.detached {
+        positionSaveChain = Task {
+            await previous?.value
             await saver?(pending.bookId, pending.position)
         }
     }
@@ -200,6 +205,10 @@ public final class ReaderModel {
     /// Debounce window after typing stops; injectable for tests.
     public var noteSaveDebounce: TimeInterval = 1.0
     private var noteSaveTask: Task<Void, Never>?
+    // Write chains: debounce timers may be cancelled freely, but the file
+    // writes themselves must run strictly in commit order.
+    private var noteSaveChain: Task<Void, Never>?
+    private var positionSaveChain: Task<Void, Never>?
 
     /// Live word count of the editor content (the ~100-word target signal).
     public var liveNoteWordCount: Int {
@@ -334,8 +343,14 @@ public final class ReaderModel {
         guard isNoteDirty, let book, let chapter, let saver = noteSaver else { return }
         let body = noteBody
         noteSaveStatus = .saving
-        Task.detached {
-            await saver(book.id, chapter.key, body)
+        // Serialize writes: a ⌘S flush can commit while a debounced save is
+        // still in flight; the newest snapshot must land last, not first.
+        let previous = noteSaveChain
+        let bookId = book.id
+        let chapterKey = chapter.key
+        noteSaveChain = Task {
+            await previous?.value
+            await saver(bookId, chapterKey, body)
         }
     }
 }

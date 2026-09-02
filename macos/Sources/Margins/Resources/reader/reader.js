@@ -48,7 +48,17 @@ async function readerOpen() {
   // Preferences may have arrived before the book finished opening.
   readerApplyViewerWidth();
 
-  await readerRendition.display(readerStartCfi || readerStartHref || undefined);
+  try {
+    await readerRendition.display(readerStartCfi || readerStartHref || undefined);
+  } catch (error) {
+    // A stale CFI (externally updated EPUB, position synced from another
+    // machine) must not brick the reader: fall back to the chapter top.
+    if (readerStartCfi) {
+      await readerRendition.display(readerStartHref || undefined);
+    } else {
+      throw error;
+    }
+  }
   readerOpened = true;
 }
 
