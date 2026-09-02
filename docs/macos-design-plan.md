@@ -241,10 +241,10 @@ The differentiator should feel like the best-crafted part of the app.
 
 **Nathan verifies**
 
-- [ ] Notes header always names the chapter you're annotating; press `n` a
+- [x] Notes header always names the chapter you're annotating; press `n` a
       few times and watch it follow.
-- [ ] Type, wait, quit without ⌘S — note survived.
-- [ ] Pane open/close feels smooth; nothing jumps when the dirty state
+- [x] Type, wait, quit without ⌘S — note survived.
+- [x] Pane open/close feels smooth; nothing jumps when the dirty state
       changes.
 
 ---
@@ -436,7 +436,7 @@ that finishes a phase, after Nathan's sign-off on the visual items).
 | 2 | Cover extraction (Rust core + FFI) | Done (a3f9f81) |
 | 3 | Library & book detail redesign | Done (80b2d96) |
 | 4 | Reading-position persistence | Done (3a46d83) |
-| 5 | Notes pane polish | Not started |
+| 5 | Notes pane polish | Done (2e96ef4) |
 | 6 | Search engine rebuild + command palette (6a/6b/6c) | Not started |
 | 7 | Discoverability, menus, settings, icon | Not started |
 
