@@ -14,9 +14,10 @@ part.
 |------|------|-------|--------|
 | I | Core extraction, bindings, app shell, library UI (was phases 0–4) | 5 | **done** |
 | II | WebKit reader (epub.js) + keyboard routing (was phases 5–6) | 2 | **done** |
-| III | Notes and search + documentation (was phases 7–8) | 2 | not started |
+| III | Notes and search + documentation (was phases 7–8) | 2 | **done** |
 
-Next: **Part III, step 1** (notes and search).
+Next: nothing — the plan is complete. Future work continues as normal
+commits (see `AGENTS.md`).
 
 ---
 
@@ -267,9 +268,9 @@ run (reader renders were to be verified here instead).
 
 ---
 
-## Part III — Notes and search + documentation
+## Part III — Notes and search + documentation — DONE
 
-### Step 1 — Notes and search
+### Step 1 — Notes and search — DONE
 
 1. Notes pane in the reader (split or inspector): Markdown editor bound to
    `get_chapter_note`/`save_chapter_note`. `i` focuses it, `Esc` returns to
@@ -285,7 +286,7 @@ run (reader renders were to be verified here instead).
 
 **Commit:** `FEAT Add chapter notes and note search to macOS app`
 
-### Step 2 — Documentation
+### Step 2 — Documentation — DONE
 
 1. `docs/architecture.md`: core vs frontend responsibilities, the UniFFI
    bridge, the `margins-reader://` scheme and its security model (fixed
