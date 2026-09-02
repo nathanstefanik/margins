@@ -23,9 +23,10 @@ final class ReaderController: NSObject {
     }
 
     func makeWebView() -> WKWebView {
-        let bytesProvider = (try? model.makeReaderBytesProvider()) ?? { _ in
+        let fallbackProvider: @Sendable (String) throws -> Data = { _ in
             throw CoreError.Message(message: "library is not open yet")
         }
+        let bytesProvider = (try? model.makeReaderBytesProvider()) ?? fallbackProvider
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
@@ -113,7 +114,7 @@ extension ReaderController: WKNavigationDelegate {
     func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
         if let url = navigationAction.request.url, url.scheme == "http" || url.scheme == "https" {
             NSWorkspace.shared.open(url)

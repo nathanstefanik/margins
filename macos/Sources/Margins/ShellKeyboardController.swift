@@ -119,7 +119,9 @@ final class ShellKeyboardController {
     private func handleScroll(_ event: NSEvent) -> NSEvent? {
         guard reader.isOpen else { return event }
         // Ignore momentum: inertia should not flip through many pages.
-        guard event.momentumPhase == .none else { return event }
+        // (Phase is an OptionSet; compare via isEmpty so `.none` doesn't
+        // resolve to Optional.none, which never matches.)
+        guard event.momentumPhase.isEmpty else { return event }
         // Only page when the cursor is actually over the book; scrolling the
         // sidebar or notes pane keeps its native behavior.
         guard isCursorOverWebView(event) else { return event }
@@ -200,6 +202,7 @@ final class ShellKeyboardController {
         evaluate("readerScrollBy(\(direction))")
     }
 
+    @discardableResult
     private func evaluate(_ script: String) -> Bool {
         guard let webView = readerWebView() else { return false }
         webView.evaluateJavaScript(script, completionHandler: nil)
