@@ -53,7 +53,7 @@ export class App {
       this.currentCfi = cfi;
       this.highlightChapter(chapter.key);
       void this.loadNote(chapter);
-    });
+    }, (event) => this.handleKey(event));
 
     this.keymap = new Keymap({
       onLibrary: () => void this.showLibrary(),
@@ -104,11 +104,15 @@ export class App {
     });
 
     window.addEventListener("keydown", (event) => {
-      this.keymap.handleKey(event, event.target);
-      if (this.keymap.getMode() === "library") {
-        this.renderLibrarySelection();
-      }
+      this.handleKey(event);
     });
+  }
+
+  private handleKey(event: KeyboardEvent): void {
+    this.keymap.handleKey(event, event.target);
+    if (this.keymap.getMode() === "library") {
+      this.renderLibrarySelection();
+    }
   }
 
   private async bootstrap(): Promise<void> {

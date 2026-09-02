@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "test:keymap": "node scripts/test-keymap.mjs",
     "preview": "vite preview",
+    "test:reader-keymap": "node scripts/test-reader-keymap.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
