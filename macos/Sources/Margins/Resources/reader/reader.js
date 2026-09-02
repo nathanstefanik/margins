@@ -32,36 +32,7 @@ async function readerOpen() {
     spread: "none",
   });
 
-  readerRendition.on("keydown", readerForwardKey);
-  document.addEventListener("keydown", readerForwardKey);
-
   await readerRendition.display(readerStartHref || undefined);
-}
-
-const readerForwardableKeys = new Set([
-  "j", "k", "g", "G", "n", "p", "i", "/", "l", "o",
-  "Enter", "Escape", " ", "ArrowRight", "ArrowLeft", "PageDown", "PageUp",
-]);
-
-function readerForwardKey(event) {
-  // Keys typed into form fields stay native; only the vim-style set is
-  // forwarded (and preventDefault-ed so the webview doesn't double-handle).
-  const tag = event.target && event.target.tagName
-    ? String(event.target.tagName).toUpperCase()
-    : "";
-  if (tag === "INPUT" || tag === "TEXTAREA") {
-    return;
-  }
-  if (!readerForwardableKeys.has(event.key)) {
-    return;
-  }
-  event.preventDefault();
-  window.webkit?.messageHandlers?.readerKeys?.postMessage({
-    key: event.key,
-    ctrl: event.ctrlKey,
-    meta: event.metaKey,
-    shift: event.shiftKey,
-  });
 }
 
 function readerDisplay(href) {
