@@ -23,7 +23,7 @@ struct MarginsCommands: Commands {
         }
     }
 
-    /// Same path as the `/` key: opens the note search sheet.
+    /// Same path as the `/` key: opens the note search overlay.
     private func find() async {
         model.requestSearch()
     }
