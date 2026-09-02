@@ -11,6 +11,10 @@ struct MarginsCommands: Commands {
                 Task { await ImportPanel.run(model: model) }
             }
             .keyboardShortcut("o", modifiers: .command)
+            Button("Choose Library Directory…") {
+                Task { await RootPanel.run(model: model) }
+            }
+            Divider()
             Button("Find") {
                 Task { await find() }
             }

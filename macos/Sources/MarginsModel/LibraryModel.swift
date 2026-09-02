@@ -14,6 +14,9 @@ public final class LibraryModel {
     public private(set) var libraryRoot = ""
     public private(set) var books: [BookSummary] = []
     public private(set) var selectedBook: BookMeta?
+    /// The selected book's notes index (`notes/_index.json`), loaded with
+    /// the book so the detail view can flag chapters that have notes.
+    public private(set) var selectedBookNotesIndex: [NoteIndexEntry] = []
     public private(set) var errorMessage: String?
 
     /// The selected book's id. Views may bind to this (e.g. sidebar list
@@ -55,6 +58,7 @@ public final class LibraryModel {
             } else {
                 selectedBook = nil
                 selectedBookID = nil
+                selectedBookNotesIndex = []
             }
         } catch {
             errorMessage = String(describing: error)
@@ -66,6 +70,7 @@ public final class LibraryModel {
         guard let store, let selectedBookID else { return }
         do {
             selectedBook = try await store.getBook(id: selectedBookID)
+            selectedBookNotesIndex = try await store.notesIndex(bookId: selectedBookID)
         } catch {
             errorMessage = String(describing: error)
         }
@@ -78,6 +83,39 @@ public final class LibraryModel {
             await loadSelectedBook()
         } else {
             selectedBook = nil
+            selectedBookNotesIndex = []
+        }
+    }
+
+    /// Points the library at a new root directory and reloads. The books and
+    /// notes move with the directory; the selection does not survive it.
+    public func setLibraryRoot(_ path: String) async {
+        guard let store else { return }
+        do {
+            try await store.setLibraryRoot(path: path)
+            selectedBookID = nil
+            selectedBook = nil
+            selectedBookNotesIndex = []
+            await refresh()
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    /// Maps a book's chapters to the word counts of their notes, joined from
+    /// the notes index. Chapters without notes are absent from the result.
+    public static func noteWordCounts(
+        chapters: [ChapterMeta],
+        index: [NoteIndexEntry]
+    ) -> [String: UInt32] {
+        var counts: [String: UInt32] = [:]
+        for entry in index {
+            counts[entry.chapterKey] = entry.wordCount
+        }
+        return chapters.reduce(into: [:]) { result, chapter in
+            if let count = counts[chapter.key] {
+                result[chapter.key] = count
+            }
         }
     }
 

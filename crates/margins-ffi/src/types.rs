@@ -76,6 +76,16 @@ pub struct NoteSearchHit {
     pub word_count: u32,
 }
 
+/// One entry of a book's `notes/_index.json`: which chapters have notes.
+#[derive(uniffi::Record)]
+pub struct NoteIndexEntry {
+    pub chapter_key: String,
+    pub chapter_index: u32,
+    pub chapter_title: String,
+    pub word_count: u32,
+    pub updated_at: Option<String>,
+}
+
 fn rfc3339(dt: DateTime<Utc>) -> String {
     dt.to_rfc3339()
 }
@@ -168,6 +178,18 @@ impl From<models::NoteSearchHit> for NoteSearchHit {
             chapter_title: value.chapter_title,
             snippet: value.snippet,
             word_count: value.word_count as u32,
+        }
+    }
+}
+
+impl From<models::NotesIndexEntry> for NoteIndexEntry {
+    fn from(value: models::NotesIndexEntry) -> Self {
+        Self {
+            chapter_key: value.chapter_key,
+            chapter_index: value.chapter_index as u32,
+            chapter_title: value.chapter_title,
+            word_count: value.word_count as u32,
+            updated_at: value.updated_at.map(rfc3339),
         }
     }
 }

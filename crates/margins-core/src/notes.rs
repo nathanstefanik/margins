@@ -42,13 +42,22 @@ pub fn count_notes(book_dir: &Path) -> Result<usize, NotesError> {
         .count())
 }
 
+/// Reads the book's `notes/_index.json`. A missing or unparsable index is
+/// treated as "no notes" so callers never need to special-case it.
+pub fn read_notes_index(book_dir: &Path) -> Result<NotesIndex, NotesError> {
+    let index_path = book_dir.join("notes/_index.json");
+    if !index_path.exists() {
+        return Ok(NotesIndex { chapters: vec![] });
+    }
+    match fs::read_to_string(&index_path) {
+        Ok(raw) => Ok(serde_json::from_str(&raw)?),
+        Err(err) => Err(NotesError::Io(err)),
+    }
+}
+
 pub fn load_chapter_note(book_dir: &Path, chapter_key: &str) -> Result<ChapterNote, NotesError> {
     let notes_dir = book_dir.join("notes");
-    let index: NotesIndex = if notes_dir.join("_index.json").exists() {
-        serde_json::from_str(&fs::read_to_string(notes_dir.join("_index.json"))?)?
-    } else {
-        NotesIndex { chapters: vec![] }
-    };
+    let index = read_notes_index(book_dir)?;
 
     if let Some(entry) = index.chapters.iter().find(|c| c.chapter_key == chapter_key) {
         let path = notes_dir.join(&entry.file);

@@ -8,7 +8,7 @@ use margins_core::models::NoteFrontmatter;
 use margins_core::notes;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use types::{BookMeta, BookSummary, ChapterNote, ChapterRef, NoteSearchHit};
+use types::{BookMeta, BookSummary, ChapterNote, ChapterRef, NoteIndexEntry, NoteSearchHit};
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -183,6 +183,16 @@ impl MarginsCore {
         };
 
         Ok(notes::save_chapter_note(&book_dir, &chapter_meta, frontmatter, &body)?.into())
+    }
+
+    pub fn get_notes_index(&self, book_id: String) -> Result<Vec<NoteIndexEntry>, CoreError> {
+        let library = self.library.lock().map_err(poisoned)?;
+        let book_dir = library.book_dir(&book_id);
+        if !book_dir.exists() {
+            return Err(CoreError::Message(format!("book not found: {book_id}")));
+        }
+        let index = notes::read_notes_index(&book_dir)?;
+        Ok(index.chapters.into_iter().map(Into::into).collect())
     }
 
     pub fn search_notes(&self, query: String) -> Result<Vec<NoteSearchHit>, CoreError> {
