@@ -41,7 +41,7 @@ pub fn write_sample_epub(dir: &Path, filename: &str) -> PathBuf {
   </metadata>
   <manifest>
     <item href="chapter1.xhtml" id="c1" media-type="application/xhtml+xml"/>
-    <item href="chapter2.xhtml" id="c2" media-type="application/xhtml+xml"/>
+    <item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
   <spine>
     <itemref idref="c1"/>
