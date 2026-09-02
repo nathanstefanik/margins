@@ -48,9 +48,19 @@ function readerForwardKey(event) {
 }
 
 function readerDisplay(href) {
-  if (readerRendition && href) {
-    void readerRendition.display(href);
+  if (!readerRendition || !href) {
+    return;
   }
+  readerRendition.display(href).catch((error) => {
+    readerShowError(error);
+  });
+}
+
+function readerShowError(message) {
+  const note = document.createElement("pre");
+  note.className = "reader-error";
+  note.textContent = `Reader failed: ${message}`;
+  document.body.replaceChildren(note);
 }
 
 function readerScrollBy(delta) {
@@ -77,8 +87,5 @@ window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
 
 readerOpen().catch((error) => {
-  const note = document.createElement("pre");
-  note.className = "reader-error";
-  note.textContent = `Reader failed: ${error}`;
-  document.body.replaceChildren(note);
+  readerShowError(error);
 });

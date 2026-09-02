@@ -39,12 +39,30 @@ final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
                 data = try Data(contentsOf: fileURL)
             }
 
-            let response = URLResponse(
-                url: url,
-                mimeType: resource.mimeType,
-                expectedContentLength: data.count,
-                textEncodingName: resource.textEncodingName
-            )
+            // fetch() requires HTTP semantics: a plain URLResponse makes
+            // WebKit reject the fetch with status 0. Frame loads (html/js)
+            // need the plain URLResponse — HTTP there breaks the load.
+            let response: URLResponse
+            if resource == .bookEpub {
+                response = HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: "HTTP/1.1",
+                    headerFields: ["Content-Length": "\(data.count)"]
+                ) ?? URLResponse(
+                    url: url,
+                    mimeType: resource.mimeType,
+                    expectedContentLength: data.count,
+                    textEncodingName: nil
+                )
+            } else {
+                response = URLResponse(
+                    url: url,
+                    mimeType: resource.mimeType,
+                    expectedContentLength: data.count,
+                    textEncodingName: resource.textEncodingName
+                )
+            }
             task.didReceive(response)
             task.didReceive(data)
             task.didFinish()
