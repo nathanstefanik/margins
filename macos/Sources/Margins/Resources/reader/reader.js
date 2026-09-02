@@ -32,7 +32,19 @@ async function readerOpen() {
     spread: "none",
   });
 
+  readerRendition.on("keydown", readerForwardKey);
+  document.addEventListener("keydown", readerForwardKey);
+
   await readerRendition.display(readerStartHref || undefined);
+}
+
+function readerForwardKey(event) {
+  window.webkit?.messageHandlers?.readerKeys?.postMessage({
+    key: event.key,
+    ctrl: event.ctrlKey,
+    meta: event.metaKey,
+    shift: event.shiftKey,
+  });
 }
 
 function readerDisplay(href) {

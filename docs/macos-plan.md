@@ -13,10 +13,10 @@ part.
 | Part | What | Steps | Status |
 |------|------|-------|--------|
 | I | Core extraction, bindings, app shell, library UI (was phases 0–4) | 5 | **done** |
-| II | WebKit reader (epub.js) + keyboard routing (was phases 5–6) | 2 | **in progress** — step 1 next |
+| II | WebKit reader (epub.js) + keyboard routing (was phases 5–6) | 2 | **done** |
 | III | Notes and search + documentation (was phases 7–8) | 2 | not started |
 
-Next: **Part II, step 1** (WebKit reader).
+Next: **Part III, step 1** (notes and search).
 
 ---
 
@@ -173,9 +173,11 @@ Human checks (stop points 4 and 5) passed.
 
 ---
 
-## Part II — Reader: WebKit (epub.js) + keyboard routing — *the vertical slice*
+## Part II — Reader: WebKit (epub.js) + keyboard routing — DONE
 
-### Step 1 — WebKit reader (epub.js)
+### Step 1 — WebKit reader (epub.js) — DONE
+
+Shipped in `3791401`.
 
 1. Vendor the renderer into `macos/Sources/Margins/Resources/reader/`:
    `epub.min.js` + `jszip.min.js` (copy from `node_modules` at the versions
@@ -217,13 +219,13 @@ Human checks (stop points 4 and 5) passed.
 fonts; chapter clicks navigate; an external link opens in the system browser,
 not in the reader.
 
-### Step 2 — Keyboard routing
+### Step 2 — Keyboard routing — DONE
 
-1. In `reader.js`, hook epub.js's rendition `keydown` (fires for keys inside
-   EPUB iframes — same hook `src/reader.ts` uses) **and** document-level
-   keydown; forward `{key, ctrl, meta, shift}` to Swift via
-   `webkit.messageHandlers.readerKeys` (registered through a weak proxy so
-   the controller does not leak).
+1. In `reader.js`, epub.js's rendition `keydown` (fires for keys inside EPUB
+   iframes — same hook `src/reader.ts` uses) **and** document-level keydown
+   forward `{key, ctrl, meta, shift}` to Swift via
+   `webkit.messageHandlers.readerKeys` (registered through a weak
+   `ReaderMessageProxy` so the controller does not leak).
 2. Swift `ReaderKeymap` (in `MarginsModel`) — a small state machine mirroring
    `src/keymaps.ts` semantics: `j`/`k` scroll (±80px) in reader, move library
    selection in shell; `n`/`p` chapter; `gg`/`G` top/bottom (pending-`g`
@@ -235,10 +237,10 @@ not in the reader.
    via `evaluateJavaScript`.
 3. Native side: the same keymap handles key events when focus is in the
    SwiftUI shell (library list: `j`/`k`/`Enter`, `o` import, `l` library),
-   via a **local `NSEvent` monitor** (chosen over `onKeyPress`: one choke
-   point that sees all key events regardless of SwiftUI focus, can skip
-   events headed for the WKWebView or a text field, and can swallow only
-   handled keys). ⌘/⌃/⌥ combos pass through to menus.
+   via a **local `NSEvent` monitor** (`ShellKeyboardController`; chosen over
+   `onKeyPress`: one choke point that sees all key events regardless of
+   SwiftUI focus, can skip events headed for the WKWebView or a text field,
+   and can swallow only handled keys). ⌘/⌃/⌥ combos pass through to menus.
 4. App-level `Commands` stay in menus: Import (⌘O), Find (⌘F → `/`),
    Settings (⌘,) placeholder.
 5. Swift Testing tests for `ReaderKeymap`: chord handling (`g` then `g`,
@@ -246,11 +248,15 @@ not in the reader.
 
 **Verify:** `make mac-build && make mac-test && cargo test --workspace`
 
+All pass (16 Swift Testing tests, 9 Rust result blocks). `reader.js` is
+syntax-checked with `node --check` before every reader commit.
+
 **Commit:** `FEAT Add vim-style reader keybindings on macOS`
 
 **STOP POINT (Part II)** — human: with click focus *inside* the rendered EPUB
 content, `j`/`k`/`n`/`p`/`gg`/`G` all work; menus still work; `Esc` returns
-to the library.
+to the library. The intermediate human check after step 1 was skipped this
+run (reader renders were to be verified here instead).
 
 ---
 

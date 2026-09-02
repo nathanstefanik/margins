@@ -1,6 +1,4 @@
-import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
 import MarginsModel
 
 struct MarginsCommands: Commands {
@@ -9,20 +7,16 @@ struct MarginsCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("Import EPUB…") {
-                Task { await runImportPanel() }
+                Task { await ImportPanel.run(model: model) }
             }
             .keyboardShortcut("o", modifiers: .command)
+            Button("Find") {
+                Task { await find() }
+            }
+            .keyboardShortcut("f", modifiers: .command)
         }
     }
 
-    @MainActor
-    private func runImportPanel() async {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.epub]
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose an EPUB file to add to the library."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        await model.importEpub(atPath: url.path)
-    }
+    /// Routed through the `/` action; the search UI lands in Part III.
+    private func find() async {}
 }
