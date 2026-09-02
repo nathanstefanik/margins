@@ -15,13 +15,13 @@ This plan is written to be executed by an AI agent phase by phase. Read
 | 1 | Real EPUB fixture + core import tests | **done** |
 | 2 | `margins-ffi` UniFFI bindings | **done** |
 | 3 | SwiftPM app skeleton / bridge proof | **done** |
-| 4 | Library UI and import | not started |
+| 4 | Library UI and import | **done** |
 | 5 | WebKit reader (epub.js) | not started |
 | 6 | Keyboard routing | not started |
 | 7 | Notes and search | not started |
 | 8 | Documentation | not started |
 
-Next: **Phase 4**.
+Next: **Phase 5**.
 
 ---
 
@@ -258,19 +258,38 @@ library (or an empty library) with the correct root path.
 
 ---
 
-## Phase 4 — Library UI and import
+## Phase 4 — Library UI and import — DONE
 
-1. `NavigationSplitView`: sidebar = books (title, author), detail = book
-   metadata + chapter list from the bridge. Selection state in an
-   `@Observable` `LibraryModel`.
-2. Import: `NSOpenPanel` (epub only) → `import_epub` → refresh list. Surface
-   import errors in an alert.
-3. Remove book with confirmation.
-4. SwiftUI `Commands`: File ▸ Import EPUB… (⌘O), standard Close/Quit.
-5. Unit tests for the model layer (import → selection → chapters) via the
-   bridge against a temp data dir.
+1. New `MarginsModel` SwiftPM target (depends on `MarginsCore`): UI-agnostic
+   `LibraryModel` (`@MainActor @Observable`) owning the bridge store, book
+   list, selection (`selectedBookID` + `selectedBook: BookMeta?`), import,
+   remove, and a single `errorMessage` channel. Kept free of
+   SwiftUI/AppKit so `MarginsTests` can unit-test it directly.
+2. `NavigationSplitView` (`SidebarView` + `DetailArea`/`BookDetailView`):
+   sidebar = books (title, author) with list selection bound through
+   `@Bindable`; detail = metadata (author, language, source file, added
+   date) + chapter list (`index + 1`, matching the Tauri frontend).
+   `BookSummary`/`ChapterMeta` gained `Identifiable` extensions.
+3. Import: `NSOpenPanel` limited to `UTType.epub` → `importEpub(atPath:)` →
+   refresh + select the new book. Import/bridge errors surface through
+   `errorMessage` into one alert. Remove: sidebar context menu →
+   `confirmationDialog` (the core deletes the book's library dir, including
+   notes; the original EPUB file is untouched — stated in the dialog).
+4. SwiftUI `Commands` (`MarginsCommands`): File ▸ Import EPUB… (⌘O);
+   standard Close/Quit menus untouched.
+5. Model-layer tests (`MarginsTests`): activate-starts-empty, import →
+   selection → chapters (all fixtures, no hardcoded book), remove clears
+   selection, import failure surfaces `errorMessage`. Fixture helpers
+   moved to a shared `Fixtures.swift`.
+6. SwiftUI code reviewed against the swiftui-pro skill checklist: modern
+   `Date(_:strategy:)`-style parsing replaced `ISO8601DateFormatter`
+   (verified against chrono RFC3339 output), button actions extracted from
+   bodies, zero-parameter `onChange`, `@Bindable` selection instead of
+   `Binding(get:set:)`.
 
 **Verify:** `make mac-build && make mac-test && cargo test --workspace`
+
+All pass (6 Swift Testing tests, 9 Rust result blocks).
 
 **Commit:** `FEAT Add macOS library browser with EPUB import`
 
