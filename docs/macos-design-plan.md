@@ -166,11 +166,11 @@ Turn the text list into something that feels like a shelf.
 
 **Nathan verifies**
 
-- [ ] Sidebar reads as a bookshelf at a glance; placeholder covers look
+- [x] Sidebar reads as a bookshelf at a glance; placeholder covers look
       intentional, not broken.
-- [ ] Book detail's Read button is the obvious next action.
-- [ ] Note indicators make annotated chapters visible without clutter.
-- [ ] Nothing overlaps the last sidebar row anymore.
+- [x] Book detail's Read button is the obvious next action.
+- [x] Note indicators make annotated chapters visible without clutter.
+- [x] Nothing overlaps the last sidebar row anymore.
 
 ---
 
@@ -434,7 +434,7 @@ that finishes a phase, after Nathan's sign-off on the visual items).
 |-------|-------|--------|
 | 1 | Reader typography + progress footer | Done (3d0fb29) |
 | 2 | Cover extraction (Rust core + FFI) | Done (a3f9f81) |
-| 3 | Library & book detail redesign | Not started |
+| 3 | Library & book detail redesign | Done (80b2d96) |
 | 4 | Reading-position persistence | Not started |
 | 5 | Notes pane polish | Not started |
 | 6 | Search engine rebuild + command palette (6a/6b/6c) | Not started |
