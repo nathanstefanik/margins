@@ -9,6 +9,10 @@ pub struct BookSummary {
     pub added_at: DateTime<Utc>,
     pub chapter_count: usize,
     pub notes_count: usize,
+    /// Cover image file name relative to the book directory (e.g.
+    /// `cover.jpg`), or `None` when the book has no cover.
+    #[serde(default)]
+    pub cover: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +32,11 @@ pub struct BookMeta {
     pub added_at: DateTime<Utc>,
     pub source_filename: String,
     pub chapters: Vec<ChapterMeta>,
+    /// Cover image file name relative to the book directory (e.g.
+    /// `cover.jpg`), or `None` when the book has no cover. Stored relative
+    /// so the library tree stays portable across machines and sync targets.
+    #[serde(default)]
+    pub cover: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

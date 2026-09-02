@@ -25,8 +25,9 @@ both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
   index.json                 # catalog of all books (regenerated)
   books/
     {book_id}/               # 24-char content hash prefix
-      meta.json              # title, author, chapter spine
+      meta.json              # title, author, chapter spine, cover file name
       source.epub            # imported copy
+      cover.jpg              # extracted cover (extension follows the image type)
       README.md              # human/agent orientation
       notes/
         _index.json          # machine index of chapter notes
@@ -38,6 +39,24 @@ both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
 Imports are assembled in hidden `.importing-*` directories under `books/` and renamed into
 place only after all book files are written. The catalog ignores these directories, so an
 interrupted import cannot appear as a book; abandoned staging directories can be removed safely.
+
+## Covers
+
+At import time the core extracts the EPUB cover image to `books/{book_id}/cover.{ext}`
+(`.jpg`, `.png`, `.gif`, `.svg`, or `.webp`, following the image's media type). The file
+name is recorded as `cover` in `meta.json` and in each `index.json` entry; books without
+a cover simply have no file and `cover: null`.
+
+Cover detection order:
+
+1. EPUB3: manifest item with `properties="cover-image"`
+2. EPUB2: `<meta name="cover" content="manifest-id"/>`
+3. Fallback: the first manifest item with an `image/*` media type
+
+The library scan backfills covers for books imported before extraction existed: if
+`meta.json` has no `cover`, the retained `source.epub` is re-probed and any cover found
+is written and recorded. A missing or corrupt `source.epub` never fails the scan — the
+book just stays coverless.
 
 ## Chapter note format
 

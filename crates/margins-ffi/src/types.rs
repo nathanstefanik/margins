@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use margins_core::library::Library;
 use margins_core::models;
 
 #[derive(uniffi::Record)]
@@ -9,6 +10,9 @@ pub struct BookSummary {
     pub added_at: String,
     pub chapter_count: u32,
     pub notes_count: u32,
+    /// Absolute path of the cover image file, or `None` when the book has
+    /// none. Resolved from the library root at call time.
+    pub cover_path: Option<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -28,6 +32,9 @@ pub struct BookMeta {
     pub added_at: String,
     pub source_filename: String,
     pub chapters: Vec<ChapterMeta>,
+    /// Absolute path of the cover image file, or `None` when the book has
+    /// none. Resolved from the library root at call time.
+    pub cover_path: Option<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -73,8 +80,11 @@ fn rfc3339(dt: DateTime<Utc>) -> String {
     dt.to_rfc3339()
 }
 
-impl From<models::BookSummary> for BookSummary {
-    fn from(value: models::BookSummary) -> Self {
+impl BookSummary {
+    /// Converts a core summary, resolving the cover to an absolute path via
+    /// the library root.
+    pub fn from_core(value: models::BookSummary, library: &Library) -> Self {
+        let cover_path = resolve_cover(library, &value.id, value.cover);
         Self {
             id: value.id,
             title: value.title,
@@ -82,6 +92,7 @@ impl From<models::BookSummary> for BookSummary {
             added_at: rfc3339(value.added_at),
             chapter_count: value.chapter_count as u32,
             notes_count: value.notes_count as u32,
+            cover_path,
         }
     }
 }
@@ -97,8 +108,11 @@ impl From<models::ChapterMeta> for ChapterMeta {
     }
 }
 
-impl From<models::BookMeta> for BookMeta {
-    fn from(value: models::BookMeta) -> Self {
+impl BookMeta {
+    /// Converts a core record, resolving the cover to an absolute path via
+    /// the library root.
+    pub fn from_core(value: models::BookMeta, library: &Library) -> Self {
+        let cover_path = resolve_cover(library, &value.id, value.cover);
         Self {
             id: value.id,
             title: value.title,
@@ -107,8 +121,13 @@ impl From<models::BookMeta> for BookMeta {
             added_at: rfc3339(value.added_at),
             source_filename: value.source_filename,
             chapters: value.chapters.into_iter().map(Into::into).collect(),
+            cover_path,
         }
     }
+}
+
+fn resolve_cover(library: &Library, book_id: &str, cover: Option<String>) -> Option<String> {
+    cover.map(|name| library.book_dir(book_id).join(name).display().to_string())
 }
 
 impl From<models::NoteFrontmatter> for NoteFrontmatter {
