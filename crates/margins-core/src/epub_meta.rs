@@ -261,6 +261,17 @@ mod tests {
     }
 
     #[test]
+    fn parse_manifest_attributes_in_either_order() {
+        // bdbbfcd: item attributes are unordered; href-before-id used to drop chapters.
+        let tmp = tempfile::tempdir().unwrap();
+        let epub = write_sample_epub(tmp.path(), "mixed-attrs.epub");
+        let info = parse_epub(&epub).expect("parse epub");
+        assert_eq!(info.chapters.len(), 2);
+        assert_eq!(info.chapters[0].href, "OEBPS/chapter1.xhtml");
+        assert_eq!(info.chapters[1].href, "OEBPS/chapter2.xhtml");
+    }
+
+    #[test]
     fn reject_non_epub_file() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("not.epub");

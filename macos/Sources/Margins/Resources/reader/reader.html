@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Reader</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #f4f1ea;
+    color: #111;
+  }
+  #viewer {
+    height: 100%;
+  }
+  pre.reader-error {
+    margin: 2rem;
+    white-space: pre-wrap;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+  }
+</style>
+<script src="jszip.min.js"></script>
+<script src="epub.min.js"></script>
+</head>
+<body>
+  <div id="viewer"></div>
+  <script src="reader.js"></script>
+</body>
+</html>

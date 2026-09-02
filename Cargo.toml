@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/margins-core", "crates/margins-ffi", "src-tauri"]
+resolver = "2"

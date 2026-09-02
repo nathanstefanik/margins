@@ -3,7 +3,12 @@ node_modules/
 
 # Build output
 dist/
+/target/
 src-tauri/target/
+macos/Sources/margins_ffiFFI/include/
+macos/Sources/MarginsCore/Generated/
+macos/.build/
+/build/
 
 # Environment and secrets
 .env
