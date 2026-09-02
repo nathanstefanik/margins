@@ -7,14 +7,31 @@ working at every stop point. No big-bang rewrite.
 This plan is written to be executed by an AI agent phase by phase. Read
 **Ground truth** and **Rules** before starting any phase.
 
+## Status (2026-09-02)
+
+| Phase | What | Status |
+|-------|------|--------|
+| 0 | Extract `margins-core` workspace crate | **done** — `728ab6c` |
+| 1 | Karamazov fixture + core import tests | **done** |
+| 2 | `margins-ffi` UniFFI bindings | not started |
+| 3 | SwiftPM app skeleton / bridge proof | not started |
+| 4 | Library UI and import | not started |
+| 5 | WebKit reader (epub.js) | not started |
+| 6 | Keyboard routing | not started |
+| 7 | Notes and search | not started |
+| 8 | Documentation | not started |
+
+Next: **Phase 2**.
+
 ---
 
-## Ground truth (verified 2026-09-01 — re-verify only if something fails)
+## Ground truth (re-verified 2026-09-02 after Phase 0)
 
-- The Rust modules `config.rs`, `epub_meta.rs`, `library.rs`, `models.rs`,
-  `notes.rs`, `sync.rs`, `test_fixtures.rs` in `src-tauri/src/` have **no Tauri
-  dependency**. Only `lib.rs`/`main.rs` (the `#[tauri::command]` layer) touch
-  Tauri. Extraction = moving files into a new crate, not rewriting them.
+- Core lives in `crates/margins-core`. Those modules have **no Tauri
+  dependency**. `src-tauri` is a thin `#[tauri::command]` wrapper over
+  `margins_core::{...}`.
+- Workspace root `Cargo.toml` members: `crates/margins-core`, `src-tauri`.
+  `Cargo.lock` is at the repo root; `cargo` output is `/target/`.
 - **This machine has Command Line Tools only, no full Xcode.** `xcodebuild`
   does not work. Therefore:
   - The macOS app is a **SwiftPM package** (`macos/Package.swift`), built with
@@ -27,8 +44,11 @@ This plan is written to be executed by an AI agent phase by phase. Read
 - Existing frontend already renders with **epub.js fed whole-book bytes**
   (`src/reader.ts`: `ePub(bytes.buffer)` after `read_epub_bytes`). The macOS
   reader mirrors this exactly.
-- Test fixture: `/Users/zariski/Downloads/dostoyevsky_the_karamazov_brothers.epub`
-  (882 KB, public domain) — Phase 1 copies it into `fixtures/` in the repo.
+- Test fixture: `fixtures/dostoyevsky_the_karamazov_brothers.epub` — Project
+  Gutenberg EPUB 28054 (Garnett; title `The Brothers Karamazov`, author
+  `Fyodor Dostoyevsky`, **100** spine items after `parse_epub` filtering).
+  The Downloads path in the original spec was an Oxford/Avsey edition (ISBN
+  9780199536375) and was not copied.
 - Commit conventions are in `AGENTS.md` (`FEAT`/`BUG`/`CHORE`/`REFACTOR`/`DOCS`
   prefix + imperative summary).
 
@@ -84,20 +104,21 @@ macOS SwiftUI app ── crates/margins-ffi (UniFFI, thin)
 
 ---
 
-## Phase 0 — Extract `margins-core` (workspace split)
+## Phase 0 — Extract `margins-core` (workspace split) — DONE
 
-1. Create a root `Cargo.toml` workspace with members `crates/margins-core` and
-   `src-tauri`. Move `src-tauri/Cargo.lock` to the workspace root.
-2. Create `crates/margins-core` and **move** these files from `src-tauri/src/`
-   into it: `config.rs`, `epub_meta.rs`, `library.rs`, `models.rs`,
-   `notes.rs`, `sync.rs`, `test_fixtures.rs`. Move their dependencies
-   (serde, serde_json, serde_yaml, chrono, uuid, sha2, hex, zip, quick-xml,
-   regex, dotenvy, dirs, thiserror, walkdir, tempfile) into the core crate's
-   manifest; drop the ones only the Tauri layer needs.
-3. Make items `pub` as required and re-export from `margins_core::` so
-   `src-tauri/src/lib.rs` becomes a thin wrapper:
-   `use margins_core::{...}` + the existing `#[tauri::command]` functions.
-4. Keep behavior identical. This is a `REFACTOR` — no logic changes.
+Shipped in `728ab6c` (`REFACTOR Extract margins-core into Cargo workspace crate`).
+
+1. Root `Cargo.toml` workspace with members `crates/margins-core` and
+   `src-tauri`. `src-tauri/Cargo.lock` moved to the workspace root.
+2. Moved `config.rs`, `epub_meta.rs`, `library.rs`, `models.rs`, `notes.rs`,
+   `sync.rs`, `test_fixtures.rs` into `crates/margins-core`. Core deps moved
+   with them; `dotenvy` stayed in `src-tauri` (only the Tauri `run()` entry
+   used it).
+3. `src-tauri/src/lib.rs` is a thin wrapper: `use margins_core::{...}` + the
+   existing `#[tauri::command]` functions. No logic changes.
+4. Extra (required by the workspace move): CI cargo steps run from the repo
+   root (`--workspace`); Linux bundle artifact path is `target/release/bundle/`;
+   root `.gitignore` ignores `/target/`.
 
 **Verify:**
 ```bash
@@ -113,19 +134,18 @@ the Linux/desktop Tauri app still functions.
 
 ---
 
-## Phase 1 — Fixture + core-level import tests
+## Phase 1 — Fixture + core-level import tests — DONE
 
-1. `mkdir fixtures/` and copy
-   `/Users/zariski/Downloads/dostoyevsky_the_karamazov_brothers.epub` into it.
-2. Add integration tests in `crates/margins-core/tests/import_karamazov.rs`
-   using a `tempfile` data dir:
-   - import succeeds; title/creator metadata are non-empty and correct;
-   - chapter/spine count matches the real book (assert the exact number after
-     first observing it);
-   - first spine item resolves to an existing resource in the archive.
-3. Confirm the existing OPF attribute-order regression test (from commit
-   `bdbbfcd`) moved into core with Phase 0; if it did not exist as a test,
-   add one now.
+1. `fixtures/dostoyevsky_the_karamazov_brothers.epub` is Gutenberg 28054, not
+   the Downloads OUP/Avsey file (copyrighted translation; see Ground truth).
+2. Integration test `crates/margins-core/tests/import_karamazov.rs` imports
+   into a `tempfile` library dir:
+   - title `The Brothers Karamazov`, author `Fyodor Dostoyevsky`;
+   - **100** chapters;
+   - first spine href exists in the imported `source.epub` ZIP.
+3. `bdbbfcd` only changed the sample fixture + XML parser — there was no
+   named test. Added `parse_manifest_attributes_in_either_order` and mixed
+   `href`/`id` order on the two sample manifest items.
 
 **Verify:** `cargo test --workspace`
 
