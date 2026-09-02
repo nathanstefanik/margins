@@ -122,7 +122,10 @@ public final class ReaderKeymap {
         case "o":
             return [.importBook]
         case "Enter":
-            return mode == .library ? [.openSelectedBook] : []
+            // Library: open the selected book. Reader: enter the notes
+            // focus (nvim-style `i`/Enter in, Esc out; repeated presses
+            // never type into the editor — Esc leaves it).
+            return mode == .library ? [.openSelectedBook] : [.focusNotes]
         default:
             pendingG = false
             pendingGSince = nil
