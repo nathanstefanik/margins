@@ -25,19 +25,26 @@ pub enum LibraryError {
 
 pub struct Library {
     root: PathBuf,
+    search_index: std::sync::Mutex<crate::search::SearchEngine>,
 }
 
 impl Library {
     pub fn open(root: PathBuf) -> Result<Self, LibraryError> {
         fs::create_dir_all(&root)?;
         fs::create_dir_all(root.join("books"))?;
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            search_index: std::sync::Mutex::new(crate::search::SearchEngine::new()),
+        })
     }
 
     pub fn set_root(&mut self, root: PathBuf) -> Result<(), LibraryError> {
         fs::create_dir_all(&root)?;
         fs::create_dir_all(root.join("books"))?;
         self.root = root;
+        // The cached index refers to the previous root; the next query
+        // rebuilds it against the new one.
+        self.search_index()?.clear();
         Ok(())
     }
 
@@ -250,7 +257,24 @@ impl Library {
     }
 
     pub fn search_notes(&self, query: &str) -> Result<Vec<NoteSearchHit>, LibraryError> {
-        Ok(notes::search_notes(&self.root, query)?)
+        Ok(self.search_index()?.query(&self.root, query))
+    }
+
+    /// Locks the search index, recovering from poisoning (the index is
+    /// rebuildable, so a panicked query must not take search down).
+    fn search_index(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, crate::search::SearchEngine>, LibraryError> {
+        self.search_index
+            .lock()
+            .or_else(|poisoned| Ok(poisoned.into_inner()))
+            .map_err(|_: LibraryError| LibraryError::Other("search index unavailable".into()))
+    }
+    /// Updates the search index for one book in place after a core save.
+    pub fn refresh_note_index(&self, book_id: &str) {
+        if let Ok(mut index) = self.search_index() {
+            index.refresh_book(&self.root, book_id);
+        }
     }
 
     /// One-shot cover backfill for books imported before covers were

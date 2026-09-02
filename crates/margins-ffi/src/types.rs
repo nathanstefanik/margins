@@ -105,18 +105,6 @@ pub struct ChapterNote {
     pub path: String,
 }
 
-#[derive(uniffi::Record)]
-pub struct NoteSearchHit {
-    pub book_id: String,
-    pub book_title: String,
-    pub book_author: String,
-    pub chapter_key: String,
-    pub chapter_index: u32,
-    pub chapter_title: String,
-    pub snippet: String,
-    pub word_count: u32,
-}
-
 /// One entry of a book's `notes/_index.json`: which chapters have notes.
 #[derive(uniffi::Record)]
 pub struct NoteIndexEntry {
@@ -125,6 +113,41 @@ pub struct NoteIndexEntry {
     pub chapter_title: String,
     pub word_count: u32,
     pub updated_at: Option<String>,
+}
+
+/// Kind of search hit; mirrors the core's `SearchHitKind`.
+#[derive(uniffi::Enum)]
+pub enum SearchHitKind {
+    NoteContent,
+    ChapterTitle,
+    BookTarget,
+}
+
+/// Half-open match range in UTF-16 code units of the string it points into.
+#[derive(uniffi::Record)]
+pub struct MatchRange {
+    pub start: u32,
+    pub end: u32,
+}
+
+#[derive(uniffi::Record)]
+pub struct NoteSearchHit {
+    pub book_id: String,
+    pub book_title: String,
+    pub book_author: String,
+    /// Empty for book-level targets.
+    pub chapter_key: String,
+    pub chapter_index: u32,
+    pub chapter_title: String,
+    pub snippet: String,
+    pub word_count: u32,
+    pub kind: SearchHitKind,
+    /// Deterministic relevance score; higher is better.
+    pub score: f64,
+    /// Matched ranges within `snippet` (UTF-16, half-open).
+    pub snippet_ranges: Vec<MatchRange>,
+    /// Matched ranges within the displayed title (UTF-16, half-open).
+    pub title_ranges: Vec<MatchRange>,
 }
 
 fn rfc3339(dt: DateTime<Utc>) -> String {
@@ -221,6 +244,28 @@ impl From<models::NoteSearchHit> for NoteSearchHit {
             chapter_title: value.chapter_title,
             snippet: value.snippet,
             word_count: value.word_count as u32,
+            kind: match value.kind {
+                models::SearchHitKind::NoteContent => SearchHitKind::NoteContent,
+                models::SearchHitKind::ChapterTitle => SearchHitKind::ChapterTitle,
+                models::SearchHitKind::BookTarget => SearchHitKind::BookTarget,
+            },
+            score: value.score,
+            snippet_ranges: value
+                .snippet_ranges
+                .into_iter()
+                .map(|r| MatchRange {
+                    start: r.start as u32,
+                    end: r.end as u32,
+                })
+                .collect(),
+            title_ranges: value
+                .title_ranges
+                .into_iter()
+                .map(|r| MatchRange {
+                    start: r.start as u32,
+                    end: r.end as u32,
+                })
+                .collect(),
         }
     }
 }

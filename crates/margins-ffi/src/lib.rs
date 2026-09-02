@@ -204,7 +204,10 @@ impl MarginsCore {
             updated_at: None,
         };
 
-        Ok(notes::save_chapter_note(&book_dir, &chapter_meta, frontmatter, &body)?.into())
+        let saved = notes::save_chapter_note(&book_dir, &chapter_meta, frontmatter, &body)?;
+        // Keep the search index warm: update this book's docs in place.
+        library.refresh_note_index(&book_id);
+        Ok(saved.into())
     }
 
     pub fn get_notes_index(&self, book_id: String) -> Result<Vec<NoteIndexEntry>, CoreError> {
