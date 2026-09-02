@@ -2161,9 +2161,21 @@ dependencies = [
 name = "margins"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
+ "margins-core",
+ "serde",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+]
+
+[[package]]
+name = "margins-core"
+version = "0.1.0"
+dependencies = [
  "chrono",
  "dirs",
- "dotenvy",
  "hex",
  "quick-xml 0.37.5",
  "regex",
@@ -2171,10 +2183,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
  "tempfile",
  "thiserror 2.0.20",
  "uuid",
