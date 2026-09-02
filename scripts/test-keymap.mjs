@@ -10,13 +10,14 @@ const { Keymap } = await import(`data:text/javascript;base64,${Buffer.from(javas
 globalThis.HTMLElement = class {};
 
 const calls = [];
+let scrolls = 0;
 const keymap = new Keymap({
   onLibrary: () => calls.push("library"),
   onImport: () => calls.push("import"),
   onExport: () => calls.push("export"),
   onSetRoot: () => calls.push("root"),
   onOpenBook: () => calls.push("open"),
-  onScroll: () => {},
+  onScroll: () => scrolls++,
   onScrollTop: () => {},
   onScrollBottom: () => {},
   onNextChapter: () => {},
@@ -47,4 +48,8 @@ keymap.handleCommandKey({ key: "Escape", preventDefault() {} }, { value: "" });
 assert.deepEqual(calls, ["focus-reader"], "escaping command mode should restore reader focus");
 assert.equal(keymap.getMode(), "reader", "escaping command mode should restore reader mode");
 
-console.log("keymap command-mode regression test passed");
+keymap.setMode("notes");
+keymap.handleKey({ key: "j", preventDefault() {} }, { tagName: "TEXTAREA" });
+assert.equal(scrolls, 0, "typing targets must not trigger reader shortcuts across realms");
+
+console.log("keymap regression tests passed");

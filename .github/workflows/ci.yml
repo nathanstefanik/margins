@@ -46,6 +46,11 @@ jobs:
       - name: Audit frontend dependencies
         run: npm audit
 
+      - name: Run frontend keyboard tests
+        run: |
+          npm run test:keymap
+          npm run test:reader-keymap
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
