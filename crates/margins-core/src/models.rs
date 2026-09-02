@@ -110,6 +110,25 @@ pub struct NotesIndexEntry {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// What a search hit points at. Chapter titles and book targets are pure
+/// navigation; note-content hits carry a snippet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SearchHitKind {
+    NoteContent,
+    ChapterTitle,
+    BookTarget,
+}
+
+/// Half-open range of matched text, measured in UTF-16 code units of the
+/// string it points into (snippet or title) so UI layers can convert it to
+/// native string ranges without re-running the matcher.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MatchRange {
+    pub start: usize,
+    pub end: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteSearchHit {
     pub book_id: String,
@@ -120,6 +139,14 @@ pub struct NoteSearchHit {
     pub chapter_title: String,
     pub snippet: String,
     pub word_count: usize,
+    pub kind: SearchHitKind,
+    /// Deterministic relevance score; higher is better.
+    pub score: f64,
+    /// Matched ranges within `snippet` (empty for non-content hits).
+    pub snippet_ranges: Vec<MatchRange>,
+    /// Matched ranges within the displayed title (chapter title, or book
+    /// title for book targets).
+    pub title_ranges: Vec<MatchRange>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
