@@ -63,7 +63,8 @@ struct SearchControllerTests {
         controller.setQuery("fa")
         controller.setQuery("fait")
 
-        try await Task.sleep(for: .milliseconds(400))
+        await waitForBackendCalls(spy, atLeast: 1)
+        await waitForSearchIdle(controller)
         let calls = await spy.recordedCalls()
         #expect(calls == ["fait"])
         #expect(controller.isSearching == false)
@@ -81,11 +82,14 @@ struct SearchControllerTests {
         await spy.setCanned([makeHit(bookId: "2", snippet: "hits:second")], for: "second")
 
         controller.setQuery("first")
-        // The first query is now in flight; retype before it lands.
-        try await Task.sleep(for: .milliseconds(60))
+        // Wait for the first query to actually fire — a fixed sleep raced
+        // the debounce on loaded CI runners — then retype while it is
+        // still in flight.
+        await waitForBackendCalls(spy, atLeast: 1)
         controller.setQuery("second")
 
-        try await Task.sleep(for: .milliseconds(400))
+        await waitForBackendCalls(spy, atLeast: 2)
+        await waitForSearchIdle(controller)
         let calls = await spy.recordedCalls()
         #expect(calls == ["first", "second"])
         #expect(controller.results.count == 1)
@@ -104,7 +108,8 @@ struct SearchControllerTests {
         await spy.setCanned(many, for: "flood")
 
         controller.setQuery("flood")
-        try await Task.sleep(for: .milliseconds(400))
+        await waitForBackendCalls(spy, atLeast: 1)
+        await waitForSearchIdle(controller)
 
         #expect(controller.results.count == SearchController.resultCap)
         #expect(controller.isTruncated == true)
@@ -136,7 +141,8 @@ struct SearchControllerTests {
         await spy.setCanned([makeHit(bookId: "1", snippet: "hits:text")], for: "text")
 
         controller.setQuery("text")
-        try await Task.sleep(for: .milliseconds(300))
+        await waitForBackendCalls(spy, atLeast: 1)
+        await waitForSearchIdle(controller)
         #expect(!controller.results.isEmpty)
 
         controller.setQuery("   ")
@@ -147,6 +153,30 @@ struct SearchControllerTests {
         try await Task.sleep(for: .milliseconds(200))
         let calls = await spy.recordedCalls()
         #expect(calls == ["text"])
+    }
+
+    /// Waits until the spy has recorded at least `atLeast` backend calls.
+    /// Event-driven so debounce/task scheduling jitter on loaded CI
+    /// runners cannot leave a query unfired when the next step runs.
+    private func waitForBackendCalls(_ spy: SpyStore, atLeast: Int) async {
+        for _ in 0..<1_000 {
+            if await spy.recordedCalls().count >= atLeast {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("timed out waiting for \(atLeast) backend calls")
+    }
+
+    /// Waits until the controller has landed its in-flight results.
+    private func waitForSearchIdle(_ controller: SearchController) async {
+        for _ in 0..<1_000 {
+            if !controller.isSearching {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("timed out waiting for search to settle")
     }
 
     private func makeDefaults() -> UserDefaults {

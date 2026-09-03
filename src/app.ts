@@ -1,10 +1,12 @@
-import { open } from "@tauri-apps/plugin-dialog";
+import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import {
   api,
   type BookMeta,
   type BookSummary,
   type ChapterMeta,
+  type CompiledNotes,
+  type ExportOptions,
   type ImportProgress,
   type NoteSearchHit,
 } from "./api";
@@ -12,6 +14,13 @@ import { Keymap } from "./keymaps";
 import { EpubReader } from "./reader";
 
 type FileOperation = "import" | "export" | "root";
+
+const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
+  include_toc: true,
+  include_stats: true,
+  include_empty_chapters: false,
+  demote_headings: true,
+};
 
 export class App {
   private books: BookSummary[] = [];
@@ -23,12 +32,18 @@ export class App {
 
   private libraryView = document.getElementById("library-view")!;
   private readerView = document.getElementById("reader-view")!;
+  private notesView = document.getElementById("notes-view")!;
   private bookList = document.getElementById("book-list")!;
   private chapterList = document.getElementById("chapter-list")!;
   private readerPane = document.getElementById("reader-pane")!;
   private notesEditor = document.getElementById("notes-editor") as HTMLTextAreaElement;
   private notesTitle = document.getElementById("notes-title")!;
   private wordCount = document.getElementById("word-count")!;
+  private notesPageTitle = document.getElementById("notes-page-title")!;
+  private notesPageStats = document.getElementById("notes-page-stats")!;
+  private notesPageBody = document.getElementById("notes-page-body")!;
+  private notesPageOutline = document.getElementById("notes-page-outline")!;
+  private notesPageOutlineVisible = false;
   private status = document.getElementById("status")!;
   private libraryRoot = document.getElementById("library-root")!;
   private importProgress = document.getElementById("import-progress")!;
@@ -44,8 +59,10 @@ export class App {
   private searchSelection = 0;
   private searchTimer: number | null = null;
   private searchGen = 0;
-  private modeBeforeSearch: "library" | "reader" | "notes" = "library";
+  private modeBeforeSearch: "library" | "reader" | "notes" | "notesPage" = "library";
   private fileOperation: FileOperation | null = null;
+  private notesData: CompiledNotes | null = null;
+  private notesBookId: string | null = null;
 
   constructor() {
     this.reader = new EpubReader(this.readerPane, (chapter, cfi) => {
@@ -61,14 +78,18 @@ export class App {
       onExport: () => void this.exportLibrary(),
       onSetRoot: () => void this.setLibraryRoot(),
       onOpenBook: (index) => void this.openBookByIndex(index),
-      onScroll: (delta) => this.reader.scrollBy(delta),
-      onScrollTop: () => this.reader.scrollToTop(),
-      onScrollBottom: () => this.reader.scrollToBottom(),
+      onScroll: (delta) => this.scrollContent(delta),
+      onScrollTop: () => this.scrollContentTop(),
+      onScrollBottom: () => this.scrollContentBottom(),
       onNextChapter: () => void this.reader.nextChapter(),
       onPrevChapter: () => void this.reader.prevChapter(),
       onFocusNotes: () => this.focusNotes(),
       onFocusReader: () => this.focusReader(),
       onSaveNote: () => void this.saveNote(),
+      onNotesPage: () => void this.openNotesPage(),
+      onNotesPageRestore: () => void this.showNotesPageView(),
+      onNotesClose: () => this.showReaderFromNotes(),
+      onNotesToggleView: () => this.showNotesOutline(!this.notesPageOutlineVisible),
       onSearch: (query) => this.showSearch(query),
       onCommand: (cmd) => this.showCommand(cmd),
       onStatus: (msg) => this.setStatus(msg),
@@ -85,6 +106,12 @@ export class App {
     document.getElementById("btn-set-root")?.addEventListener("click", () => void this.setLibraryRoot());
     document.getElementById("btn-save-note")?.addEventListener("click", () => void this.saveNote());
     document.getElementById("btn-search")?.addEventListener("click", () => this.showSearch());
+    document.getElementById("btn-all-notes")?.addEventListener("click", () => void this.openNotesPage());
+    document.getElementById("btn-copy-notes")?.addEventListener("click", () => void this.copyNotes());
+    document.getElementById("btn-export-notes")?.addEventListener("click", () => void this.exportNotes());
+    document.getElementById("btn-clear-notes")?.addEventListener("click", () => void this.clearNotes());
+    document.getElementById("btn-notes-outline")?.addEventListener("click", () => this.showNotesOutline(true));
+    document.getElementById("btn-notes-contents")?.addEventListener("click", () => this.showNotesOutline(false));
 
     this.notesEditor.addEventListener("input", () => this.updateWordCount());
 
@@ -175,6 +202,7 @@ export class App {
     await this.reader.open(uint8, meta.chapters, startIndex);
 
     this.libraryView.classList.add("hidden");
+    this.notesView.classList.add("hidden");
     this.readerView.classList.remove("hidden");
     this.keymap.setMode("reader");
     this.focusReader();
@@ -212,20 +240,30 @@ export class App {
       this.setStatus("no chapter selected");
       return;
     }
+    const bookId = this.currentBook.id;
+    // Invalidate the compiled page before the first await: a `:w` restore
+    // runs synchronously after the command and must not show stale data.
+    if (this.notesBookId === bookId) {
+      this.notesData = null;
+    }
     const saved = await api.saveChapterNote(
-      this.currentBook.id,
+      bookId,
       { key: this.currentChapter.key, epub_cfi: this.currentCfi },
       this.notesEditor.value,
     );
     this.updateWordCount(saved.frontmatter.word_count);
     this.setStatus(`saved note (${saved.frontmatter.word_count} words)`);
     await this.refreshLibrary();
+    // The notes page itself may be showing (`:w` from the command bar on
+    // the notes view): recompile so outline/contents include this save.
+    if (this.notesBookId === bookId && this.keymap.getMode() === "notesPage") {
+      await this.fetchNotesPage(bookId);
+    }
   }
 
   private updateWordCount(count?: number): void {
     const words = count ?? this.notesEditor.value.trim().split(/\s+/).filter(Boolean).length;
     this.wordCount.textContent = `${words} words`;
-    this.wordCount.classList.toggle("warn", words > 0 && (words < 80 || words > 120));
   }
 
   private showLibrary(): void {
@@ -234,10 +272,266 @@ export class App {
     this.currentBook = null;
     this.currentChapter = null;
     this.readerView.classList.add("hidden");
+    this.notesView.classList.add("hidden");
     this.libraryView.classList.remove("hidden");
     this.keymap.setMode("library");
     void this.refreshLibrary();
     this.setStatus("library");
+  }
+
+  // MARK: Notes page
+
+  /// `N` / `:notes` — compiles the current book's notes into one page.
+  private async openNotesPage(): Promise<void> {
+    if (!this.currentBook) {
+      this.setStatus("open a book to see its notes");
+      return;
+    }
+    if (!(await this.fetchNotesPage(this.currentBook.id))) return;
+    this.showNotesPageView();
+  }
+
+  /// Fetches and renders the compiled page for `bookId`. Returns false on
+  /// failure (status line carries the error).
+  private async fetchNotesPage(bookId: string): Promise<boolean> {
+    try {
+      this.notesData = await api.getCompiledNotes(bookId);
+    } catch (error) {
+      this.setStatus(`could not compile notes: ${errorMessage(error)}`);
+      return false;
+    }
+    this.notesBookId = bookId;
+    this.renderNotesPage();
+    return true;
+  }
+
+  /// Re-shows the already-compiled page (restore after search/command).
+  /// A save invalidates the cache, so a restore recompiles first and the
+  /// outline/contents always reflect the latest notes.
+  private async showNotesPageView(): Promise<void> {
+    if (!this.notesData) {
+      if (!this.notesBookId || !(await this.fetchNotesPage(this.notesBookId))) return;
+    }
+    const notes = this.notesData;
+    if (!notes) return;
+    this.libraryView.classList.add("hidden");
+    this.readerView.classList.add("hidden");
+    this.notesView.classList.remove("hidden");
+    this.keymap.setMode("notesPage");
+    this.setStatus(`${notes.book_title} — notes`);
+  }
+
+  /// `Esc` from the notes page: the reader is still open underneath.
+  private showReaderFromNotes(): void {
+    this.notesView.classList.add("hidden");
+    this.readerView.classList.remove("hidden");
+    this.keymap.setMode("reader");
+    this.focusReader();
+    this.setStatus("reader");
+  }
+
+  private renderNotesPage(): void {
+    const notes = this.notesData;
+    if (!notes) return;
+
+    this.notesPageTitle.textContent = `Notes — ${notes.book_title}`;
+    const statParts = [
+      `${notes.chapters_with_notes}/${notes.chapter_count} chapters annotated`,
+      `${notes.total_words} words`,
+    ];
+    if (notes.last_updated_at) {
+      statParts.push(`last updated ${formatDate(notes.last_updated_at)}`);
+    }
+    this.notesPageStats.textContent = statParts.join(" · ");
+
+    // Outline view: one entry per annotated chapter. The page opens on
+    // the notes view; `t` / the header toggle flip between the two.
+    this.notesPageOutline.innerHTML = "";
+    if (notes.chapters.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "notes-outline-empty";
+      empty.textContent = "No notes yet — press `i` in the reader to write one.";
+      this.notesPageOutline.appendChild(empty);
+    } else {
+      for (const chapter of notes.chapters) {
+        const li = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = "#";
+        link.textContent = `${chapter.chapter_index + 1}. ${chapter.chapter_title}`;
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          this.showNotesOutline(false);
+          this.scrollToSection(chapter.chapter_key);
+        });
+        const meta = document.createElement("span");
+        meta.className = "notes-outline-meta";
+        const parts = [`${chapter.word_count} words`];
+        if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
+        meta.textContent = parts.join(" · ");
+        li.append(link, meta);
+        this.notesPageOutline.appendChild(li);
+      }
+    }
+
+    // Contents view: sections for chapters that have notes only.
+    this.notesPageBody.innerHTML = "";
+    if (notes.chapters.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "notes-page-empty";
+      empty.textContent = "No notes yet — press `i` in the reader to write one.";
+      this.notesPageBody.appendChild(empty);
+    } else {
+      for (const chapter of notes.chapters) {
+        this.notesPageBody.appendChild(this.buildNotesSection(chapter));
+      }
+    }
+    this.showNotesOutline(false);
+  }
+
+  private showNotesOutline(visible: boolean): void {
+    this.notesPageOutlineVisible = visible;
+    this.notesPageOutline.classList.toggle("hidden", !visible);
+    this.notesPageBody.classList.toggle("hidden", visible);
+    document.getElementById("btn-notes-outline")?.classList.toggle("active", visible);
+    document.getElementById("btn-notes-contents")?.classList.toggle("active", !visible);
+  }
+
+  private buildNotesSection(chapter: CompiledNotes["chapters"][number]): HTMLElement {
+    const section = document.createElement("section");
+    section.className = "notes-section";
+    section.dataset.key = chapter.chapter_key;
+
+    const header = document.createElement("h3");
+    header.className = "notes-section-header";
+    header.textContent = `${chapter.chapter_index + 1}. ${chapter.chapter_title}`;
+    header.addEventListener("click", () => void this.openNotesSection(chapter.chapter_key));
+    section.appendChild(header);
+
+    const meta = document.createElement("div");
+    meta.className = "notes-section-meta";
+    const parts = [`${chapter.word_count} words`];
+    if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
+    meta.textContent = parts.join(" · ");
+    section.appendChild(meta);
+
+    if (chapter.body.trim()) {
+      // User markdown stays plain text: textContent only, never innerHTML.
+      const body = document.createElement("pre");
+      body.className = "notes-section-body";
+      body.textContent = chapter.body.trim();
+      section.appendChild(body);
+    }
+    return section;
+  }
+
+  private scrollToSection(chapterKey: string): void {
+    const section = this.notesPageBody.querySelector(`[data-key="${CSS.escape(chapterKey)}"]`);
+    section?.scrollIntoView({ block: "start" });
+  }
+
+  /// Clicking a section header opens the reader at that chapter.
+  private async openNotesSection(chapterKey: string): Promise<void> {
+    const bookId = this.notesBookId;
+    if (!bookId) return;
+    this.showReaderFromNotes();
+    if (this.currentBook?.id === bookId) {
+      const idx = this.currentBook.chapters.findIndex((c) => c.key === chapterKey);
+      if (idx >= 0) {
+        await this.reader.displayChapter(idx);
+      }
+    } else {
+      await this.openBook(bookId, chapterKey);
+    }
+  }
+
+  private async copyNotes(): Promise<void> {
+    if (!this.notesBookId) return;
+    try {
+      const markdown = await api.renderNotesMarkdown(this.notesBookId, DEFAULT_EXPORT_OPTIONS);
+      await navigator.clipboard.writeText(markdown);
+      this.setStatus("markdown copied to clipboard");
+    } catch (error) {
+      this.setStatus(`copy failed: ${errorMessage(error)}`);
+    }
+  }
+
+  private async exportNotes(): Promise<void> {
+    if (!this.notesBookId || !this.notesData) return;
+    const destination = await save({
+      defaultPath: this.notesData.suggested_filename,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    if (!destination) return;
+    try {
+      const path = await api.exportNotesMarkdown(
+        this.notesBookId,
+        destination,
+        DEFAULT_EXPORT_OPTIONS,
+      );
+      this.setStatus(`exported ${path}`);
+    } catch (error) {
+      this.setStatus(`export failed: ${errorMessage(error)}`);
+    }
+  }
+
+  /// Deletes every note for the book behind the notes page, after an
+  /// explicit confirmation. The reader's open note editor is reloaded so a
+  /// stale body cannot resurrect a cleared note on the next save.
+  private async clearNotes(): Promise<void> {
+    if (!this.notesBookId || !this.notesData) return;
+    if (this.notesData.chapters.length === 0) {
+      this.setStatus("no notes to clear");
+      return;
+    }
+    const count = this.notesData.chapters.length;
+    const confirmed = await ask(
+      `Delete all ${count} chapter note${count === 1 ? "" : "s"} for “${this.notesData.book_title}”? This cannot be undone.`,
+      {
+        title: "Clear all notes",
+        kind: "warning",
+        okLabel: "Clear Notes",
+        cancelLabel: "Keep Notes",
+      },
+    );
+    if (!confirmed) return;
+    const bookId = this.notesBookId;
+    try {
+      const removed = await api.clearBookNotes(bookId);
+      await this.refreshLibrary();
+      if (this.currentBook?.id === bookId && this.currentChapter) {
+        await this.loadNote(this.currentChapter);
+      }
+      await this.openNotesPage();
+      this.setStatus(`cleared ${removed} note${removed === 1 ? "" : "s"}`);
+    } catch (error) {
+      this.setStatus(`could not clear notes: ${errorMessage(error)}`);
+    }
+  }
+
+  /// `j`/`k` scroll the reader pane normally, but the notes page when it
+  /// is the visible content.
+  private scrollContent(delta: number): void {
+    if (this.keymap.getMode() === "notesPage") {
+      this.notesView.scrollBy({ top: delta });
+    } else {
+      this.reader.scrollBy(delta);
+    }
+  }
+
+  private scrollContentTop(): void {
+    if (this.keymap.getMode() === "notesPage") {
+      this.notesView.scrollTo({ top: 0 });
+    } else {
+      this.reader.scrollToTop();
+    }
+  }
+
+  private scrollContentBottom(): void {
+    if (this.keymap.getMode() === "notesPage") {
+      this.notesView.scrollTo({ top: this.notesView.scrollHeight });
+    } else {
+      this.reader.scrollToBottom();
+    }
   }
 
   private focusNotes(): void {
@@ -259,7 +553,7 @@ export class App {
 
   private showSearch(query = ""): void {
     const mode = this.keymap.getMode();
-    if (mode === "library" || mode === "reader" || mode === "notes") {
+    if (mode === "library" || mode === "reader" || mode === "notes" || mode === "notesPage") {
       this.modeBeforeSearch = mode;
     }
     this.commandBar.classList.add("hidden");
@@ -288,6 +582,8 @@ export class App {
       this.keymap.setMode("library");
     } else if (this.modeBeforeSearch === "notes") {
       this.focusNotes();
+    } else if (this.modeBeforeSearch === "notesPage") {
+      void this.showNotesPageView();
     } else {
       this.focusReader();
     }
@@ -514,6 +810,7 @@ export class App {
       this.currentChapter = null;
       this.currentCfi = undefined;
       this.readerView.classList.add("hidden");
+      this.notesView.classList.add("hidden");
       this.libraryView.classList.remove("hidden");
       this.keymap.setMode("library");
 
@@ -538,6 +835,12 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function formatDate(rfc3339: string): string {
+  const date = new Date(rfc3339);
+  if (Number.isNaN(date.getTime())) return rfc3339;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function escapeRegex(value: string): string {

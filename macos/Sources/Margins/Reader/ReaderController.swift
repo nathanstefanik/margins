@@ -43,7 +43,8 @@ final class ReaderController: NSObject {
 
         observeTypography()
 
-        if let book = reader.book, let chapter = reader.chapter, let url = readerURL(bookID: book.id, chapterHref: chapter.href) {
+        if let book = reader.book, let chapter = reader.chapter,
+           let url = readerURL(bookID: book.id, chapterHref: chapter.jumpTarget) {
             webView.load(URLRequest(url: url))
         }
         return webView
@@ -144,7 +145,8 @@ extension ReaderController: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        if let url = navigationAction.request.url, url.scheme == "http" || url.scheme == "https" {
+        if let url = navigationAction.request.url,
+           url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto" {
             NSWorkspace.shared.open(url)
             decisionHandler(.cancel)
             return

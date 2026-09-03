@@ -41,6 +41,59 @@ Imports are assembled in hidden `.importing-*` directories under `books/` and re
 place only after all book files are written. The catalog ignores these directories, so an
 interrupted import cannot appear as a book; abandoned staging directories can be removed safely.
 
+## Chapter metadata
+
+`meta.json` holds the book's spine as a list of chapters, alongside a
+`chapters_version` for the whole book:
+
+```json
+{
+  "chapters_version": 1,
+  "chapters": [
+    {
+      "key": "005",
+      "index": 4,
+      "title": "Chapter II. He Gets Rid Of His Eldest Son",
+      "href": "OEBPS/28054-h-3.htm.html",
+      "fragment": "pgepubid00008"
+    }
+  ]
+}
+```
+
+- `key` is the chapter's spine position and is the anchor for everything
+  else: note file names, `notes/_index.json`, note frontmatter, and
+  `position.json`. It never changes for a given EPUB.
+- `href` is the in-zip path of the spine item, always **without** a
+  fragment — both readers match the renderer's relocation events against it.
+- `fragment` (optional) is the anchor id where the chapter starts inside
+  that file, taken from the book's TOC. Jump targets are `href#fragment`
+  when it is present, which matters for books that pack several chapters
+  into one file. Absent when the book has no TOC entry for the file.
+
+Titles resolve from the first source that has one: the TOC label (EPUB3 nav
+document, else NCX), the file's first `<h1>`–`<h3>`, the file's `<title>`,
+then `"Chapter {n}"`. A `<title>` shared verbatim by three or more chapters,
+equal to the book's own title, or beginning "The Project Gutenberg eBook" is
+a template rather than a name and is skipped — Gutenberg's Ebookmaker stamps
+one `<title>` into every file.
+
+### `chapters_version`
+
+`chapters_version` in `meta.json` records which parser produced `chapters`
+(absent means 0). When the library scan finds a book below the current
+version it re-parses the retained `source.epub`, rewrites `chapters`, and
+bumps the field. The spine is unchanged by a re-parse, so keys keep pointing
+at the same notes and reading position; only titles and fragments improve. A
+missing or corrupt `source.epub` leaves the book exactly as it was.
+
+Notes keep the chapter title captured when they were saved, so the compiled
+notes page and export prefer the spine's title for a matching key and fall
+back to frontmatter only for keys the spine no longer has. Note files are
+never rewritten by the upgrade. Saving a note whose chapter has been
+retitled renames the existing file to match the new slug (one file per
+chapter) rather than leaving the old one stranded.
+
 ## Covers
 
 At import time the core extracts the EPUB cover image to `books/{book_id}/cover.{ext}`
@@ -98,7 +151,7 @@ updated_at: 2026-08-29T12:30:00Z
 
 # Introduction — Summary
 
-Your ~100 word chapter summary here.
+Your notes on this chapter.
 ```
 
 ### Why this shape
@@ -107,6 +160,24 @@ Your ~100 word chapter summary here.
 - **Frontmatter** — structured metadata without a DB; easy to parse in any language
 - **`_index.json`** — O(1) lookup of which chapters have notes and word counts
 - **`index.json`** — library-wide catalog for batch operations
+
+### Clearing a book's notes
+
+Clearing all notes for a book (both frontends expose it behind a confirmation
+prompt) deletes every file under `notes/chapters/` and rewrites `_index.json`
+to empty. Everything else about the book — `meta.json`, `source.epub`,
+`position.json` — is untouched, and the search index drops the cleared notes
+on its next refresh.
+
+## Compiled notes page & markdown export
+
+Both frontends can show a per-book **notes page** that compiles every
+chapter note in spine order (`margins-core`'s `compile.rs`, reading
+`meta.json` + `notes/_index.json` + the note files). Exports are **derived
+artifacts**: the rendered markdown (`{author} — {title} — notes.md`) is
+written wherever the user chooses and nothing new is stored in the library
+tree — recompiling is always possible from the note files, so deleting an
+export never loses data.
 
 ## Sync workflow
 

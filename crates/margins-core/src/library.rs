@@ -23,6 +23,13 @@ pub enum LibraryError {
     Other(String),
 }
 
+/// Schema version of `BookMeta::chapters`. Bumped whenever chapter
+/// metadata gains information the parser can now recover from the source
+/// EPUB (v1: TOC-derived titles and start fragments); the library scan
+/// re-parses any book below it. Chapter keys are spine-derived and stay
+/// stable across re-parses, so notes keep resolving.
+pub const CHAPTERS_VERSION: u32 = 1;
+
 pub struct Library {
     root: PathBuf,
     search_index: std::sync::Mutex<crate::search::SearchEngine>,
@@ -76,7 +83,8 @@ impl Library {
             if !meta_path.exists() {
                 continue;
             }
-            let meta: BookMeta = serde_json::from_str(&fs::read_to_string(meta_path)?)?;
+            let mut meta: BookMeta = serde_json::from_str(&fs::read_to_string(meta_path)?)?;
+            self.backfill_chapters(&entry.path(), &mut meta);
             let notes_count = notes::count_notes(&entry.path())?;
             let cover = meta
                 .cover
@@ -227,6 +235,7 @@ impl Library {
             chapters,
             cover: cover_name,
             progress_percent: None,
+            chapters_version: CHAPTERS_VERSION,
         };
 
         on_progress(95, "saving");
@@ -274,6 +283,30 @@ impl Library {
     pub fn refresh_note_index(&self, book_id: &str) {
         if let Ok(mut index) = self.search_index() {
             index.refresh_book(&self.root, book_id);
+        }
+    }
+
+    /// Re-derives chapter metadata for books imported under an older
+    /// parser (`chapters_version` below `CHAPTERS_VERSION`) by re-reading
+    /// the retained `source.epub`. The spine is unchanged, so keys keep
+    /// pointing at the same notes and `position.json`; only titles and
+    /// start fragments improve. A missing or corrupt source leaves the book
+    /// exactly as it was — a bad EPUB must never break the library scan.
+    fn backfill_chapters(&self, book_dir: &Path, meta: &mut BookMeta) {
+        if meta.chapters_version >= CHAPTERS_VERSION {
+            return;
+        }
+        let source = book_dir.join("source.epub");
+        if !source.is_file() {
+            return;
+        }
+        let Ok(info) = epub_meta::parse_epub(&source) else {
+            return;
+        };
+        meta.chapters = info.chapters;
+        meta.chapters_version = CHAPTERS_VERSION;
+        if let Ok(raw) = serde_json::to_string_pretty(&meta) {
+            let _ = fs::write(book_dir.join("meta.json"), raw);
         }
     }
 
@@ -419,9 +452,35 @@ fn progress_between(start: u8, end: u8, processed: u64, total: u64) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::NoteFrontmatter;
     use crate::test_fixtures::{
-        write_sample_epub, write_sample_epub_covered, SampleCover, SAMPLE_COVER_PNG,
+        write_sample_epub, write_sample_epub_covered, write_sample_epub_toc, SampleCover,
+        SampleToc, SAMPLE_COVER_PNG,
     };
+
+    /// Rewrites a book's `meta.json` the way a pre-TOC import left it:
+    /// no `chapters_version`, no fragments, titles from `<title>`.
+    fn downgrade_chapters(book_dir: &Path) {
+        let mut meta: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(book_dir.join("meta.json")).unwrap()).unwrap();
+        let object = meta.as_object_mut().unwrap();
+        object.remove("chapters_version");
+        for (index, chapter) in object["chapters"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            let chapter = chapter.as_object_mut().unwrap();
+            chapter.remove("fragment");
+            chapter["title"] = serde_json::Value::from(format!("Chapter {}", index + 1));
+        }
+        fs::write(
+            book_dir.join("meta.json"),
+            serde_json::to_string_pretty(&meta).unwrap(),
+        )
+        .unwrap();
+    }
 
     #[test]
     fn import_stores_cover_and_reports_it_in_the_catalog() {
@@ -505,6 +564,75 @@ mod tests {
         let listed = library.list_books().unwrap();
         assert_eq!(listed.len(), 1);
         assert!(listed[0].cover.is_none());
+    }
+
+    #[test]
+    fn scan_upgrades_legacy_chapter_metadata_without_moving_keys() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub_toc(tmp.path(), "legacy.epub", SampleToc::Ncx);
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+        let book_dir = library.book_dir(&meta.id);
+
+        // A note written before the upgrade, keyed by spine position.
+        let chapter = meta.chapters[0].clone();
+        notes::save_chapter_note(
+            &book_dir,
+            &chapter,
+            NoteFrontmatter {
+                book_id: meta.id.clone(),
+                chapter_key: chapter.key.clone(),
+                chapter_index: chapter.index,
+                chapter_title: "Chapter 1".into(),
+                chapter_href: chapter.href.clone(),
+                epub_cfi: None,
+                kind: "summary".into(),
+                word_count: 0,
+                created_at: None,
+                updated_at: None,
+            },
+            "Notes from before the upgrade.",
+        )
+        .unwrap();
+
+        downgrade_chapters(&book_dir);
+        library.list_books().unwrap();
+
+        let upgraded = library.get_book(&meta.id).unwrap();
+        assert_eq!(upgraded.chapters_version, CHAPTERS_VERSION);
+        assert_eq!(upgraded.chapters[0].key, "001");
+        assert_eq!(upgraded.chapters[0].title, "Opening Remarks");
+        assert_eq!(upgraded.chapters[0].fragment.as_deref(), Some("start"));
+
+        // The note still resolves under the same key, body intact.
+        let note = notes::load_chapter_note(&book_dir, "001").unwrap();
+        assert_eq!(note.body.trim(), "Notes from before the upgrade.");
+
+        // A second scan is a no-op: the version stops the re-parse.
+        library.list_books().unwrap();
+        assert_eq!(
+            library.get_book(&meta.id).unwrap().chapters[0].title,
+            "Opening Remarks"
+        );
+    }
+
+    #[test]
+    fn scan_leaves_chapters_alone_when_the_source_is_unreadable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let library = Library::open(tmp.path().join("library")).unwrap();
+        let epub = write_sample_epub_toc(tmp.path(), "legacy.epub", SampleToc::Ncx);
+        let meta = library.import_epub_with_progress(epub, |_, _| {}).unwrap();
+        let book_dir = library.book_dir(&meta.id);
+
+        downgrade_chapters(&book_dir);
+        fs::write(book_dir.join("source.epub"), b"junk").unwrap();
+
+        let listed = library.list_books().unwrap();
+        assert_eq!(listed.len(), 1);
+        let unchanged = library.get_book(&meta.id).unwrap();
+        assert_eq!(unchanged.chapters_version, 0);
+        assert_eq!(unchanged.chapters[0].title, "Chapter 1");
+        assert_eq!(unchanged.chapters.len(), 2);
     }
 
     #[test]

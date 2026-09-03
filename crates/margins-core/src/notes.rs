@@ -40,6 +40,26 @@ pub fn count_notes(book_dir: &Path) -> Result<usize, NotesError> {
         .count())
 }
 
+/// Deletes every note file under `notes/chapters/` and resets
+/// `notes/_index.json` to empty. Returns how many note files were removed.
+/// Everything else about the book (spine, reading position) is untouched.
+pub fn clear_book_notes(book_dir: &Path) -> Result<usize, NotesError> {
+    let chapters_dir = book_dir.join("notes/chapters");
+    let mut removed = 0;
+    if chapters_dir.exists() {
+        for entry in fs::read_dir(&chapters_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "md") && path.is_file() {
+                fs::remove_file(&path)?;
+                removed += 1;
+            }
+        }
+    }
+    write_empty_index(book_dir)?;
+    Ok(removed)
+}
+
 /// Reads the book's `notes/_index.json`. A missing or unparsable index is
 /// treated as "no notes" so callers never need to special-case it.
 pub fn read_notes_index(book_dir: &Path) -> Result<NotesIndex, NotesError> {
@@ -102,6 +122,29 @@ pub fn save_chapter_note(
     let relative_path = format!("chapters/{filename}");
     let path = notes_dir.join(&relative_path);
 
+    let mut index: NotesIndex = if notes_dir.join("_index.json").exists() {
+        serde_json::from_str(&fs::read_to_string(notes_dir.join("_index.json"))?)?
+    } else {
+        NotesIndex { chapters: vec![] }
+    };
+
+    // The file name carries the chapter's title slug, so a chapter whose
+    // title was re-derived since the note was written (see
+    // `library::CHAPTERS_VERSION`) would otherwise leave the old file
+    // behind, outside `_index.json` and invisible to every reader. Move it
+    // to the new name instead: one file per chapter is the contract.
+    if let Some(previous) = index
+        .chapters
+        .iter()
+        .find(|entry| entry.chapter_key == chapter.key)
+        .map(|entry| entry.file.clone())
+    {
+        let source = notes_dir.join(&previous);
+        if previous != relative_path && source.is_file() && !path.exists() {
+            let _ = fs::rename(&source, &path);
+        }
+    }
+
     let now = Utc::now();
     if path.exists() {
         if let Ok(existing) = parse_note_file(&path, &chapter.key) {
@@ -115,12 +158,6 @@ pub fn save_chapter_note(
 
     let content = render_note(&frontmatter, body)?;
     fs::write(&path, &content)?;
-
-    let mut index: NotesIndex = if notes_dir.join("_index.json").exists() {
-        serde_json::from_str(&fs::read_to_string(notes_dir.join("_index.json"))?)?
-    } else {
-        NotesIndex { chapters: vec![] }
-    };
 
     index.chapters.retain(|e| e.chapter_key != chapter.key);
     index.chapters.push(NotesIndexEntry {
@@ -174,7 +211,7 @@ pub fn count_words(text: &str) -> usize {
         .count()
 }
 
-fn slugify(title: &str) -> String {
+pub(crate) fn slugify(title: &str) -> String {
     let lower = title.to_lowercase();
     let re = Regex::new(r"[^a-z0-9]+").unwrap();
     let slug = re.replace_all(&lower, "-");
@@ -193,6 +230,7 @@ mod tests {
             index: 0,
             title: "Introduction".into(),
             href: "OEBPS/chapter1.xhtml".into(),
+            fragment: None,
         };
         let meta = BookMeta {
             id: "abc123".into(),
@@ -204,6 +242,7 @@ mod tests {
             chapters: vec![chapter.clone()],
             cover: None,
             progress_percent: None,
+            chapters_version: crate::library::CHAPTERS_VERSION,
         };
         fs::create_dir_all(dir.join("notes/chapters")).unwrap();
         fs::write(
@@ -270,6 +309,47 @@ mod tests {
     }
 
     #[test]
+    fn a_retitled_chapter_moves_its_note_instead_of_orphaning_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book_dir = tmp.path();
+        let chapter = seed_book(book_dir);
+
+        let frontmatter = NoteFrontmatter {
+            book_id: "abc123".into(),
+            chapter_key: chapter.key.clone(),
+            chapter_index: chapter.index,
+            chapter_title: chapter.title.clone(),
+            chapter_href: chapter.href.clone(),
+            epub_cfi: None,
+            kind: "summary".into(),
+            word_count: 0,
+            created_at: None,
+            updated_at: None,
+        };
+        let first =
+            save_chapter_note(book_dir, &chapter, frontmatter.clone(), "first draft").unwrap();
+        assert!(first.path.ends_with("001-introduction.md"));
+
+        // The library scan re-derived the title from the book's TOC.
+        let retitled = ChapterMeta {
+            title: "Opening Remarks".into(),
+            ..chapter.clone()
+        };
+        let second = save_chapter_note(book_dir, &retitled, frontmatter, "second draft").unwrap();
+
+        assert!(second.path.ends_with("001-opening-remarks.md"));
+        assert_eq!(first.frontmatter.created_at, second.frontmatter.created_at);
+        assert!(!book_dir.join("notes/chapters/001-introduction.md").exists());
+        let index = read_notes_index(book_dir).unwrap();
+        assert_eq!(index.chapters.len(), 1);
+        assert_eq!(index.chapters[0].file, "chapters/001-opening-remarks.md");
+        assert_eq!(
+            load_chapter_note(book_dir, "001").unwrap().body.trim(),
+            "second draft"
+        );
+    }
+
+    #[test]
     fn resave_preserves_created_at() {
         let tmp = tempfile::tempdir().unwrap();
         let book_dir = tmp.path();
@@ -317,5 +397,50 @@ mod tests {
         assert!(note.body.is_empty());
         assert_eq!(note.frontmatter.word_count, 0);
         assert!(note.path.is_empty());
+    }
+
+    #[test]
+    fn clear_book_notes_removes_files_and_resets_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book_dir = tmp.path();
+        let chapter = seed_book(book_dir);
+
+        let frontmatter = NoteFrontmatter {
+            book_id: "abc123".into(),
+            chapter_key: chapter.key.clone(),
+            chapter_index: chapter.index,
+            chapter_title: chapter.title.clone(),
+            chapter_href: chapter.href.clone(),
+            epub_cfi: None,
+            kind: "summary".into(),
+            word_count: 0,
+            created_at: None,
+            updated_at: None,
+        };
+        save_chapter_note(book_dir, &chapter, frontmatter, "a note to lose").unwrap();
+        assert_eq!(count_notes(book_dir).unwrap(), 1);
+
+        let removed = clear_book_notes(book_dir).unwrap();
+        assert_eq!(removed, 1);
+        assert_eq!(count_notes(book_dir).unwrap(), 0);
+
+        let index = read_notes_index(book_dir).unwrap();
+        assert!(index.chapters.is_empty());
+
+        let note = load_chapter_note(book_dir, "001").unwrap();
+        assert!(note.body.is_empty());
+        assert!(note.path.is_empty());
+    }
+
+    #[test]
+    fn clear_book_notes_without_notes_writes_empty_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book_dir = tmp.path();
+        seed_book(book_dir);
+
+        assert_eq!(clear_book_notes(book_dir).unwrap(), 0);
+        assert!(book_dir.join("notes/_index.json").exists());
+        let index = read_notes_index(book_dir).unwrap();
+        assert!(index.chapters.is_empty());
     }
 }

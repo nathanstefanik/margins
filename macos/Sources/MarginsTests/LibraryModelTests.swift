@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import MarginsCore
 import MarginsModel
 
 @Suite("Library model")
@@ -66,6 +67,75 @@ struct LibraryModelTests {
         #expect(model.errorMessage == nil)
     }
 
+    @Test("clearNotes empties the index and resets the reader's editor")
+    @MainActor
+    func clearNotesResetsReaderEditor() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteBody = "a note about chapter one"
+        await model.saveChapterNote(reader: reader)
+        #expect(reader.notesError == nil)
+
+        await model.loadSelectedBook()
+        let countsBefore = LibraryModel.noteWordCounts(
+            chapters: book.chapters,
+            index: model.selectedBookNotesIndex
+        )
+        #expect(!countsBefore.isEmpty)
+
+        let cleared = await model.clearNotes(bookId: book.id)
+        #expect(cleared == 1)
+        #expect(model.errorMessage == nil)
+        #expect(model.selectedBookNotesIndex.isEmpty)
+
+        // The reader's editor was reloaded from disk: blank body with a
+        // clean baseline, so a later autosave cannot resurrect the note.
+        #expect(reader.noteBody.isEmpty)
+        #expect(!reader.isNoteDirty)
+
+        // The refreshed book summary reflects zero notes.
+        #expect(model.books.first?.notesCount == 0)
+    }
+
+    @Test("saving a note recompiles a stale compiled notes page")
+    @MainActor
+    func saveNoteRefreshesCompiledPage() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+
+        let book = try #require(model.selectedBook)
+        await model.loadCompiledNotes(bookId: book.id)
+        #expect(model.detailMode == .notes)
+        #expect(model.compiledNotes?.chaptersWithNotes == 0)
+        model.showNotesPageTab(.outline)
+
+        // Opening a chapter from the notes page leaves the page mounted
+        // underneath the reader (detailMode stays .notes).
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteBody = "a brand new observation"
+        await model.saveChapterNote(reader: reader)
+        #expect(reader.notesError == nil)
+
+        // The save recompiled the page: outline and contents now include
+        // the note, and the outline tab choice survived the reload.
+        let notes = try #require(model.compiledNotes)
+        #expect(notes.chaptersWithNotes == 1)
+        #expect(notes.chapters.first?.body.contains("a brand new observation") == true)
+        #expect(model.detailMode == .notes)
+        #expect(model.notesPageTab == .outline)
+    }
+
     @Test("import failure surfaces an error message")
     @MainActor
     func importFailureSurfacesError() async throws {
@@ -98,6 +168,27 @@ struct LibraryModelTests {
             #expect(first == second, "tint must not depend on process state")
             #expect(first >= 0 && first < paletteSize)
         }
+    }
+
+    @Test("annotated chapter rows follow the spine and join note stats")
+    func annotatedChapterRowsFollowSpineOrder() {
+        let chapters = [
+            ChapterMeta(key: "001", index: 0, title: "One", href: "one.xhtml", fragment: nil),
+            ChapterMeta(key: "002", index: 1, title: "Two", href: "two.xhtml", fragment: nil),
+            ChapterMeta(key: "003", index: 2, title: "Three", href: "three.xhtml", fragment: nil),
+        ]
+        // Index order must not matter: the spine defines the row order.
+        let index = [
+            NoteIndexEntry(chapterKey: "003", chapterIndex: 2, chapterTitle: "Three", wordCount: 41, updatedAt: nil),
+            NoteIndexEntry(chapterKey: "001", chapterIndex: 0, chapterTitle: "One", wordCount: 98, updatedAt: "2026-09-01T12:00:00+00:00"),
+        ]
+
+        let rows = LibraryModel.annotatedChapterRows(chapters: chapters, index: index)
+
+        #expect(rows.map(\.chapter.key) == ["001", "003"])
+        #expect(rows[0].wordCount == 98)
+        #expect(rows[0].updatedAt == "2026-09-01T12:00:00+00:00")
+        #expect(rows[1].wordCount == 41)
     }
 
     @Test("chapter → note word count join from the notes index")

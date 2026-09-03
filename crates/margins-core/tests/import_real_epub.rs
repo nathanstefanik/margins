@@ -49,14 +49,31 @@ fn import_fixture_epubs_metadata_and_first_spine_resource() {
         assert_eq!(meta.author, parsed.author);
         assert_eq!(meta.chapters.len(), parsed.chapters.len());
 
+        assert_eq!(
+            meta.chapters_version,
+            margins_core::library::CHAPTERS_VERSION
+        );
+
         let source = library.book_dir(&meta.id).join("source.epub");
         let mut archive = ZipArchive::new(BufReader::new(File::open(source).unwrap())).unwrap();
-        archive.by_name(&meta.chapters[0].href).unwrap_or_else(|e| {
-            panic!(
-                "{}: first spine {} missing from archive: {e}",
+        for chapter in &meta.chapters {
+            // A chapter's href addresses the spine item and nothing else:
+            // the TOC anchor lives in `fragment`, because both frontends
+            // match relocation events against the bare path.
+            assert!(
+                !chapter.href.contains('#'),
+                "{}: chapter {} href carries a fragment: {}",
                 epub.display(),
-                meta.chapters[0].href
-            )
-        });
+                chapter.key,
+                chapter.href
+            );
+            archive.by_name(&chapter.href).unwrap_or_else(|e| {
+                panic!(
+                    "{}: spine item {} missing from archive: {e}",
+                    epub.display(),
+                    chapter.href
+                )
+            });
+        }
     }
 }

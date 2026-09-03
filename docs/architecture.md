@@ -25,6 +25,9 @@ All domain logic lives here and has **no Tauri dependency**:
 - `epub_meta.rs` — OPF/spine/metadata parsing.
 - `notes.rs` — per-chapter markdown notes with YAML frontmatter and a
   `_index.json` per book.
+- `compile.rs` — compiles a book's notes into one spine-ordered document
+  (the per-book notes page) and renders it as markdown for the `.md`
+  export / copy-all; exports are derived artifacts (see `docs/storage.md`).
 - `sync.rs` — export/import of whole library trees.
 - `models.rs` — shared record types.
 
@@ -37,9 +40,10 @@ files are byte-identical regardless of which app wrote them.
 A thin UniFFI 0.29 (proc-macro mode) wrapper over the core. One exported
 object, `MarginsCore`, with `list_books`, `import_epub`, `get_book`,
 `remove_book`, `read_epub_bytes`, `get_chapter_note`, `save_chapter_note`,
-`search_notes` — records mirror `models.rs` with RFC3339 date strings and
-`u32` counts (UniFFI has no `chrono`/`usize`); errors are a flat `CoreError`.
-Sync export/import is not exposed (no UI for it yet on either platform).
+`get_compiled_notes`, `render_notes_markdown`, `search_notes` — records
+mirror `models.rs` with RFC3339 date strings and `u32` counts (UniFFI has
+no `chrono`/`usize`); errors are a flat `CoreError`. Sync export/import is
+not exposed (no UI for it yet on either platform).
 
 `scripts/build-core.sh` release-builds the staticlib and generates the Swift
 bindings into the SwiftPM layout (`macos/Sources/margins_ffiFFI/include/`
@@ -92,6 +96,13 @@ breaks the load.
 Navigation policy sends any `http(s)` navigation (and `target=_blank`) to
 the system browser; only `margins-reader://` loads in the webview.
 
+Section iframes run with `allow-same-origin allow-scripts allow-popups`
+(epub.js ≥ 0.3.89 requires `allow-scripts` for any in-book link to work).
+This means EPUB-embedded scripts can run and reach the parent page — an
+accepted risk: books are local, user-imported files, and the
+`margins-reader://` handler exposes only reader assets and the open book's
+bytes. Possible future hardening: strip `<script>` tags during import.
+
 ### Keyboard routing
 
 One local `NSEvent` monitor (`ShellKeyboardController`) sees every keyDown
@@ -110,6 +121,14 @@ files as the Tauri app. `/` (or ⌘F) opens the search overlay over
 overlay is non-modal (no sheet window) and `LibraryModel.searchOpen` is the
 single source of truth: the shell key monitor closes it on Esc and clicks
 outside the panel dismiss it.
+
+The **compiled notes page** (`NotesPageView`, reached via the book detail's
+"All Notes" button, `N`, or ⇧⌘N / View → Book Notes) shows every chapter
+note in spine order through `get_compiled_notes`; `LibraryModel.detailMode`
+switches the detail area between the book card and the page. "Export
+Notes…" (button or File menu) renders with `render_notes_markdown` and
+writes the file after an `NSSavePanel`; note bodies render as plain `Text`
+(never as markdown/HTML).
 
 ## Building and running (macOS)
 

@@ -181,9 +181,24 @@ final class ShellKeyboardController {
             guard model.selectedBookID != nil else { return false }
             openSelectedBook()
             return true
+        case .openBookNotes:
+            guard let id = model.selectedBookID else { return false }
+            Task { await model.loadCompiledNotes(bookId: id) }
+            return true
+        case .toggleNotesPageTab:
+            // Only meaningful while the compiled notes page is open.
+            guard model.detailMode == .notes, model.compiledNotes != nil else { return false }
+            model.toggleNotesPageTab()
+            return true
         case .backToLibrary:
             guard reader.isOpen else { return false }
             reader.close()
+            return true
+        case .backToBook:
+            // Only the compiled notes page has somewhere to go back to;
+            // on the plain book detail the key stays unhandled.
+            guard model.detailMode == .notes, model.compiledNotes != nil else { return false }
+            model.showBookDetail()
             return true
         case .importBook:
             Task { await ImportPanel.run(model: model) }
@@ -214,9 +229,9 @@ final class ShellKeyboardController {
     }
 
     private func displayCurrentChapter() -> Bool {
-        guard let href = reader.chapter?.href else { return false }
+        guard let target = reader.chapter?.jumpTarget else { return false }
         return ReaderController.evaluateInReader(
-            "readerDisplay(\(ReaderController.javaScriptLiteral(href)))"
+            "readerDisplay(\(ReaderController.javaScriptLiteral(target)))"
         )
     }
 

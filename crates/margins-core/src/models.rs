@@ -24,7 +24,14 @@ pub struct ChapterMeta {
     pub key: String,
     pub index: usize,
     pub title: String,
+    /// In-zip path of the spine item, without a fragment. Both frontends
+    /// match relocated hrefs against this, so it must stay a pure path.
     pub href: String,
+    /// Anchor id where this chapter starts inside `href`, taken from the
+    /// book's TOC. Jump targets are `href#fragment` when present; `None`
+    /// when the TOC has no entry for the file (or there is no TOC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fragment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +52,11 @@ pub struct BookMeta {
     /// Never persisted into `meta.json` — it lives in `position.json`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress_percent: Option<f64>,
+    /// Schema version of `chapters`. Absent (0) in books imported before
+    /// TOC-derived titles existed; the library scan re-parses those and
+    /// bumps this to `CHAPTERS_VERSION`.
+    #[serde(default)]
+    pub chapters_version: u32,
 }
 
 /// Where a reader left off in a book, stored as
@@ -154,4 +166,68 @@ pub struct SyncReport {
     pub files_copied: usize,
     pub bytes_copied: u64,
     pub destination: String,
+}
+
+/// One chapter section of a compiled notes page: the chapter's note, loaded
+/// from disk. Note-less chapters are represented in `CompiledNotes`'
+/// `empty_chapters` instead, with an empty body.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompiledChapter {
+    pub chapter_key: String,
+    pub chapter_index: usize,
+    pub chapter_title: String,
+    /// Markdown, without frontmatter.
+    pub body: String,
+    pub word_count: usize,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+/// Every chapter note of a book, compiled into one ordered document.
+/// `chapters` holds the chapters that actually have notes (spine order);
+/// `empty_chapters` mirrors the spine's note-less chapters so both UIs can
+/// show gaps when asked.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompiledNotes {
+    pub book_id: String,
+    pub book_title: String,
+    pub book_author: String,
+    /// Chapters with notes, sorted by `chapter_index`.
+    pub chapters: Vec<CompiledChapter>,
+    /// Spine chapters without a note file, sorted by `chapter_index`.
+    pub empty_chapters: Vec<CompiledChapter>,
+    pub chapters_with_notes: usize,
+    /// Total chapters in the book's spine.
+    pub chapter_count: usize,
+    pub total_words: usize,
+    pub first_created_at: Option<DateTime<Utc>>,
+    pub last_updated_at: Option<DateTime<Utc>>,
+    /// Shared default export name: `"{author} — {title} — notes.md"`,
+    /// sanitized for filesystem use.
+    pub suggested_filename: String,
+}
+
+/// Toggles for `render_markdown`; all default `true` unless noted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExportOptions {
+    /// Linked table of contents after the header.
+    pub include_toc: bool,
+    /// Coverage/word-count summary line under the title.
+    pub include_stats: bool,
+    /// Default `false`; list note-less chapters as `_No note._` stubs so
+    /// gaps stay visible.
+    pub include_empty_chapters: bool,
+    /// Shift `#`/`##` inside note bodies down two levels so user headings
+    /// never collide with the document's own `#`/`##` structure.
+    pub demote_headings: bool,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        Self {
+            include_toc: true,
+            include_stats: true,
+            include_empty_chapters: false,
+            demote_headings: true,
+        }
+    }
 }

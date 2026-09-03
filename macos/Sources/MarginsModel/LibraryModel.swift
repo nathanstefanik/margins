@@ -17,7 +17,10 @@ public final class LibraryModel {
     /// The selected book's notes index (`notes/_index.json`), loaded with
     /// the book so the detail view can flag chapters that have notes.
     public private(set) var selectedBookNotesIndex: [NoteIndexEntry] = []
-    public private(set) var errorMessage: String?
+    /// The last non-fatal failure, surfaced as a transient banner.
+    /// Model methods set it; AppKit-level flows (save panel, clipboard)
+    /// set it from the view layer so the banner stays the single sink.
+    public var errorMessage: String?
 
     /// The selected book's id. Views may bind to this (e.g. sidebar list
     /// selection) and observe it; use `selectBook(id:)` for programmatic
@@ -59,6 +62,8 @@ public final class LibraryModel {
                 selectedBook = nil
                 selectedBookID = nil
                 selectedBookNotesIndex = []
+                compiledNotes = nil
+                detailMode = .book
             }
         } catch {
             errorMessage = String(describing: error)
@@ -71,6 +76,12 @@ public final class LibraryModel {
         do {
             selectedBook = try await store.getBook(id: selectedBookID)
             selectedBookNotesIndex = try await store.notesIndex(bookId: selectedBookID)
+            // A compiled page for a previous selection must never survive
+            // the selection changing underneath it.
+            if compiledNotes?.bookId != selectedBookID {
+                compiledNotes = nil
+                detailMode = .book
+            }
         } catch {
             errorMessage = String(describing: error)
         }
@@ -84,6 +95,8 @@ public final class LibraryModel {
         } else {
             selectedBook = nil
             selectedBookNotesIndex = []
+            compiledNotes = nil
+            detailMode = .book
         }
     }
 
@@ -96,6 +109,8 @@ public final class LibraryModel {
             selectedBookID = nil
             selectedBook = nil
             selectedBookNotesIndex = []
+            compiledNotes = nil
+            detailMode = .book
             await refresh()
         } catch {
             errorMessage = String(describing: error)
@@ -116,6 +131,38 @@ public final class LibraryModel {
             if let count = counts[chapter.key] {
                 result[chapter.key] = count
             }
+        }
+    }
+
+    /// One row of the book detail's "Show Notes" list: a chapter that has a
+    /// note, joined with the note's stats from `_index.json`.
+    public struct ChapterNoteRow: Equatable, Sendable {
+        public var chapter: ChapterMeta
+        public var wordCount: UInt32
+        public var updatedAt: String?
+
+        public init(chapter: ChapterMeta, wordCount: UInt32, updatedAt: String?) {
+            self.chapter = chapter
+            self.wordCount = wordCount
+            self.updatedAt = updatedAt
+        }
+    }
+
+    /// The spine's annotated chapters in spine order (never reordered by
+    /// note presence), each joined with its note's word count and updated
+    /// date. Pure so the views and tests share one definition.
+    public nonisolated static func annotatedChapterRows(
+        chapters: [ChapterMeta],
+        index: [NoteIndexEntry]
+    ) -> [ChapterNoteRow] {
+        let byKey = Dictionary(index.map { ($0.chapterKey, $0) }, uniquingKeysWith: { first, _ in first })
+        return chapters.compactMap { chapter in
+            guard let entry = byKey[chapter.key] else { return nil }
+            return ChapterNoteRow(
+                chapter: chapter,
+                wordCount: entry.wordCount,
+                updatedAt: entry.updatedAt
+            )
         }
     }
 
@@ -172,6 +219,27 @@ public final class LibraryModel {
         }
     }
 
+    /// Deletes every note file for the book, then refreshes. The open
+    /// reader's note editor (if any) is reloaded from disk so a stale body
+    /// cannot resurrect a cleared note on the next autosave. Returns the
+    /// number of note files removed, or `nil` on failure (surfaced in
+    /// `errorMessage`).
+    @discardableResult
+    public func clearNotes(bookId: String) async -> UInt32? {
+        guard let store else { return nil }
+        do {
+            let cleared = try await store.clearNotes(bookId: bookId)
+            if let reader, reader.book?.id == bookId {
+                await loadChapterNote(reader: reader)
+            }
+            await refresh()
+            return cleared
+        } catch {
+            errorMessage = String(describing: error)
+            return nil
+        }
+    }
+
     /// Opens a book at its saved reading position (chapter + CFI), falling
     /// back to the first chapter for books never opened. Used by Enter,
     /// double-click, and the detail view's Read button; explicit chapter
@@ -225,6 +293,126 @@ public final class LibraryModel {
         return { bookID in
             try store.readEpubBytesSync(id: bookID)
         }
+    }
+
+    // MARK: Compiled notes page
+
+    /// What the detail area shows when no reader session is open: the
+    /// book's detail card or its compiled notes page.
+    public enum DetailMode: Equatable, Sendable {
+        case book
+        case notes
+    }
+
+    public private(set) var detailMode: DetailMode = .book
+    /// The selected book's compiled notes; loaded by `loadCompiledNotes`.
+    public private(set) var compiledNotes: CompiledNotes?
+
+    /// Which face of the compiled notes page is showing: the outline
+    /// (chapter/title list) or the contents (compiled markdown view).
+    /// Lives here (not in view state) so the shell keyboard can flip it
+    /// with `t`, the same way the Tauri keymap does.
+    public enum NotesPageTab: Equatable, Sendable {
+        case outline
+        case contents
+    }
+
+    public private(set) var notesPageTab: NotesPageTab = .contents
+
+    /// Flips between the outline and the contents view.
+    public func toggleNotesPageTab() {
+        notesPageTab = notesPageTab == .outline ? .contents : .outline
+    }
+
+    public func showNotesPageTab(_ tab: NotesPageTab) {
+        notesPageTab = tab
+    }
+
+    /// Compiles the book's notes and switches the detail area to the notes
+    /// page. Returns the compilation, or `nil` on failure (surfaced in
+    /// `errorMessage`).
+    @discardableResult
+    public func loadCompiledNotes(bookId: String) async -> CompiledNotes? {
+        guard let store else { return nil }
+        do {
+            let notes = try await store.compiledNotes(bookId: bookId)
+            compiledNotes = notes
+            detailMode = .notes
+            notesPageTab = .contents
+            return notes
+        } catch {
+            errorMessage = String(describing: error)
+            return nil
+        }
+    }
+
+    /// Back to the book's detail card (kept out of `selectBook` so views
+    /// can return without reloading).
+    public func showBookDetail() {
+        detailMode = .book
+    }
+
+    /// Renders the book's notes as markdown for export/copy. Runs through
+    /// the `CoreStore` actor, so the compile happens off the main actor.
+    public func renderNotesMarkdown(bookId: String) async throws -> String {
+        guard let store else {
+            throw CoreError.Message(message: "library is not open yet")
+        }
+        return try await store.renderNotesMarkdown(bookId: bookId, options: nil)
+    }
+
+    /// One-line coverage summary, e.g.
+    /// "3/5 chapters annotated · 1,240 words · last updated Sep 1, 2026".
+    /// Pure (nonisolated) so tests can cover it without UI; matches the
+    /// export's stats line (modulo the author, which the page shows in its
+    /// header).
+    public nonisolated static func statsLine(for notes: CompiledNotes) -> String {
+        var parts = [
+            "\(notes.chaptersWithNotes)/\(notes.chapterCount) chapters annotated",
+            "\(groupedCount(notes.totalWords)) words",
+        ]
+        if let updated = notes.lastUpdatedAt.flatMap(parseRFC3339) {
+            parts.append("last updated \(dateText(updated))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Thousands-grouped count with a fixed separator so the line does not
+    /// depend on the user's locale.
+    public nonisolated static func groupedCount(_ value: UInt32) -> String {
+        let digits = String(value)
+        var grouped = ""
+        for (offset, char) in digits.reversed().enumerated() {
+            if offset > 0, offset % 3 == 0 {
+                grouped.insert(",", at: grouped.startIndex)
+            }
+            grouped.insert(char, at: grouped.startIndex)
+        }
+        return grouped
+    }
+
+    /// Parses an RFC3339 bridge timestamp (with or without fractional
+    /// seconds), or `nil` when it is missing/unparsable.
+    public nonisolated static func parseRFC3339(_ value: String) -> Date? {
+        for includingFractionalSeconds in [true, false] {
+            let style = Date.ISO8601FormatStyle(
+                dateTimeSeparator: .standard,
+                timeZoneSeparator: .colon,
+                includingFractionalSeconds: includingFractionalSeconds
+            )
+            if let date = try? Date(value, strategy: style) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    /// Fixed-locale "Sep 1, 2026" date text for the stats line.
+    public nonisolated static func dateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
     }
 
     // MARK: Notes (Part III)
@@ -302,6 +490,7 @@ public final class LibraryModel {
                 updatedAt: note.frontmatter.updatedAt,
                 savedBody: body
             )
+            await refreshCompiledNotesAfterSave(bookId: book.id)
         } catch {
             reader.noteFailed(String(describing: error))
         }
@@ -327,9 +516,22 @@ public final class LibraryModel {
                 updatedAt: note.frontmatter.updatedAt,
                 savedBody: body
             )
+            await refreshCompiledNotesAfterSave(bookId: bookId)
         } catch {
             reader?.noteFailed(String(describing: error))
         }
+    }
+
+    /// The compiled notes page keeps its snapshot while a reader session
+    /// is open on top of it (`detailMode` stays `.notes` and Esc falls back
+    /// to the page), so a save recompiles it in the background and
+    /// returning to the page shows the new content. The outline/contents
+    /// tab choice is preserved.
+    private func refreshCompiledNotesAfterSave(bookId: String) async {
+        guard detailMode == .notes, compiledNotes?.bookId == bookId else { return }
+        let tab = notesPageTab
+        guard (await loadCompiledNotes(bookId: bookId)) != nil else { return }
+        notesPageTab = tab
     }
 
     public func searchNotes(_ query: String) async -> [NoteSearchHit] {
