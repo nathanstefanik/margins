@@ -13,7 +13,10 @@ export interface ChapterMeta {
   key: string;
   index: number;
   title: string;
+  /** In-zip path of the spine item; never carries a fragment. */
   href: string;
+  /** Anchor id where the chapter starts inside `href`, from the book's TOC. */
+  fragment?: string | null;
 }
 
 export interface BookMeta {
@@ -118,6 +121,7 @@ export const api = {
   renderNotesMarkdown: (bookId: string, options?: ExportOptions) =>
     invoke<string>("render_notes_markdown", { bookId, options }),
   removeBook: (bookId: string) => invoke<void>("remove_book", { bookId }),
+  clearBookNotes: (bookId: string) => invoke<number>("clear_book_notes", { bookId }),
   exportLibrary: (destination: string) =>
     invoke<SyncReport>("export_library", { destination }),
   importLibrary: (source: string, merge: boolean) =>

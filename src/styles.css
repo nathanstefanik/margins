@@ -72,6 +72,14 @@ button.ghost {
   background: transparent;
 }
 
+button.ghost.danger {
+  color: #f7768e;
+}
+
+button.ghost.danger:hover {
+  border-color: #f7768e;
+}
+
 button.primary {
   background: var(--accent-dim);
   border-color: var(--accent);

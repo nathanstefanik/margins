@@ -39,6 +39,12 @@ public actor CoreStore {
         try core.removeBook(id: id)
     }
 
+    /// Deletes every note file for the book and resets its notes index;
+    /// returns the number of note files removed.
+    public func clearNotes(bookId: String) throws -> UInt32 {
+        try core.clearNotes(bookId: bookId)
+    }
+
     /// The book's saved reading position, or `nil` when it was never opened.
     public func readingPosition(bookId: String) throws -> ReadingPosition? {
         core.getReadingPosition(id: bookId)

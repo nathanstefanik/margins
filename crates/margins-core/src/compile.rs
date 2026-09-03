@@ -19,6 +19,17 @@ pub fn compile_book_notes(book_dir: &Path) -> Result<CompiledNotes, NotesError> 
     let index = notes::read_notes_index(book_dir)?;
     let notes_dir = book_dir.join("notes");
 
+    // Note frontmatter records the chapter title as it stood when the note
+    // was saved, so a book whose titles were re-derived (see
+    // `library::CHAPTERS_VERSION`) would show stale names here. The spine is
+    // the source of truth; frontmatter only fills in for keys it no longer
+    // has. Note files are left untouched on disk.
+    let spine_titles: HashMap<&str, &str> = meta
+        .chapters
+        .iter()
+        .map(|chapter| (chapter.key.as_str(), chapter.title.as_str()))
+        .collect();
+
     let mut chapters: Vec<CompiledChapter> = Vec::new();
     let mut first_created_at: Option<DateTime<Utc>> = None;
     let mut last_updated_at: Option<DateTime<Utc>> = None;
@@ -33,10 +44,14 @@ pub fn compile_book_notes(book_dir: &Path) -> Result<CompiledNotes, NotesError> 
         // Recounted from the body so the page always agrees with what it
         // displays, even for hand-edited note files.
         let word_count = notes::count_words(&note.body);
+        let chapter_title = spine_titles
+            .get(entry.chapter_key.as_str())
+            .map(|title| title.to_string())
+            .unwrap_or(note.frontmatter.chapter_title);
         chapters.push(CompiledChapter {
             chapter_key: entry.chapter_key.clone(),
             chapter_index: note.frontmatter.chapter_index,
-            chapter_title: note.frontmatter.chapter_title,
+            chapter_title,
             body: note.body,
             word_count,
             updated_at: note.frontmatter.updated_at,
@@ -291,6 +306,7 @@ mod tests {
                 index: i,
                 title: (*title).into(),
                 href: format!("OEBPS/ch{i}.xhtml"),
+                fragment: None,
             })
             .collect();
         let meta = BookMeta {
@@ -303,6 +319,7 @@ mod tests {
             chapters: spine,
             cover: None,
             progress_percent: None,
+            chapters_version: crate::library::CHAPTERS_VERSION,
         };
         fs::create_dir_all(dir.join("notes/chapters")).unwrap();
         fs::write(
@@ -375,6 +392,31 @@ mod tests {
 
     fn fixed_date(secs: i64) -> DateTime<Utc> {
         Utc.timestamp_opt(secs, 0).unwrap()
+    }
+
+    #[test]
+    fn compile_prefers_the_spine_title_over_stale_frontmatter() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book = seed_book(tmp.path(), &[("001", "Chapter II. The Real Name")]);
+        // Written before the chapter titles were re-derived, so the note
+        // still carries the old name.
+        book.write_note("001", 0, "Chapter 1", "Body.");
+
+        let compiled = compile_book_notes(&book.dir).unwrap();
+        assert_eq!(
+            compiled.chapters[0].chapter_title,
+            "Chapter II. The Real Name"
+        );
+    }
+
+    #[test]
+    fn compile_falls_back_to_frontmatter_for_keys_off_the_spine() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book = seed_book(tmp.path(), &[("001", "Opening")]);
+        book.write_note("009", 8, "An Orphaned Note", "Body.");
+
+        let compiled = compile_book_notes(&book.dir).unwrap();
+        assert_eq!(compiled.chapters[0].chapter_title, "An Orphaned Note");
     }
 
     #[test]

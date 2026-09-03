@@ -24,7 +24,14 @@ pub struct ChapterMeta {
     pub key: String,
     pub index: usize,
     pub title: String,
+    /// In-zip path of the spine item, without a fragment. Both frontends
+    /// match relocated hrefs against this, so it must stay a pure path.
     pub href: String,
+    /// Anchor id where this chapter starts inside `href`, taken from the
+    /// book's TOC. Jump targets are `href#fragment` when present; `None`
+    /// when the TOC has no entry for the file (or there is no TOC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fragment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +52,11 @@ pub struct BookMeta {
     /// Never persisted into `meta.json` — it lives in `position.json`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress_percent: Option<f64>,
+    /// Schema version of `chapters`. Absent (0) in books imported before
+    /// TOC-derived titles existed; the library scan re-parses those and
+    /// bumps this to `CHAPTERS_VERSION`.
+    #[serde(default)]
+    pub chapters_version: u32,
 }
 
 /// Where a reader left off in a book, stored as

@@ -67,6 +67,43 @@ struct LibraryModelTests {
         #expect(model.errorMessage == nil)
     }
 
+    @Test("clearNotes empties the index and resets the reader's editor")
+    @MainActor
+    func clearNotesResetsReaderEditor() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteBody = "a note about chapter one"
+        await model.saveChapterNote(reader: reader)
+        #expect(reader.notesError == nil)
+
+        await model.loadSelectedBook()
+        let countsBefore = LibraryModel.noteWordCounts(
+            chapters: book.chapters,
+            index: model.selectedBookNotesIndex
+        )
+        #expect(!countsBefore.isEmpty)
+
+        let cleared = await model.clearNotes(bookId: book.id)
+        #expect(cleared == 1)
+        #expect(model.errorMessage == nil)
+        #expect(model.selectedBookNotesIndex.isEmpty)
+
+        // The reader's editor was reloaded from disk: blank body with a
+        // clean baseline, so a later autosave cannot resurrect the note.
+        #expect(reader.noteBody.isEmpty)
+        #expect(!reader.isNoteDirty)
+
+        // The refreshed book summary reflects zero notes.
+        #expect(model.books.first?.notesCount == 0)
+    }
+
     @Test("import failure surfaces an error message")
     @MainActor
     func importFailureSurfacesError() async throws {
@@ -104,9 +141,9 @@ struct LibraryModelTests {
     @Test("annotated chapter rows follow the spine and join note stats")
     func annotatedChapterRowsFollowSpineOrder() {
         let chapters = [
-            ChapterMeta(key: "001", index: 0, title: "One", href: "one.xhtml"),
-            ChapterMeta(key: "002", index: 1, title: "Two", href: "two.xhtml"),
-            ChapterMeta(key: "003", index: 2, title: "Three", href: "three.xhtml"),
+            ChapterMeta(key: "001", index: 0, title: "One", href: "one.xhtml", fragment: nil),
+            ChapterMeta(key: "002", index: 1, title: "Two", href: "two.xhtml", fragment: nil),
+            ChapterMeta(key: "003", index: 2, title: "Three", href: "three.xhtml", fragment: nil),
         ]
         // Index order must not matter: the spine defines the row order.
         let index = [
