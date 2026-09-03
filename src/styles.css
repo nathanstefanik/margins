@@ -202,6 +202,17 @@ button:disabled {
   background: var(--bg-elevated);
 }
 
+.chapter-sidebar-header {
+  padding: 0.15rem 0 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.5rem;
+}
+
+.chapter-sidebar-header button {
+  width: 100%;
+  font-size: 0.82rem;
+}
+
 .chapter-item {
   display: block;
   width: 100%;
@@ -414,6 +425,85 @@ mark {
   color: var(--text);
   padding: 0 0.12em;
   border-radius: 2px;
+}
+
+.notes-page {
+  max-width: 760px;
+}
+
+.notes-page .panel-header {
+  align-items: center;
+}
+
+.notes-page-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+#notes-page-stats {
+  margin: -0.5rem 0 1.25rem;
+}
+
+.notes-page-toc {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 0.75rem 0.75rem 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+}
+
+.notes-page-toc a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.notes-page-toc a:hover {
+  text-decoration: underline;
+}
+
+.notes-section {
+  padding: 0.25rem 0 0.5rem;
+}
+
+.notes-section + .notes-section {
+  border-top: 1px solid var(--border);
+}
+
+.notes-section-header {
+  margin: 0;
+  padding: 0.5rem 0 0.15rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.notes-section-header:hover {
+  color: var(--accent);
+}
+
+.notes-section-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  padding-bottom: 0.5rem;
+}
+
+.notes-section-stub .notes-section-header,
+.notes-section-stub .notes-section-meta {
+  color: var(--muted);
+}
+
+.notes-section-body {
+  margin: 0 0 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.notes-page-empty {
+  color: var(--muted);
 }
 
 @media (max-width: 1000px) {

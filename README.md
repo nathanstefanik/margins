@@ -10,6 +10,8 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Progress feedback while importing EPUBs
 - Paginated reader with vim-style keybindings
 - Per-chapter markdown notes with YAML frontmatter (~100-word summaries)
+- Compiled per-book **notes page** (`N`) with one-click markdown export
+  and copy-all
 - Full-text search across notes (`/` or `:search`)
 - Export/import entire library trees (external drives, cloud sync folders)
 - Choose the library directory with the in-app folder picker or **root** command
@@ -52,6 +54,7 @@ macOS keybindings:
 | Space / arrows / PgDn / PgUp | Turn pages (reader) |
 | `gg` / `G` | First / last page of chapter |
 | `n` / `p` | Next / previous chapter |
+| `N` | Compiled notes page for the selected book (book view; also ⇧⌘N) |
 | `i` / `Enter` | Open and focus the notes pane (reader) |
 | `Esc` | Notes editor → reader; reader → close notes pane; pane closed → library |
 | `l` | Library |
@@ -79,6 +82,7 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 |-----|--------|
 | `j` / `k` | Scroll (reader) or move selection (library) |
 | `n` / `p` | Next / previous chapter |
+| `N` | Compiled notes page for the current book (reader) |
 | `gg` / `G` | Top / bottom of chapter |
 | `i` | Focus notes editor |
 | `/` | Search notes (library-wide) |
@@ -88,7 +92,7 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 | `E` | Export library |
 | `R` | Choose the library directory |
 | `Enter` | Open selected book (library) or search hit |
-| `:` | Command mode (`:w` save, `:q` library, `:search`, `:import`, `:export`, `:root`, `:open 3`) |
+| `:` | Command mode (`:w` save, `:q` library, `:notes` compiled page, `:search`, `:import`, `:export`, `:root`, `:open 3`) |
 
 ## License
 

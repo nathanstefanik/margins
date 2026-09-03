@@ -40,7 +40,12 @@
       </div>
 
       <div id="reader-view" class="reader-layout hidden">
-        <aside id="chapter-list" class="chapter-sidebar"></aside>
+        <aside class="chapter-sidebar">
+          <div class="chapter-sidebar-header">
+            <button id="btn-all-notes" class="ghost" title="All notes (N)">all notes</button>
+          </div>
+          <div id="chapter-list"></div>
+        </aside>
         <main id="reader-pane" class="reader-pane" tabindex="0"></main>
         <aside id="notes-pane" class="notes-pane">
           <div class="notes-header">
@@ -58,10 +63,23 @@
         </aside>
       </div>
 
+      <div id="notes-view" class="panel notes-page hidden">
+        <div class="panel-header">
+          <h2 id="notes-page-title">Notes</h2>
+          <div class="notes-page-actions">
+            <button id="btn-copy-notes" class="ghost">copy all</button>
+            <button id="btn-export-notes" class="ghost">export .md</button>
+          </div>
+        </div>
+        <div id="notes-page-stats" class="muted"></div>
+        <div id="notes-page-body"></div>
+      </div>
+
       <footer class="keybar">
         <span><kbd>j</kbd>/<kbd>k</kbd> scroll</span>
         <span><kbd>n</kbd>/<kbd>p</kbd> chapter</span>
         <span><kbd>i</kbd> notes</span>
+        <span><kbd>N</kbd> all notes</span>
         <span><kbd>/</kbd> search</span>
         <span><kbd>Esc</kbd> reader</span>
         <span><kbd>l</kbd> library</span>

@@ -1,4 +1,4 @@
-type ContentMode = "library" | "reader" | "notes";
+type ContentMode = "library" | "reader" | "notes" | "notesPage";
 type Mode = ContentMode | "command" | "search";
 
 export interface KeymapHandlers {
@@ -15,6 +15,9 @@ export interface KeymapHandlers {
   onFocusNotes: () => void;
   onFocusReader: () => void;
   onSaveNote: () => void;
+  onNotesPage: () => void;
+  onNotesPageRestore: () => void;
+  onNotesClose: () => void;
   onSearch: (query?: string) => void;
   onCommand: (cmd: string) => void;
   onStatus: (msg: string) => void;
@@ -115,14 +118,23 @@ export class Keymap {
         break;
       case "n":
         event.preventDefault();
+        if (this.mode === "notesPage") break;
         this.handlers.onNextChapter();
         break;
       case "p":
         event.preventDefault();
+        if (this.mode === "notesPage") break;
         this.handlers.onPrevChapter();
+        break;
+      case "N":
+        event.preventDefault();
+        if (this.mode === "reader") {
+          this.handlers.onNotesPage();
+        }
         break;
       case "i":
         event.preventDefault();
+        if (this.mode === "notesPage") break;
         this.handlers.onFocusNotes();
         break;
       case "/":
@@ -153,7 +165,11 @@ export class Keymap {
         break;
       case "Escape":
         event.preventDefault();
-        this.handlers.onFocusReader();
+        if (this.mode === "notesPage") {
+          this.handlers.onNotesClose();
+        } else {
+          this.handlers.onFocusReader();
+        }
         break;
       default:
         if (this.pendingG && event.key === "g") {
@@ -191,6 +207,8 @@ export class Keymap {
       this.handlers.onFocusReader();
     } else if (this.mode === "notes") {
       this.handlers.onFocusNotes();
+    } else if (this.mode === "notesPage") {
+      this.handlers.onNotesPageRestore();
     }
   }
 
@@ -206,6 +224,9 @@ export class Keymap {
         return true;
       case "q":
         this.handlers.onLibrary();
+        return true;
+      case "notes":
+        this.handlers.onNotesPage();
         return true;
       case "import":
         this.handlers.onImport();
