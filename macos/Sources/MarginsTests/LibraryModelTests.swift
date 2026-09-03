@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import MarginsCore
 import MarginsModel
 
 @Suite("Library model")
@@ -98,6 +99,27 @@ struct LibraryModelTests {
             #expect(first == second, "tint must not depend on process state")
             #expect(first >= 0 && first < paletteSize)
         }
+    }
+
+    @Test("annotated chapter rows follow the spine and join note stats")
+    func annotatedChapterRowsFollowSpineOrder() {
+        let chapters = [
+            ChapterMeta(key: "001", index: 0, title: "One", href: "one.xhtml"),
+            ChapterMeta(key: "002", index: 1, title: "Two", href: "two.xhtml"),
+            ChapterMeta(key: "003", index: 2, title: "Three", href: "three.xhtml"),
+        ]
+        // Index order must not matter: the spine defines the row order.
+        let index = [
+            NoteIndexEntry(chapterKey: "003", chapterIndex: 2, chapterTitle: "Three", wordCount: 41, updatedAt: nil),
+            NoteIndexEntry(chapterKey: "001", chapterIndex: 0, chapterTitle: "One", wordCount: 98, updatedAt: "2026-09-01T12:00:00+00:00"),
+        ]
+
+        let rows = LibraryModel.annotatedChapterRows(chapters: chapters, index: index)
+
+        #expect(rows.map(\.chapter.key) == ["001", "003"])
+        #expect(rows[0].wordCount == 98)
+        #expect(rows[0].updatedAt == "2026-09-01T12:00:00+00:00")
+        #expect(rows[1].wordCount == 41)
     }
 
     @Test("chapter → note word count join from the notes index")

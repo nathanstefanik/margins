@@ -42,6 +42,8 @@ export class App {
   private notesPageTitle = document.getElementById("notes-page-title")!;
   private notesPageStats = document.getElementById("notes-page-stats")!;
   private notesPageBody = document.getElementById("notes-page-body")!;
+  private notesPageOutline = document.getElementById("notes-page-outline")!;
+  private notesPageOutlineVisible = false;
   private status = document.getElementById("status")!;
   private libraryRoot = document.getElementById("library-root")!;
   private importProgress = document.getElementById("import-progress")!;
@@ -87,6 +89,7 @@ export class App {
       onNotesPage: () => void this.openNotesPage(),
       onNotesPageRestore: () => this.showNotesPageView(),
       onNotesClose: () => this.showReaderFromNotes(),
+      onNotesToggleView: () => this.showNotesOutline(!this.notesPageOutlineVisible),
       onSearch: (query) => this.showSearch(query),
       onCommand: (cmd) => this.showCommand(cmd),
       onStatus: (msg) => this.setStatus(msg),
@@ -106,6 +109,8 @@ export class App {
     document.getElementById("btn-all-notes")?.addEventListener("click", () => void this.openNotesPage());
     document.getElementById("btn-copy-notes")?.addEventListener("click", () => void this.copyNotes());
     document.getElementById("btn-export-notes")?.addEventListener("click", () => void this.exportNotes());
+    document.getElementById("btn-notes-outline")?.addEventListener("click", () => this.showNotesOutline(true));
+    document.getElementById("btn-notes-contents")?.addEventListener("click", () => this.showNotesOutline(false));
 
     this.notesEditor.addEventListener("input", () => this.updateWordCount());
 
@@ -315,50 +320,61 @@ export class App {
     }
     this.notesPageStats.textContent = statParts.join(" · ");
 
-    this.notesPageBody.innerHTML = "";
+    // Outline view: one entry per annotated chapter. The page opens on
+    // the notes view; `t` / the header toggle flip between the two.
+    this.notesPageOutline.innerHTML = "";
     if (notes.chapters.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "notes-page-empty";
+      const empty = document.createElement("li");
+      empty.className = "notes-outline-empty";
       empty.textContent = "No notes yet — press `i` in the reader to write one.";
-      this.notesPageBody.appendChild(empty);
-      return;
-    }
-
-    // Jump list.
-    if (notes.chapters.length > 1) {
-      const toc = document.createElement("ul");
-      toc.className = "notes-page-toc";
-      notes.chapters.forEach((chapter) => {
+      this.notesPageOutline.appendChild(empty);
+    } else {
+      for (const chapter of notes.chapters) {
         const li = document.createElement("li");
         const link = document.createElement("a");
         link.href = "#";
         link.textContent = `${chapter.chapter_index + 1}. ${chapter.chapter_title}`;
         link.addEventListener("click", (event) => {
           event.preventDefault();
+          this.showNotesOutline(false);
           this.scrollToSection(chapter.chapter_key);
         });
-        li.appendChild(link);
-        toc.appendChild(li);
-      });
-      this.notesPageBody.appendChild(toc);
+        const meta = document.createElement("span");
+        meta.className = "notes-outline-meta";
+        const parts = [`${chapter.word_count} words`];
+        if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
+        meta.textContent = parts.join(" · ");
+        li.append(link, meta);
+        this.notesPageOutline.appendChild(li);
+      }
     }
 
-    for (const chapter of notes.chapters) {
-      this.notesPageBody.appendChild(this.buildNotesSection(chapter, false));
+    // Contents view: sections for chapters that have notes only.
+    this.notesPageBody.innerHTML = "";
+    if (notes.chapters.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "notes-page-empty";
+      empty.textContent = "No notes yet — press `i` in the reader to write one.";
+      this.notesPageBody.appendChild(empty);
+    } else {
+      for (const chapter of notes.chapters) {
+        this.notesPageBody.appendChild(this.buildNotesSection(chapter));
+      }
     }
-    // Gap visibility: chapters without notes render as muted stubs, but
-    // still jump to the chapter so the page doubles as a checklist.
-    for (const chapter of notes.empty_chapters) {
-      this.notesPageBody.appendChild(this.buildNotesSection(chapter, true));
-    }
+    this.showNotesOutline(false);
   }
 
-  private buildNotesSection(
-    chapter: CompiledNotes["chapters"][number],
-    isStub: boolean,
-  ): HTMLElement {
+  private showNotesOutline(visible: boolean): void {
+    this.notesPageOutlineVisible = visible;
+    this.notesPageOutline.classList.toggle("hidden", !visible);
+    this.notesPageBody.classList.toggle("hidden", visible);
+    document.getElementById("btn-notes-outline")?.classList.toggle("active", visible);
+    document.getElementById("btn-notes-contents")?.classList.toggle("active", !visible);
+  }
+
+  private buildNotesSection(chapter: CompiledNotes["chapters"][number]): HTMLElement {
     const section = document.createElement("section");
-    section.className = isStub ? "notes-section notes-section-stub" : "notes-section";
+    section.className = "notes-section";
     section.dataset.key = chapter.chapter_key;
 
     const header = document.createElement("h3");
@@ -369,16 +385,12 @@ export class App {
 
     const meta = document.createElement("div");
     meta.className = "notes-section-meta";
-    if (isStub) {
-      meta.textContent = "No note yet.";
-    } else {
-      const parts = [`${chapter.word_count} words`];
-      if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
-      meta.textContent = parts.join(" · ");
-    }
+    const parts = [`${chapter.word_count} words`];
+    if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
+    meta.textContent = parts.join(" · ");
     section.appendChild(meta);
 
-    if (!isStub && chapter.body.trim()) {
+    if (chapter.body.trim()) {
       // User markdown stays plain text: textContent only, never innerHTML.
       const body = document.createElement("pre");
       body.className = "notes-section-body";

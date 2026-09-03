@@ -185,9 +185,20 @@ final class ShellKeyboardController {
             guard let id = model.selectedBookID else { return false }
             Task { await model.loadCompiledNotes(bookId: id) }
             return true
+        case .toggleNotesPageTab:
+            // Only meaningful while the compiled notes page is open.
+            guard model.detailMode == .notes, model.compiledNotes != nil else { return false }
+            model.toggleNotesPageTab()
+            return true
         case .backToLibrary:
             guard reader.isOpen else { return false }
             reader.close()
+            return true
+        case .backToBook:
+            // Only the compiled notes page has somewhere to go back to;
+            // on the plain book detail the key stays unhandled.
+            guard model.detailMode == .notes, model.compiledNotes != nil else { return false }
+            model.showBookDetail()
             return true
         case .importBook:
             Task { await ImportPanel.run(model: model) }

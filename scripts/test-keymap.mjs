@@ -31,6 +31,7 @@ const keymap = new Keymap({
   },
   onNotesPageRestore: () => calls.push("notes-page-restore"),
   onNotesClose: () => calls.push("notes-close"),
+  onNotesToggleView: () => calls.push("notes-toggle-view"),
   onSearch: () => {},
   onCommand: () => {},
   onStatus: () => {},
@@ -72,6 +73,16 @@ calls.length = 0;
 keymap.setMode("notesPage");
 keymap.handleKey({ key: "Escape", preventDefault() {} }, null);
 assert.deepEqual(calls, ["notes-close"], "Esc on the notes page should return to the reader");
+
+calls.length = 0;
+keymap.setMode("notesPage");
+keymap.handleKey({ key: "t", preventDefault() {} }, null);
+assert.deepEqual(calls, ["notes-toggle-view"], "t on the notes page should toggle contents/notes");
+
+calls.length = 0;
+keymap.setMode("reader");
+keymap.handleKey({ key: "t", preventDefault() {} }, null);
+assert.deepEqual(calls, [], "t must do nothing outside the notes page");
 
 calls.length = 0;
 keymap.setMode("reader");

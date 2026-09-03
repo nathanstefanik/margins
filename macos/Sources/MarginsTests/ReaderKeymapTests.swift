@@ -97,6 +97,27 @@ struct ReaderKeymapTests {
         #expect(keymap.handle(ReaderKeyEvent(key: "N", shift: true), now: 0).isEmpty)
     }
 
+    @Test("t toggles the notes page tab from the book view only")
+    func notesTabToggleKey() {
+        let keymap = ReaderKeymap(mode: .library)
+        #expect(keymap.handle(ReaderKeyEvent(key: "t"), now: 0) == [.toggleNotesPageTab])
+        keymap.setMode(.reader)
+        #expect(keymap.handle(ReaderKeyEvent(key: "t"), now: 0).isEmpty)
+        keymap.setMode(.modal)
+        #expect(keymap.handle(ReaderKeyEvent(key: "t"), now: 0).isEmpty)
+    }
+
+    @Test("l/Escape pop back from the notes page in book view, exit the reader in reader view")
+    func backKeys() {
+        let keymap = ReaderKeymap(mode: .library)
+        #expect(keymap.handle(ReaderKeyEvent(key: "l"), now: 0) == [.backToBook])
+        #expect(keymap.handle(ReaderKeyEvent(key: "Escape"), now: 0) == [.backToBook])
+
+        keymap.setMode(.reader)
+        #expect(keymap.handle(ReaderKeyEvent(key: "l"), now: 0) == [.backToLibrary])
+        #expect(keymap.handle(ReaderKeyEvent(key: "Escape"), now: 0) == [.backToLibrary])
+    }
+
     @Test("modal mode: every key passes through so the overlay handles Esc and typing")
     func modalModePassthrough() {
         let keymap = ReaderKeymap(mode: .modal)
