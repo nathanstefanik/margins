@@ -1,4 +1,4 @@
-.PHONY: core mac-build mac-test mac-app mac-run
+.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run bump
 
 core:
 	./scripts/build-core.sh
@@ -12,5 +12,12 @@ mac-test: core
 mac-app: core
 	./scripts/make-app.sh
 
+mac-app-universal:
+	UNIVERSAL=1 ./scripts/build-core.sh
+	UNIVERSAL=1 ./scripts/make-app.sh
+
 mac-run: mac-app
 	open build/Margins.app
+
+bump:
+	./scripts/bump-version.sh $(VERSION)

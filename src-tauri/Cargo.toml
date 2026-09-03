@@ -1,10 +1,10 @@
 [package]
 name = "margins"
-version = "0.1.0"
+version.workspace = true
 description = "Minimal EPUB reader with file-based, AI-friendly annotations"
 authors = ["Margins contributors"]
 edition = "2021"
-license = "GPL-3.0-or-later"
+license.workspace = true
 
 [lib]
 name = "margins_lib"
