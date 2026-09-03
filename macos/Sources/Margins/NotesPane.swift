@@ -7,10 +7,6 @@ struct NotesPane: View {
     @Environment(ReaderModel.self) private var reader
     @FocusState private var editorFocused: Bool
 
-    /// The ~100-word target the word count gently signals.
-    private static let targetWords = 100
-    private static let approachWords = 80
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
@@ -50,10 +46,7 @@ struct NotesPane: View {
             Text("\(reader.liveNoteWordCount) words")
                 .font(.caption)
                 .monospacedDigit()
-                .foregroundStyle(
-                    reader.liveNoteWordCount >= Self.approachWords ? Color.primary : Color.secondary
-                )
-                .animation(.easeOut(duration: 0.2), value: reader.liveNoteWordCount >= Self.approachWords)
+                .foregroundStyle(.secondary)
             saveStatus
         }
     }
@@ -97,7 +90,7 @@ struct NotesPane: View {
                 .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 6))
                 .padding(4)
             if reader.noteBody.isEmpty {
-                Text("Summarize this chapter in ~\(Self.targetWords) words…")
+                Text("What stood out? Questions, reactions, and ideas worth returning to…")
                     .font(.body)
                     .foregroundStyle(.tertiary)
                     .padding(.top, 12)

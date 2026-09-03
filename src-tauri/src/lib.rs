@@ -1,8 +1,8 @@
 use margins_core::notes;
 use margins_core::sync;
 use margins_core::{
-    AppConfig, BookMeta, BookSummary, ChapterNote, ChapterRef, Library, NoteFrontmatter,
-    NoteSearchHit, SyncReport,
+    AppConfig, BookMeta, BookSummary, ChapterNote, ChapterRef, CompiledNotes, ExportOptions,
+    Library, NoteFrontmatter, NoteSearchHit, SyncReport,
 };
 use serde::Serialize;
 use std::path::PathBuf;
@@ -154,6 +154,50 @@ fn search_notes(state: State<'_, AppState>, query: String) -> Result<Vec<NoteSea
 }
 
 #[tauri::command]
+fn get_compiled_notes(
+    state: State<'_, AppState>,
+    book_id: String,
+) -> Result<CompiledNotes, String> {
+    let library = state.library.lock().map_err(|e| e.to_string())?;
+    margins_core::compile::compile_book_notes(&library.book_dir(&book_id))
+        .map_err(|e| e.to_string())
+}
+
+/// Compiles, renders, and writes the markdown export; returns the written
+/// path. Writing here keeps the frontend free of fs permissions.
+#[tauri::command]
+fn export_notes_markdown(
+    state: State<'_, AppState>,
+    book_id: String,
+    destination: String,
+    options: Option<ExportOptions>,
+) -> Result<String, String> {
+    let library = state.library.lock().map_err(|e| e.to_string())?;
+    let compiled = margins_core::compile::compile_book_notes(&library.book_dir(&book_id))
+        .map_err(|e| e.to_string())?;
+    let markdown = margins_core::compile::render_markdown(&compiled, &options.unwrap_or_default());
+    std::fs::write(&destination, markdown).map_err(|e| e.to_string())?;
+    Ok(destination)
+}
+
+/// Renders the markdown export without writing a file — the clipboard path
+/// for "copy all".
+#[tauri::command]
+fn render_notes_markdown(
+    state: State<'_, AppState>,
+    book_id: String,
+    options: Option<ExportOptions>,
+) -> Result<String, String> {
+    let library = state.library.lock().map_err(|e| e.to_string())?;
+    let compiled = margins_core::compile::compile_book_notes(&library.book_dir(&book_id))
+        .map_err(|e| e.to_string())?;
+    Ok(margins_core::compile::render_markdown(
+        &compiled,
+        &options.unwrap_or_default(),
+    ))
+}
+
+#[tauri::command]
 fn remove_book(state: State<'_, AppState>, book_id: String) -> Result<(), String> {
     state
         .library
@@ -161,6 +205,20 @@ fn remove_book(state: State<'_, AppState>, book_id: String) -> Result<(), String
         .map_err(|e| e.to_string())?
         .remove_book(&book_id)
         .map_err(|e| e.to_string())
+}
+
+/// Deletes every note file for the book and resets its notes index.
+/// Returns the number of note files removed.
+#[tauri::command]
+fn clear_book_notes(state: State<'_, AppState>, book_id: String) -> Result<usize, String> {
+    let library = state.library.lock().map_err(|e| e.to_string())?;
+    let book_dir = library.book_dir(&book_id);
+    if !book_dir.exists() {
+        return Err(format!("book not found: {book_id}"));
+    }
+    let cleared = notes::clear_book_notes(&book_dir).map_err(|e| e.to_string())?;
+    library.refresh_note_index(&book_id);
+    Ok(cleared)
 }
 
 #[tauri::command]
@@ -258,7 +316,11 @@ pub fn run() {
             get_chapter_note,
             save_chapter_note,
             search_notes,
+            get_compiled_notes,
+            export_notes_markdown,
+            render_notes_markdown,
             remove_book,
+            clear_book_notes,
             export_library,
             import_library,
             set_library_root,

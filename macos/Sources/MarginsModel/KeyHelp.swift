@@ -36,6 +36,9 @@ extension ReaderKeymap {
             KeyHelpGroup(name: "Library", entries: [
                 KeyHelpEntry(keys: ["j", "k"], description: "Move selection"),
                 KeyHelpEntry(keys: ["Enter"], description: "Open selected book"),
+                KeyHelpEntry(keys: ["N"], description: "Compiled notes page"),
+                KeyHelpEntry(keys: ["t"], description: "Toggle outline / contents"),
+                KeyHelpEntry(keys: ["l", "Escape"], description: "Back to the book (notes page)"),
                 KeyHelpEntry(keys: ["o"], description: "Import EPUB"),
                 KeyHelpEntry(keys: ["/"], description: "Search notes"),
                 KeyHelpEntry(keys: ["?"], description: "Keyboard shortcuts"),

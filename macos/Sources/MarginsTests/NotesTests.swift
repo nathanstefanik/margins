@@ -92,6 +92,41 @@ struct NotesTests {
         #expect(misses.isEmpty)
     }
 
+    @Test("clearNotes deletes every note file and resets the index")
+    func clearNotesRemovesAll() async throws {
+        let store = try CoreStore(dataDir: try makeTempDataDir())
+        let fixture = try #require(try fixtureEpubs().first)
+        let meta = try await store.importEpub(atPath: fixture)
+        #expect(meta.chapters.count >= 2)
+
+        _ = try await store.saveChapterNote(
+            bookId: meta.id,
+            chapter: ChapterRef(key: meta.chapters[0].key, epubCfi: nil),
+            body: "first note",
+            kind: nil
+        )
+        _ = try await store.saveChapterNote(
+            bookId: meta.id,
+            chapter: ChapterRef(key: meta.chapters[1].key, epubCfi: nil),
+            body: "second note",
+            kind: nil
+        )
+
+        let cleared = try await store.clearNotes(bookId: meta.id)
+        #expect(cleared == 2)
+
+        let index = try await store.notesIndex(bookId: meta.id)
+        #expect(index.isEmpty)
+
+        let reloaded = try await store.getChapterNote(bookId: meta.id, chapterKey: meta.chapters[0].key)
+        #expect(reloaded.body.isEmpty)
+        #expect(reloaded.path.isEmpty)
+
+        // Clearing a book that already has no notes is a zero-count no-op.
+        let again = try await store.clearNotes(bookId: meta.id)
+        #expect(again == 0)
+    }
+
     @Test("reader note state tracks dirty and saved baselines")
     @MainActor
     func readerNoteState() {
@@ -302,8 +337,8 @@ struct NotesTests {
             addedAt: "2026-01-01",
             sourceFilename: "test.epub",
             chapters: [
-                ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml"),
-                ChapterMeta(key: "ch2", index: 1, title: "Two", href: "two.xhtml"),
+                ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml", fragment: nil),
+                ChapterMeta(key: "ch2", index: 1, title: "Two", href: "two.xhtml", fragment: nil),
             ],
             coverPath: nil,
             progressPercent: nil

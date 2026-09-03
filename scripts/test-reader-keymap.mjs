@@ -4,7 +4,11 @@ import ts from "typescript";
 
 const source = fs
   .readFileSync(new URL("../src/reader.ts", import.meta.url), "utf8")
-  .replace('import ePub, { Book, Rendition } from "epubjs";', "const ePub = globalThis.__testEpub;");
+  .replace('import ePub, { Book, Rendition } from "epubjs";', "const ePub = globalThis.__testEpub;")
+  .replace(
+    'import { openUrl } from "@tauri-apps/plugin-opener";',
+    "const openUrl = globalThis.__testOpenUrl;",
+  );
 const javascript = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext },
 }).outputText;
@@ -21,6 +25,11 @@ const rendition = {
   },
   async display() {},
   destroy() {},
+  hooks: {
+    content: {
+      register() {},
+    },
+  },
 };
 
 globalThis.__testEpub = () => ({
@@ -30,6 +39,8 @@ globalThis.__testEpub = () => ({
   },
   destroy() {},
 });
+
+globalThis.__testOpenUrl = async () => {};
 
 const { EpubReader } = await import(
   `data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`,

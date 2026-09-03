@@ -9,9 +9,9 @@ use margins_core::notes;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use types::{
-    BookMeta, BookSummary, ChapterNote, ChapterRef, NoteIndexEntry, NoteSearchHit, ReadingPosition,
+    BookMeta, BookSummary, ChapterNote, ChapterRef, CompiledNotes, ExportOptions, NoteIndexEntry,
+    NoteSearchHit, ReadingPosition,
 };
-
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum CoreError {
@@ -137,6 +137,20 @@ impl MarginsCore {
         Ok(self.library.lock().map_err(poisoned)?.remove_book(&id)?)
     }
 
+    /// Deletes every note file for the book and resets its notes index.
+    /// Returns the number of note files removed.
+    pub fn clear_notes(&self, book_id: String) -> Result<u32, CoreError> {
+        let library = self.library.lock().map_err(poisoned)?;
+        let book_dir = library.book_dir(&book_id);
+        if !book_dir.exists() {
+            return Err(CoreError::Message(format!("book not found: {book_id}")));
+        }
+        let cleared = notes::clear_book_notes(&book_dir)?;
+        // Keep the search index warm: update this book's docs in place.
+        library.refresh_note_index(&book_id);
+        Ok(cleared as u32)
+    }
+
     pub fn read_epub_bytes(&self, id: String) -> Result<Vec<u8>, CoreError> {
         Ok(self
             .library
@@ -218,6 +232,37 @@ impl MarginsCore {
         }
         let index = notes::read_notes_index(&book_dir)?;
         Ok(index.chapters.into_iter().map(Into::into).collect())
+    }
+
+    /// The book's notes compiled into one spine-ordered document.
+    pub fn get_compiled_notes(&self, book_id: String) -> Result<CompiledNotes, CoreError> {
+        let library = self.library.lock().map_err(poisoned)?;
+        let book_dir = library.book_dir(&book_id);
+        if !book_dir.join("meta.json").exists() {
+            return Err(CoreError::Message(format!("book not found: {book_id}")));
+        }
+        Ok(margins_core::compile::compile_book_notes(&book_dir)?.into())
+    }
+
+    /// Renders the book's notes as markdown (the export/copy payload).
+    /// macOS writes the file itself after `NSSavePanel`, so the bridge only
+    /// needs the string.
+    pub fn render_notes_markdown(
+        &self,
+        book_id: String,
+        options: Option<ExportOptions>,
+    ) -> Result<String, CoreError> {
+        let library = self.library.lock().map_err(poisoned)?;
+        let book_dir = library.book_dir(&book_id);
+        if !book_dir.join("meta.json").exists() {
+            return Err(CoreError::Message(format!("book not found: {book_id}")));
+        }
+        let compiled = margins_core::compile::compile_book_notes(&book_dir)?;
+        let core_options = options.map(Into::into).unwrap_or_default();
+        Ok(margins_core::compile::render_markdown(
+            &compiled,
+            &core_options,
+        ))
     }
 
     pub fn search_notes(&self, query: String) -> Result<Vec<NoteSearchHit>, CoreError> {

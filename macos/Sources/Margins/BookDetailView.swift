@@ -7,6 +7,11 @@ struct BookDetailView: View {
     @Environment(ReaderModel.self) private var reader
     let book: BookMeta
 
+    /// The chapter list has two faces: the plain spine (default — easiest
+    /// for navigating to any chapter) and a "Show Notes" view listing only
+    /// the annotated chapters with their stats. Persisted across launches.
+    @AppStorage("bookDetailShowsNotes") private var showsNotes = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -46,14 +51,23 @@ struct BookDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 if !book.chapters.isEmpty {
-                    Button {
-                        Task { await model.openBookResuming(id: book.id) }
-                    } label: {
-                        Label("Read", systemImage: "book.fill")
+                    HStack {
+                        Button {
+                            Task { await model.openBookResuming(id: book.id) }
+                        } label: {
+                            Label("Read", systemImage: "book.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .help("Resume reading (Enter)")
+                        Button {
+                            Task { await model.loadCompiledNotes(bookId: book.id) }
+                        } label: {
+                            Label("All Notes", systemImage: "note.text")
+                        }
+                        .controlSize(.large)
+                        .help("Compiled notes page (N)")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .help("Resume reading (Enter)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -75,22 +89,67 @@ struct BookDetailView: View {
 
     // MARK: Chapter list
 
-    private var noteWordCounts: [String: UInt32] {
-        LibraryModel.noteWordCounts(
-            chapters: book.chapters,
-            index: model.selectedBookNotesIndex
-        )
+    private var hasAnyNotes: Bool {
+        !model.selectedBookNotesIndex.isEmpty
     }
 
     private var chapterList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Chapters")
-                .font(.headline)
-                .padding(.bottom, 6)
+            HStack {
+                Text(showsNotes ? "Notes" : "Chapters")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        showsNotes.toggle()
+                    }
+                } label: {
+                    Text(showsNotes ? "Hide Notes" : "Show Notes")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!hasAnyNotes && !showsNotes)
+                .help(showsNotes ? "Show the full chapter list" : "Show only chapters with notes")
+            }
+            .padding(.bottom, 6)
+
+            if showsNotes {
+                notesList
+            } else {
+                chaptersList
+            }
+        }
+    }
+
+    /// The full spine, plain rows: number and title only.
+    private var chaptersList: some View {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(book.chapters) { chapter in
                 chapterRow(chapter)
                 if chapter.key != book.chapters.last?.key {
                     Divider()
+                }
+            }
+        }
+    }
+
+    /// Only the annotated chapters, in spine order, with their note stats.
+    private var notesList: some View {
+        let rows = LibraryModel.annotatedChapterRows(
+            chapters: book.chapters,
+            index: model.selectedBookNotesIndex
+        )
+        return VStack(alignment: .leading, spacing: 0) {
+            if rows.isEmpty {
+                Text("No notes yet — press `i` in the reader to write one.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 10)
+            } else {
+                ForEach(rows, id: \.chapter.key) { row in
+                    noteRow(row)
+                    if row.chapter.key != rows.last?.chapter.key {
+                        Divider()
+                    }
                 }
             }
         }
@@ -108,18 +167,41 @@ struct BookDetailView: View {
                 Text(chapter.title)
                     .lineLimit(2)
                     .padding(.vertical, 8)
-                Spacer(minLength: 12)
-                if let count = noteWordCounts[chapter.key] {
-                    Label("\(count) words", systemImage: "note.text")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .labelStyle(.titleAndIcon)
-                        .help("This chapter has a note")
-                }
             }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+    }
+
+    private func noteRow(_ row: LibraryModel.ChapterNoteRow) -> some View {
+        Button {
+            openReader(row.chapter)
+        } label: {
+            HStack(spacing: 12) {
+                Text("\(row.chapter.index + 1)")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 26, alignment: .trailing)
+                Text(row.chapter.title)
+                    .lineLimit(2)
+                Spacer(minLength: 12)
+                Text(noteRowMeta(row))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(.rect)
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .help("This chapter has a note — open it in the reader")
+    }
+
+    private func noteRowMeta(_ row: LibraryModel.ChapterNoteRow) -> String {
+        var parts = ["\(LibraryModel.groupedCount(row.wordCount)) words"]
+        if let updated = row.updatedAt.flatMap(LibraryModel.parseRFC3339) {
+            parts.append("updated \(LibraryModel.dateText(updated))")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func openReader(_ chapter: ChapterMeta) {

@@ -15,12 +15,39 @@ struct ReaderModelTests {
             addedAt: "2026-01-01",
             sourceFilename: "test.epub",
             chapters: [
-                ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml"),
-                ChapterMeta(key: "ch2", index: 1, title: "Two", href: "two.xhtml"),
+                ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml", fragment: nil),
+                ChapterMeta(key: "ch2", index: 1, title: "Two", href: "two.xhtml", fragment: "part-two"),
             ],
             coverPath: nil,
             progressPercent: nil
         )
+    }
+
+    @Test("jumpTarget appends the TOC anchor only when the book named one")
+    func jumpTargetUsesTheFragment() {
+        let book = makeBook()
+        // No TOC entry for the file: the top of the file is the chapter.
+        #expect(book.chapters[0].jumpTarget == "one.xhtml")
+        // With one, the jump carries the anchor so a file holding several
+        // chapters still lands on the right heading.
+        #expect(book.chapters[1].jumpTarget == "two.xhtml#part-two")
+    }
+
+    @Test("jumpTarget ignores an empty fragment")
+    func jumpTargetIgnoresEmptyFragment() {
+        let chapter = ChapterMeta(key: "ch3", index: 2, title: "Three", href: "three.xhtml", fragment: "")
+        #expect(chapter.jumpTarget == "three.xhtml")
+    }
+
+    @Test("relocated still matches chapters by bare href")
+    func relocatedMatchesBareHref() {
+        // Relocation events carry the section href without a fragment, so a
+        // chapter that jumps to an anchor must still be found by `href`.
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(page: 1, totalPages: 4, href: "two.xhtml", cfi: nil)
+        #expect(reader.chapter?.key == "ch2")
     }
 
     @Test("relocated records clamped page progress")

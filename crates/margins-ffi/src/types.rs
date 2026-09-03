@@ -22,7 +22,11 @@ pub struct ChapterMeta {
     pub key: String,
     pub index: u32,
     pub title: String,
+    /// In-zip path of the spine item, never carrying a fragment.
     pub href: String,
+    /// Anchor id where the chapter starts inside `href`, from the book's
+    /// TOC. Jump targets are `href#fragment` when present.
+    pub fragment: Option<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -179,6 +183,7 @@ impl From<models::ChapterMeta> for ChapterMeta {
             index: value.index as u32,
             title: value.title,
             href: value.href,
+            fragment: value.fragment,
         }
     }
 }
@@ -278,6 +283,90 @@ impl From<models::NotesIndexEntry> for NoteIndexEntry {
             chapter_title: value.chapter_title,
             word_count: value.word_count as u32,
             updated_at: value.updated_at.map(rfc3339),
+        }
+    }
+}
+
+/// Toggles for markdown rendering; mirrors the core's `ExportOptions`.
+#[derive(uniffi::Record)]
+pub struct ExportOptions {
+    pub include_toc: bool,
+    pub include_stats: bool,
+    pub include_empty_chapters: bool,
+    pub demote_headings: bool,
+}
+
+impl From<ExportOptions> for models::ExportOptions {
+    fn from(value: ExportOptions) -> Self {
+        Self {
+            include_toc: value.include_toc,
+            include_stats: value.include_stats,
+            include_empty_chapters: value.include_empty_chapters,
+            demote_headings: value.demote_headings,
+        }
+    }
+}
+
+/// One chapter section of a compiled notes page; note-less chapters carry
+/// an empty body and live in `CompiledNotes.empty_chapters`.
+#[derive(uniffi::Record)]
+pub struct CompiledChapter {
+    pub chapter_key: String,
+    pub chapter_index: u32,
+    pub chapter_title: String,
+    /// Markdown, without frontmatter.
+    pub body: String,
+    pub word_count: u32,
+    pub updated_at: Option<String>,
+}
+
+impl From<models::CompiledChapter> for CompiledChapter {
+    fn from(value: models::CompiledChapter) -> Self {
+        Self {
+            chapter_key: value.chapter_key,
+            chapter_index: value.chapter_index as u32,
+            chapter_title: value.chapter_title,
+            body: value.body,
+            word_count: value.word_count as u32,
+            updated_at: value.updated_at.map(rfc3339),
+        }
+    }
+}
+
+/// Every chapter note of a book, compiled into one ordered document.
+#[derive(uniffi::Record)]
+pub struct CompiledNotes {
+    pub book_id: String,
+    pub book_title: String,
+    pub book_author: String,
+    /// Chapters with notes, sorted by chapter index.
+    pub chapters: Vec<CompiledChapter>,
+    /// Spine chapters without a note file, sorted by chapter index.
+    pub empty_chapters: Vec<CompiledChapter>,
+    pub chapters_with_notes: u32,
+    /// Total chapters in the book's spine.
+    pub chapter_count: u32,
+    pub total_words: u32,
+    pub first_created_at: Option<String>,
+    pub last_updated_at: Option<String>,
+    /// Shared default export name: `"{author} — {title} — notes.md"`.
+    pub suggested_filename: String,
+}
+
+impl From<models::CompiledNotes> for CompiledNotes {
+    fn from(value: models::CompiledNotes) -> Self {
+        Self {
+            book_id: value.book_id,
+            book_title: value.book_title,
+            book_author: value.book_author,
+            chapters: value.chapters.into_iter().map(Into::into).collect(),
+            empty_chapters: value.empty_chapters.into_iter().map(Into::into).collect(),
+            chapters_with_notes: value.chapters_with_notes as u32,
+            chapter_count: value.chapter_count as u32,
+            total_words: value.total_words as u32,
+            first_created_at: value.first_created_at.map(rfc3339),
+            last_updated_at: value.last_updated_at.map(rfc3339),
+            suggested_filename: value.suggested_filename,
         }
     }
 }

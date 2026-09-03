@@ -39,6 +39,12 @@ public actor CoreStore {
         try core.removeBook(id: id)
     }
 
+    /// Deletes every note file for the book and resets its notes index;
+    /// returns the number of note files removed.
+    public func clearNotes(bookId: String) throws -> UInt32 {
+        try core.clearNotes(bookId: bookId)
+    }
+
     /// The book's saved reading position, or `nil` when it was never opened.
     public func readingPosition(bookId: String) throws -> ReadingPosition? {
         core.getReadingPosition(id: bookId)
@@ -69,6 +75,17 @@ public actor CoreStore {
     /// notes, with word counts. Empty when the book has no notes.
     public func notesIndex(bookId: String) throws -> [NoteIndexEntry] {
         try core.getNotesIndex(bookId: bookId)
+    }
+
+    /// The book's notes compiled into one spine-ordered document.
+    public func compiledNotes(bookId: String) throws -> CompiledNotes {
+        try core.getCompiledNotes(bookId: bookId)
+    }
+
+    /// Renders the book's notes as markdown (the export/copy payload).
+    /// `options` of `nil` uses the core defaults.
+    public func renderNotesMarkdown(bookId: String, options: ExportOptions?) throws -> String {
+        try core.renderNotesMarkdown(bookId: bookId, options: options)
     }
 
     public func saveChapterNote(
