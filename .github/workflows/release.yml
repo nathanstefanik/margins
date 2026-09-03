@@ -1,0 +1,144 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux bundles (x86_64)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches package version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            libfuse2 \
+            wget
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Linux bundles
+        run: npm run tauri build -- --ci
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          cp target/release/bundle/deb/*.deb dist/
+          cp target/release/bundle/rpm/*.rpm dist/
+          cp target/release/bundle/appimage/*.AppImage dist/
+          ls -l dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundles
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS universal DMG
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches package version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+
+      - name: Select Xcode (Swift 6 / Swift Testing)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build universal app bundle
+        run: make mac-app-universal
+
+      - name: Package DMG
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          hdiutil create -volname Margins -srcfolder build/Margins.app \
+            -ov -format UDZO "Margins-v${version}.dmg"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: Margins-v*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Attach artifacts to GitHub Release
+    needs: [linux, macos]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          cd dist
+          sha256sum -- * > /tmp/SHA256SUMS.txt
+          mv /tmp/SHA256SUMS.txt SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

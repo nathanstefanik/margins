@@ -1,9 +1,9 @@
 [package]
 name = "margins-ffi"
-version = "0.1.0"
+version.workspace = true
 description = "UniFFI bindings to margins-core"
 edition = "2021"
-license = "GPL-3.0-or-later"
+license.workspace = true
 
 [lib]
 name = "margins_ffi"

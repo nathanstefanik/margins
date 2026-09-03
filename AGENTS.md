@@ -67,6 +67,8 @@ make core        # rebuild margins-ffi + regenerate Swift bindings
 make mac-build   # build the macOS Swift package
 make mac-test    # run the macOS Swift Testing suite
 make mac-run     # assemble + open build/Margins.app
+make mac-app-universal  # universal (arm64 + x86_64) build/Margins.app; needs full Xcode
+make bump VERSION=x.y.z  # bump version everywhere, commit, tag vx.y.z
 ```
 
 macOS tests use Swift Testing (`import Testing`) via the `MarginsTests`
