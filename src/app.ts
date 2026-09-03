@@ -87,7 +87,7 @@ export class App {
       onFocusReader: () => this.focusReader(),
       onSaveNote: () => void this.saveNote(),
       onNotesPage: () => void this.openNotesPage(),
-      onNotesPageRestore: () => this.showNotesPageView(),
+      onNotesPageRestore: () => void this.showNotesPageView(),
       onNotesClose: () => this.showReaderFromNotes(),
       onNotesToggleView: () => this.showNotesOutline(!this.notesPageOutlineVisible),
       onSearch: (query) => this.showSearch(query),
@@ -240,14 +240,25 @@ export class App {
       this.setStatus("no chapter selected");
       return;
     }
+    const bookId = this.currentBook.id;
+    // Invalidate the compiled page before the first await: a `:w` restore
+    // runs synchronously after the command and must not show stale data.
+    if (this.notesBookId === bookId) {
+      this.notesData = null;
+    }
     const saved = await api.saveChapterNote(
-      this.currentBook.id,
+      bookId,
       { key: this.currentChapter.key, epub_cfi: this.currentCfi },
       this.notesEditor.value,
     );
     this.updateWordCount(saved.frontmatter.word_count);
     this.setStatus(`saved note (${saved.frontmatter.word_count} words)`);
     await this.refreshLibrary();
+    // The notes page itself may be showing (`:w` from the command bar on
+    // the notes view): recompile so outline/contents include this save.
+    if (this.notesBookId === bookId && this.keymap.getMode() === "notesPage") {
+      await this.fetchNotesPage(bookId);
+    }
   }
 
   private updateWordCount(count?: number): void {
@@ -276,25 +287,38 @@ export class App {
       this.setStatus("open a book to see its notes");
       return;
     }
-    try {
-      this.notesData = await api.getCompiledNotes(this.currentBook.id);
-    } catch (error) {
-      this.setStatus(`could not compile notes: ${errorMessage(error)}`);
-      return;
-    }
-    this.notesBookId = this.currentBook.id;
-    this.renderNotesPage();
+    if (!(await this.fetchNotesPage(this.currentBook.id))) return;
     this.showNotesPageView();
   }
 
+  /// Fetches and renders the compiled page for `bookId`. Returns false on
+  /// failure (status line carries the error).
+  private async fetchNotesPage(bookId: string): Promise<boolean> {
+    try {
+      this.notesData = await api.getCompiledNotes(bookId);
+    } catch (error) {
+      this.setStatus(`could not compile notes: ${errorMessage(error)}`);
+      return false;
+    }
+    this.notesBookId = bookId;
+    this.renderNotesPage();
+    return true;
+  }
+
   /// Re-shows the already-compiled page (restore after search/command).
-  private showNotesPageView(): void {
-    if (!this.notesData) return;
+  /// A save invalidates the cache, so a restore recompiles first and the
+  /// outline/contents always reflect the latest notes.
+  private async showNotesPageView(): Promise<void> {
+    if (!this.notesData) {
+      if (!this.notesBookId || !(await this.fetchNotesPage(this.notesBookId))) return;
+    }
+    const notes = this.notesData;
+    if (!notes) return;
     this.libraryView.classList.add("hidden");
     this.readerView.classList.add("hidden");
     this.notesView.classList.remove("hidden");
     this.keymap.setMode("notesPage");
-    this.setStatus(`${this.notesData.book_title} — notes`);
+    this.setStatus(`${notes.book_title} — notes`);
   }
 
   /// `Esc` from the notes page: the reader is still open underneath.
@@ -559,7 +583,7 @@ export class App {
     } else if (this.modeBeforeSearch === "notes") {
       this.focusNotes();
     } else if (this.modeBeforeSearch === "notesPage") {
-      this.showNotesPageView();
+      void this.showNotesPageView();
     } else {
       this.focusReader();
     }
