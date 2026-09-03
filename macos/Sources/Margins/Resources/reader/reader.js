@@ -39,12 +39,22 @@ async function readerOpen() {
     height: "100%",
     flow: "paginated",
     spread: "none",
+    // epub.js >= 0.3.89 sandboxes section iframes without these. allow-scripts
+    // is what lets the internal-link onclick handlers epub.js installs fire;
+    // allow-popups lets target="_blank" reach the WKUIDelegate, which opens
+    // external URLs in the system browser.
+    allowScriptedContent: true,
+    allowPopups: true,
   });
 
   readerRendition.hooks.content.register(readerPreserveAspectRatio);
   readerRendition.hooks.content.register(readerStyleContents);
   readerRendition.on("relocated", readerReportRelocated);
-
+  readerRendition.on("rendered", (section, view) => {
+    if (view && view.contents && view.contents.document && section && section.href) {
+      readerAttachLinks(view.contents.document, section.href);
+    }
+  });
   // Preferences may have arrived before the book finished opening.
   readerApplyViewerWidth();
 
@@ -168,6 +178,69 @@ function readerReportRelocated(location) {
     page: displayed.page || 1,
     totalPages: displayed.total || 0,
   });
+}
+
+// Internal links (TOC pages, cross-references): the shell passes
+// allowScriptedContent so epub.js's own link handlers can run, but its
+// resolution chain (book.path.relative against the package directory)
+// lands on the wrong spine href for byte-rendered books, so these
+// capture-phase listeners take precedence: anchors are resolved against
+// the current section per RFC 3986 and displayed directly. External
+// links are left alone — allowPopups routes target="_blank" through the
+// WKUIDelegate to the system browser. A dead link must not break the
+// reader, so display failures are swallowed instead of raising the
+// error page.
+function readerAttachLinks(doc, sectionHref) {
+  doc.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target;
+      const anchor = target && target.closest ? target.closest("a[href]") : null;
+      if (!anchor) {
+        return;
+      }
+      const href = anchor.getAttribute("href");
+      if (!href || /^(https?:|mailto:)/i.test(href)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const resolved = readerResolveHref(sectionHref, href);
+      if (resolved && readerRendition) {
+        readerRendition.display(resolved).catch(() => {});
+      }
+    },
+    true,
+  );
+}
+
+// RFC 3986 relative resolution over the spine's paths: returns the
+// book-root-relative target (with fragment, if any) for rendition.display.
+function readerResolveHref(sectionHref, linkHref) {
+  const hashAt = linkHref.indexOf("#");
+  const path = hashAt === -1 ? linkHref : linkHref.slice(0, hashAt);
+  const fragment = hashAt === -1 ? null : linkHref.slice(hashAt + 1);
+  if (!path) {
+    return fragment ? `${sectionHref}#${fragment}` : null;
+  }
+  let stack;
+  if (path.charAt(0) === "/") {
+    stack = [];
+  } else {
+    stack = sectionHref.split("/").slice(0, -1);
+  }
+  path.split("/").forEach((part) => {
+    if (!part || part === ".") {
+      return;
+    }
+    if (part === "..") {
+      stack.pop();
+    } else {
+      stack.push(part);
+    }
+  });
+  const resolved = stack.join("/");
+  return fragment ? `${resolved}#${fragment}` : resolved;
 }
 
 function readerDisplay(href) {

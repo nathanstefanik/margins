@@ -98,7 +98,7 @@ updated_at: 2026-08-29T12:30:00Z
 
 # Introduction — Summary
 
-Your ~100 word chapter summary here.
+Your notes on this chapter.
 ```
 
 ### Why this shape

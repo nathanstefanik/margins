@@ -144,7 +144,8 @@ extension ReaderController: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        if let url = navigationAction.request.url, url.scheme == "http" || url.scheme == "https" {
+        if let url = navigationAction.request.url,
+           url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto" {
             NSWorkspace.shared.open(url)
             decisionHandler(.cancel)
             return
