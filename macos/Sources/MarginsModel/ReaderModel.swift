@@ -210,7 +210,7 @@ public final class ReaderModel {
     private var noteSaveChain: Task<Void, Never>?
     private var positionSaveChain: Task<Void, Never>?
 
-    /// Live word count of the editor content (the ~100-word target signal).
+    /// Live word count of the editor content.
     public var liveNoteWordCount: Int {
         noteBody
             .components(separatedBy: .whitespacesAndNewlines)

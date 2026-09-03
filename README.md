@@ -9,7 +9,7 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Import and browse EPUBs from a local library
 - Progress feedback while importing EPUBs
 - Paginated reader with vim-style keybindings
-- Per-chapter markdown notes with YAML frontmatter (~100-word summaries)
+- Per-chapter markdown notes with YAML frontmatter
 - Compiled per-book **notes page** (`N`) with one-click markdown export
   and copy-all
 - Full-text search across notes (`/` or `:search`)

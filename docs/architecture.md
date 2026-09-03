@@ -96,6 +96,13 @@ breaks the load.
 Navigation policy sends any `http(s)` navigation (and `target=_blank`) to
 the system browser; only `margins-reader://` loads in the webview.
 
+Section iframes run with `allow-same-origin allow-scripts allow-popups`
+(epub.js ≥ 0.3.89 requires `allow-scripts` for any in-book link to work).
+This means EPUB-embedded scripts can run and reach the parent page — an
+accepted risk: books are local, user-imported files, and the
+`margins-reader://` handler exposes only reader assets and the open book's
+bytes. Possible future hardening: strip `<script>` tags during import.
+
 ### Keyboard routing
 
 One local `NSEvent` monitor (`ShellKeyboardController`) sees every keyDown

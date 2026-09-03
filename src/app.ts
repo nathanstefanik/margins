@@ -252,7 +252,6 @@ export class App {
   private updateWordCount(count?: number): void {
     const words = count ?? this.notesEditor.value.trim().split(/\s+/).filter(Boolean).length;
     this.wordCount.textContent = `${words} words`;
-    this.wordCount.classList.toggle("warn", words > 0 && (words < 80 || words > 120));
   }
 
   private showLibrary(): void {
