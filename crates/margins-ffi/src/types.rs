@@ -22,7 +22,11 @@ pub struct ChapterMeta {
     pub key: String,
     pub index: u32,
     pub title: String,
+    /// In-zip path of the spine item, never carrying a fragment.
     pub href: String,
+    /// Anchor id where the chapter starts inside `href`, from the book's
+    /// TOC. Jump targets are `href#fragment` when present.
+    pub fragment: Option<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -179,6 +183,7 @@ impl From<models::ChapterMeta> for ChapterMeta {
             index: value.index as u32,
             title: value.title,
             href: value.href,
+            fragment: value.fragment,
         }
     }
 }

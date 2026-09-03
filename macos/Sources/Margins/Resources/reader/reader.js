@@ -20,6 +20,12 @@ let readerTypography = null;
 // True once the first display finished; relayouts are only queued after that.
 let readerOpened = false;
 let readerRelayoutTimer = null;
+// Bumped by every navigation; a re-anchor pass abandons itself when a newer
+// jump started while it waited for layout.
+let readerNavigationToken = 0;
+// The last target displayed, so `gg` can return to the chapter's anchor
+// rather than the top of the file it happens to share.
+let readerCurrentTarget = null;
 
 async function readerOpen() {
   if (!readerBookId) {
@@ -59,12 +65,16 @@ async function readerOpen() {
   readerApplyViewerWidth();
 
   try {
-    await readerRendition.display(readerStartCfi || readerStartHref || undefined);
+    if (readerStartCfi) {
+      await readerRendition.display(readerStartCfi);
+    } else {
+      await readerDisplayTarget(readerStartHref || undefined);
+    }
   } catch (error) {
     // A stale CFI (externally updated EPUB, position synced from another
-    // machine) must not brick the reader: fall back to the chapter top.
+    // machine) must not brick the reader: fall back to the chapter start.
     if (readerStartCfi) {
-      await readerRendition.display(readerStartHref || undefined);
+      await readerDisplayTarget(readerStartHref || undefined);
     } else {
       throw error;
     }
@@ -206,8 +216,8 @@ function readerAttachLinks(doc, sectionHref) {
       event.preventDefault();
       event.stopPropagation();
       const resolved = readerResolveHref(sectionHref, href);
-      if (resolved && readerRendition) {
-        readerRendition.display(resolved).catch(() => {});
+      if (resolved) {
+        readerDisplayTarget(resolved).catch(() => {});
       }
     },
     true,
@@ -243,13 +253,106 @@ function readerResolveHref(sectionHref, linkHref) {
   return fragment ? `${resolved}#${fragment}` : resolved;
 }
 
+// Chapter jumps from the shell. `href` may carry the chapter's TOC anchor
+// (`path#fragment`), which is what makes a jump land on the chapter heading
+// rather than the top of a file holding several chapters.
 function readerDisplay(href) {
-  if (!readerRendition || !href) {
+  if (!href) {
     return;
   }
-  readerRendition.display(href).catch((error) => {
+  readerDisplayTarget(href).catch((error) => {
     readerShowError(error);
   });
+}
+
+// The single navigation path: displays a target and, when it carries a
+// fragment, re-anchors once after the layout settles.
+//
+// epub.js picks the landing page from the anchor's offset at display time
+// (`locationOf` then `moveTo`, which floors that offset onto a column).
+// Anything that shifts layout afterwards — late image loads, web fonts, the
+// readerStyleContents/readerPreserveAspectRatio hooks, the viewer's
+// max-width — moves the anchor into a different column, so the jump lands a
+// page or two off. Re-issuing the same display once the layout stops moving
+// re-runs that same page math against settled offsets. Exactly one retry,
+// never a loop.
+async function readerDisplayTarget(target) {
+  if (!readerRendition) {
+    return;
+  }
+  const rendition = readerRendition;
+  const token = ++readerNavigationToken;
+  readerCurrentTarget = target || null;
+  // No target at all still means "open the book": epub.js starts at the
+  // first section.
+  await rendition.display(target || undefined);
+
+  const hashAt = target ? target.indexOf("#") : -1;
+  if (hashAt === -1) {
+    return;
+  }
+  const fragment = target.slice(hashAt + 1);
+
+  try {
+    const contents = (rendition.getContents() || []).filter(
+      (candidate) => candidate && candidate.document && candidate.document.getElementById(fragment),
+    )[0];
+    if (!contents) {
+      return;
+    }
+    const landed = readerStartCfiOf(rendition);
+
+    await readerSettleLayout(contents.document);
+
+    // Abandon quietly if the session moved on: a newer jump, a replaced
+    // rendition, or the reader paged elsewhere while we waited.
+    if (token !== readerNavigationToken || readerRendition !== rendition) {
+      return;
+    }
+    if (landed && readerStartCfiOf(rendition) !== landed) {
+      return;
+    }
+    if (!contents.document.getElementById(fragment)) {
+      return;
+    }
+    await rendition.display(target);
+  } catch (error) {
+    // A dead anchor must not break the reading session.
+  }
+}
+
+function readerStartCfiOf(rendition) {
+  const location = rendition.currentLocation();
+  return location && location.start ? location.start.cfi : null;
+}
+
+// Waits for what still moves a section's layout after it first renders —
+// web fonts and images that arrive without intrinsic sizes — so an anchor's
+// offset can be trusted. Capped, because a section that never settles must
+// not hang navigation.
+const READER_LAYOUT_SETTLE_CAP_MS = 300;
+
+async function readerSettleLayout(doc) {
+  const capped = new Promise((resolve) => setTimeout(resolve, READER_LAYOUT_SETTLE_CAP_MS));
+  const fonts = doc.fonts ? doc.fonts.ready.then(() => {}, () => {}) : Promise.resolve();
+  const images = Array.prototype.slice
+    .call(doc.images || [])
+    .filter((image) => !image.complete)
+    .map(
+      (image) =>
+        new Promise((resolve) => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        }),
+    );
+  await Promise.race([Promise.all([fonts].concat(images)), capped]);
+  await readerNextFrame(doc);
+  await readerNextFrame(doc);
+}
+
+function readerNextFrame(doc) {
+  const view = doc.defaultView || window;
+  return new Promise((resolve) => view.requestAnimationFrame(() => resolve()));
 }
 
 function readerShowError(message) {
@@ -271,14 +374,21 @@ function readerScrollBy(delta) {
   }
 }
 
+// `gg`: the start of the chapter being read. When the current chapter began
+// at a TOC anchor inside this file, that anchor is the start — the top of
+// the file belongs to whichever chapter came first in it.
 function readerScrollTop() {
   if (!readerRendition) {
     return;
   }
   const location = readerRendition.currentLocation();
-  if (location && location.start && location.start.href) {
-    readerRendition.display(location.start.href).catch(readerShowError);
+  const href = location && location.start ? location.start.href : null;
+  if (!href) {
+    return;
   }
+  const target =
+    readerCurrentTarget && readerCurrentTarget.split("#")[0] === href ? readerCurrentTarget : href;
+  readerDisplayTarget(target).catch(readerShowError);
 }
 
 function readerScrollBottom() {

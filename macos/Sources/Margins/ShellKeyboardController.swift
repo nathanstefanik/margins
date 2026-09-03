@@ -229,9 +229,9 @@ final class ShellKeyboardController {
     }
 
     private func displayCurrentChapter() -> Bool {
-        guard let href = reader.chapter?.href else { return false }
+        guard let target = reader.chapter?.jumpTarget else { return false }
         return ReaderController.evaluateInReader(
-            "readerDisplay(\(ReaderController.javaScriptLiteral(href)))"
+            "readerDisplay(\(ReaderController.javaScriptLiteral(target)))"
         )
     }
 

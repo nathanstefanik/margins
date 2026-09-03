@@ -16,8 +16,16 @@ declare module "epubjs" {
     document: Document;
   }
 
+  /** Where the rendition currently sits; `undefined` before the first render. */
+  export interface DisplayedLocation {
+    start?: { cfi?: string; href?: string };
+    end?: { cfi?: string; href?: string };
+  }
+
   export interface Rendition {
     display(target?: string): Promise<void>;
+    getContents(): Contents[];
+    currentLocation(): DisplayedLocation | undefined;
     destroy(): void;
     on(event: "relocated", callback: (value: { start: { cfi: string; href?: string } }) => void): void;
     on(event: "keydown", callback: (event: KeyboardEvent) => void): void;

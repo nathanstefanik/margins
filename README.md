@@ -10,8 +10,8 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Progress feedback while importing EPUBs
 - Paginated reader with vim-style keybindings
 - Per-chapter markdown notes with YAML frontmatter
-- Compiled per-book **notes page** (`N`) with one-click markdown export
-  and copy-all
+- Compiled per-book **notes page** (`N`) with one-click markdown export,
+  copy-all, and clear-all (with a confirmation prompt)
 - Full-text search across notes (`/` or `:search`)
 - Export/import entire library trees (external drives, cloud sync folders)
 - Choose the library directory with the in-app folder picker or **root** command

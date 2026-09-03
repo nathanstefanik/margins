@@ -219,6 +219,27 @@ public final class LibraryModel {
         }
     }
 
+    /// Deletes every note file for the book, then refreshes. The open
+    /// reader's note editor (if any) is reloaded from disk so a stale body
+    /// cannot resurrect a cleared note on the next autosave. Returns the
+    /// number of note files removed, or `nil` on failure (surfaced in
+    /// `errorMessage`).
+    @discardableResult
+    public func clearNotes(bookId: String) async -> UInt32? {
+        guard let store else { return nil }
+        do {
+            let cleared = try await store.clearNotes(bookId: bookId)
+            if let reader, reader.book?.id == bookId {
+                await loadChapterNote(reader: reader)
+            }
+            await refresh()
+            return cleared
+        } catch {
+            errorMessage = String(describing: error)
+            return nil
+        }
+    }
+
     /// Opens a book at its saved reading position (chapter + CFI), falling
     /// back to the first chapter for books never opened. Used by Enter,
     /// double-click, and the detail view's Read button; explicit chapter

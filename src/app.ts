@@ -1,4 +1,4 @@
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import {
   api,
@@ -109,6 +109,7 @@ export class App {
     document.getElementById("btn-all-notes")?.addEventListener("click", () => void this.openNotesPage());
     document.getElementById("btn-copy-notes")?.addEventListener("click", () => void this.copyNotes());
     document.getElementById("btn-export-notes")?.addEventListener("click", () => void this.exportNotes());
+    document.getElementById("btn-clear-notes")?.addEventListener("click", () => void this.clearNotes());
     document.getElementById("btn-notes-outline")?.addEventListener("click", () => this.showNotesOutline(true));
     document.getElementById("btn-notes-contents")?.addEventListener("click", () => this.showNotesOutline(false));
 
@@ -446,6 +447,40 @@ export class App {
       this.setStatus(`exported ${path}`);
     } catch (error) {
       this.setStatus(`export failed: ${errorMessage(error)}`);
+    }
+  }
+
+  /// Deletes every note for the book behind the notes page, after an
+  /// explicit confirmation. The reader's open note editor is reloaded so a
+  /// stale body cannot resurrect a cleared note on the next save.
+  private async clearNotes(): Promise<void> {
+    if (!this.notesBookId || !this.notesData) return;
+    if (this.notesData.chapters.length === 0) {
+      this.setStatus("no notes to clear");
+      return;
+    }
+    const count = this.notesData.chapters.length;
+    const confirmed = await ask(
+      `Delete all ${count} chapter note${count === 1 ? "" : "s"} for “${this.notesData.book_title}”? This cannot be undone.`,
+      {
+        title: "Clear all notes",
+        kind: "warning",
+        okLabel: "Clear Notes",
+        cancelLabel: "Keep Notes",
+      },
+    );
+    if (!confirmed) return;
+    const bookId = this.notesBookId;
+    try {
+      const removed = await api.clearBookNotes(bookId);
+      await this.refreshLibrary();
+      if (this.currentBook?.id === bookId && this.currentChapter) {
+        await this.loadNote(this.currentChapter);
+      }
+      await this.openNotesPage();
+      this.setStatus(`cleared ${removed} note${removed === 1 ? "" : "s"}`);
+    } catch (error) {
+      this.setStatus(`could not clear notes: ${errorMessage(error)}`);
     }
   }
 

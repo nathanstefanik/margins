@@ -8,6 +8,9 @@ export class EpubReader {
   private rendition: Rendition | null = null;
   private chapters: ChapterMeta[] = [];
   private chapterIndex = 0;
+  /// Bumped by every navigation; a re-anchor pass abandons itself when a
+  /// newer jump started while it waited for layout.
+  private navigationToken = 0;
 
   constructor(
     private container: HTMLElement,
@@ -103,7 +106,7 @@ export class EpubReader {
         const resolved = resolveEpubHref(sectionHref, href);
         if (resolved) {
           // A dead in-book link must not break the reading session.
-          void this.rendition?.display(resolved).catch(() => {});
+          void this.displayTarget(resolved).catch(() => {});
         }
       },
       true,
@@ -129,8 +132,49 @@ export class EpubReader {
     }
     this.chapterIndex = index;
     const chapter = this.chapters[index];
-    await this.rendition.display(chapter.href);
+    await this.displayTarget(chapterTarget(chapter));
     this.onChapterChange(chapter);
+  }
+
+  /// The single navigation path: displays a target and, when it carries a
+  /// fragment, re-anchors once after the layout settles.
+  ///
+  /// epub.js picks the landing page from the anchor's offset at display
+  /// time (`locationOf` then `moveTo`, which floors the offset onto a
+  /// column). Anything that shifts layout afterwards — late image loads,
+  /// web fonts, the content hooks, the viewer's max-width — moves the
+  /// anchor into a different column, so the jump lands a page or two off.
+  /// Re-issuing the same display once the layout stops moving re-runs that
+  /// same page math against settled offsets. Exactly one retry, never a
+  /// loop.
+  private async displayTarget(target: string): Promise<void> {
+    const rendition = this.rendition;
+    if (!rendition) return;
+    const token = ++this.navigationToken;
+    await rendition.display(target);
+
+    const hashAt = target.indexOf("#");
+    if (hashAt < 0) return;
+    const fragment = target.slice(hashAt + 1);
+
+    try {
+      const contents = rendition
+        .getContents()
+        .find((candidate) => candidate.document?.getElementById(fragment));
+      if (!contents) return;
+      const landedCfi = rendition.currentLocation()?.start?.cfi;
+
+      await settleLayout(contents.document);
+
+      // Abandon quietly if the session moved on: a newer jump, a torn-down
+      // rendition, or the reader paged elsewhere while we waited.
+      if (token !== this.navigationToken || this.rendition !== rendition) return;
+      if (landedCfi && rendition.currentLocation()?.start?.cfi !== landedCfi) return;
+      if (!contents.document.getElementById(fragment)) return;
+      await rendition.display(target);
+    } catch {
+      // A dead anchor must not break the reading session.
+    }
   }
 
   async nextChapter(): Promise<void> {
@@ -174,6 +218,41 @@ export class EpubReader {
     this.book = null;
     this.container.innerHTML = "";
   }
+}
+
+/// The jump target for a chapter: its TOC anchor when the book named one,
+/// otherwise the top of its file. `ChapterMeta.href` itself stays a pure
+/// path — both frontends match relocation events against it.
+function chapterTarget(chapter: ChapterMeta): string {
+  return chapter.fragment ? `${chapter.href}#${chapter.fragment}` : chapter.href;
+}
+
+/// Waits for what still moves a section's layout after it first renders —
+/// web fonts and images that arrive without intrinsic sizes — so an
+/// anchor's offset can be trusted. Capped, because a section that never
+/// settles must not hang navigation.
+const LAYOUT_SETTLE_CAP_MS = 300;
+
+async function settleLayout(doc: Document): Promise<void> {
+  const capped = new Promise<void>((resolve) => setTimeout(resolve, LAYOUT_SETTLE_CAP_MS));
+  const fonts = doc.fonts ? doc.fonts.ready.then(() => {}, () => {}) : Promise.resolve();
+  const images = Array.from(doc.images ?? [])
+    .filter((image) => !image.complete)
+    .map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        }),
+    );
+  await Promise.race([Promise.all([fonts, ...images]), capped]);
+  await nextFrame(doc);
+  await nextFrame(doc);
+}
+
+function nextFrame(doc: Document): Promise<void> {
+  const view = doc.defaultView ?? window;
+  return new Promise((resolve) => view.requestAnimationFrame(() => resolve()));
 }
 
 /// Resolves an anchor's href against the section it appears in, per RFC

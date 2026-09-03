@@ -6,6 +6,15 @@ extension BookSummary: Identifiable {}
 
 extension ChapterMeta: Identifiable {
     public var id: String { key }
+
+    /// Where the reader should land for this chapter: the chapter's TOC
+    /// anchor when the book named one, otherwise the top of its file.
+    /// `href` itself stays a pure path, because relocation events are
+    /// matched against it.
+    public var jumpTarget: String {
+        guard let fragment, !fragment.isEmpty else { return href }
+        return "\(href)#\(fragment)"
+    }
 }
 
 extension NoteSearchHit: Identifiable {

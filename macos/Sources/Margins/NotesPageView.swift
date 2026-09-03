@@ -12,6 +12,8 @@ struct NotesPageView: View {
     @Environment(ReaderModel.self) private var reader
     let notes: CompiledNotes
 
+    @State private var showingClearDialog = false
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -40,6 +42,18 @@ struct NotesPageView: View {
                 }
                 .help("Back to the book detail (Esc)")
             }
+        }
+        .confirmationDialog(
+            "Clear All Notes?",
+            isPresented: $showingClearDialog,
+            titleVisibility: .visible
+        ) {
+            Button("Clear All Notes", role: .destructive) {
+                clearAllNotes()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Delete every chapter note for \"\(notes.bookTitle)\"? This cannot be undone.")
         }
     }
 
@@ -74,6 +88,13 @@ struct NotesPageView: View {
                 Button("Copy Markdown") {
                     copyAll()
                 }
+                Button(role: .destructive) {
+                    showingClearDialog = true
+                } label: {
+                    Label("Clear All Notes…", systemImage: "trash")
+                }
+                .disabled(notes.chapters.isEmpty)
+                .help("Delete every chapter note for this book")
             }
             .padding(.top, 4)
         }
@@ -233,6 +254,16 @@ struct NotesPageView: View {
                 pasteboard.setString(markdown, forType: .string)
             } catch {
                 model.errorMessage = String(describing: error)
+            }
+        }
+    }
+
+    /// Clears every note for this book, then reloads the compiled page so
+    /// it reflects the emptied library.
+    private func clearAllNotes() {
+        Task {
+            if await model.clearNotes(bookId: notes.bookId) != nil {
+                await model.loadCompiledNotes(bookId: notes.bookId)
             }
         }
     }
