@@ -18,6 +18,7 @@ export interface KeymapHandlers {
   onNotesPage: () => void;
   onNotesPageRestore: () => void;
   onNotesClose: () => void;
+  onNotesToggleView: () => void;
   onSearch: (query?: string) => void;
   onCommand: (cmd: string) => void;
   onStatus: (msg: string) => void;
@@ -130,6 +131,12 @@ export class Keymap {
         event.preventDefault();
         if (this.mode === "reader") {
           this.handlers.onNotesPage();
+        }
+        break;
+      case "t":
+        event.preventDefault();
+        if (this.mode === "notesPage") {
+          this.handlers.onNotesToggleView();
         }
         break;
       case "i":

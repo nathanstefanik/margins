@@ -134,6 +134,38 @@ public final class LibraryModel {
         }
     }
 
+    /// One row of the book detail's "Show Notes" list: a chapter that has a
+    /// note, joined with the note's stats from `_index.json`.
+    public struct ChapterNoteRow: Equatable, Sendable {
+        public var chapter: ChapterMeta
+        public var wordCount: UInt32
+        public var updatedAt: String?
+
+        public init(chapter: ChapterMeta, wordCount: UInt32, updatedAt: String?) {
+            self.chapter = chapter
+            self.wordCount = wordCount
+            self.updatedAt = updatedAt
+        }
+    }
+
+    /// The spine's annotated chapters in spine order (never reordered by
+    /// note presence), each joined with its note's word count and updated
+    /// date. Pure so the views and tests share one definition.
+    public nonisolated static func annotatedChapterRows(
+        chapters: [ChapterMeta],
+        index: [NoteIndexEntry]
+    ) -> [ChapterNoteRow] {
+        let byKey = Dictionary(index.map { ($0.chapterKey, $0) }, uniquingKeysWith: { first, _ in first })
+        return chapters.compactMap { chapter in
+            guard let entry = byKey[chapter.key] else { return nil }
+            return ChapterNoteRow(
+                chapter: chapter,
+                wordCount: entry.wordCount,
+                updatedAt: entry.updatedAt
+            )
+        }
+    }
+
     /// Imports an EPUB, refreshes the list, and selects the new book.
     /// Returns whether the import succeeded; failures surface in
     /// `errorMessage` for the UI to present.
@@ -255,6 +287,26 @@ public final class LibraryModel {
     /// The selected book's compiled notes; loaded by `loadCompiledNotes`.
     public private(set) var compiledNotes: CompiledNotes?
 
+    /// Which face of the compiled notes page is showing: the outline
+    /// (chapter/title list) or the contents (compiled markdown view).
+    /// Lives here (not in view state) so the shell keyboard can flip it
+    /// with `t`, the same way the Tauri keymap does.
+    public enum NotesPageTab: Equatable, Sendable {
+        case outline
+        case contents
+    }
+
+    public private(set) var notesPageTab: NotesPageTab = .contents
+
+    /// Flips between the outline and the contents view.
+    public func toggleNotesPageTab() {
+        notesPageTab = notesPageTab == .outline ? .contents : .outline
+    }
+
+    public func showNotesPageTab(_ tab: NotesPageTab) {
+        notesPageTab = tab
+    }
+
     /// Compiles the book's notes and switches the detail area to the notes
     /// page. Returns the compilation, or `nil` on failure (surfaced in
     /// `errorMessage`).
@@ -265,6 +317,7 @@ public final class LibraryModel {
             let notes = try await store.compiledNotes(bookId: bookId)
             compiledNotes = notes
             detailMode = .notes
+            notesPageTab = .contents
             return notes
         } catch {
             errorMessage = String(describing: error)

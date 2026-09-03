@@ -106,6 +106,35 @@ struct NotesPageTests {
         #expect(model.compiledNotes == nil)
     }
 
+    @Test("the notes page tab toggles between outline and contents")
+    @MainActor
+    func notesPageTabToggling() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+
+        // The page opens on the contents (compiled) view.
+        #expect(model.notesPageTab == .contents)
+
+        _ = await model.loadCompiledNotes(bookId: book.id)
+        #expect(model.notesPageTab == .contents)
+
+        model.toggleNotesPageTab()
+        #expect(model.notesPageTab == .outline)
+        model.toggleNotesPageTab()
+        #expect(model.notesPageTab == .contents)
+
+        // Explicit selection (the segmented control) agrees with the toggle.
+        model.showNotesPageTab(.outline)
+        #expect(model.notesPageTab == .outline)
+
+        // A fresh compile resets to the contents view.
+        _ = await model.loadCompiledNotes(bookId: book.id)
+        #expect(model.notesPageTab == .contents)
+    }
+
     @Test("the notes page survives a reload while the same book is selected")
     @MainActor
     func notesPageSurvivesReload() async throws {

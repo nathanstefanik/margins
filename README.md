@@ -55,9 +55,10 @@ macOS keybindings:
 | `gg` / `G` | First / last page of chapter |
 | `n` / `p` | Next / previous chapter |
 | `N` | Compiled notes page for the selected book (book view; also ⇧⌘N) |
+| `t` | Toggle outline / contents views on the notes page |
 | `i` / `Enter` | Open and focus the notes pane (reader) |
-| `Esc` | Notes editor → reader; reader → close notes pane; pane closed → library |
-| `l` | Library |
+| `Esc` | Notes editor → reader; reader → close notes pane; notes page → book detail; pane closed → library |
+| `l` | Library (from the reader); back to book detail (notes page) |
 | `o` | Import EPUB (also ⌘O) |
 | `Enter` | Open selected book (library) |
 | `/` | Search notes (also ⌘F) |
@@ -83,6 +84,7 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 | `j` / `k` | Scroll (reader) or move selection (library) |
 | `n` / `p` | Next / previous chapter |
 | `N` | Compiled notes page for the current book (reader) |
+| `t` | Toggle outline / contents views on the notes page |
 | `gg` / `G` | Top / bottom of chapter |
 | `i` | Focus notes editor |
 | `/` | Search notes (library-wide) |

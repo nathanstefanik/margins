@@ -67,11 +67,16 @@
         <div class="panel-header">
           <h2 id="notes-page-title">Notes</h2>
           <div class="notes-page-actions">
+            <div class="notes-view-toggle">
+              <button id="btn-notes-outline" class="ghost" title="Outline view (t)">outline</button>
+              <button id="btn-notes-contents" class="ghost active" title="Contents view (t)">contents</button>
+            </div>
             <button id="btn-copy-notes" class="ghost">copy all</button>
             <button id="btn-export-notes" class="ghost">export .md</button>
           </div>
         </div>
         <div id="notes-page-stats" class="muted"></div>
+        <ul id="notes-page-outline" class="notes-outline hidden"></ul>
         <div id="notes-page-body"></div>
       </div>
 
@@ -80,6 +85,7 @@
         <span><kbd>n</kbd>/<kbd>p</kbd> chapter</span>
         <span><kbd>i</kbd> notes</span>
         <span><kbd>N</kbd> all notes</span>
+        <span><kbd>t</kbd> outline</span>
         <span><kbd>/</kbd> search</span>
         <span><kbd>Esc</kbd> reader</span>
         <span><kbd>l</kbd> library</span>

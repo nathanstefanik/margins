@@ -3,8 +3,10 @@ import MarginsCore
 import MarginsModel
 
 /// The compiled notes page: every chapter note in spine order, with a
-/// stats header, a jump list, and one-click markdown export. Matches
-/// `BookDetailView`'s visual language (serif title, 720pt max width).
+/// stats header, an outline view (chapter/title list) and a contents view
+/// (the compiled document — `t` or the segmented control flips between
+/// them), and one-click markdown export. Matches `BookDetailView`'s
+/// visual language (serif title, 720pt max width).
 struct NotesPageView: View {
     @Environment(LibraryModel.self) private var model
     @Environment(ReaderModel.self) private var reader
@@ -17,8 +19,9 @@ struct NotesPageView: View {
                     header
                     if notes.chapters.isEmpty {
                         emptyState
+                    } else if model.notesPageTab == .outline {
+                        outlineView(proxy: proxy)
                     } else {
-                        jumpList(proxy)
                         sectionList
                     }
                 }
@@ -28,6 +31,16 @@ struct NotesPageView: View {
             }
         }
         .navigationTitle("Notes — \(notes.bookTitle)")
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    model.showBookDetail()
+                } label: {
+                    Label("Back to Book", systemImage: "chevron.left")
+                }
+                .help("Back to the book detail (Esc)")
+            }
+        }
     }
 
     // MARK: Header
@@ -44,6 +57,15 @@ struct NotesPageView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             HStack {
+                Picker("View", selection: tabBinding) {
+                    Text("Outline").tag(LibraryModel.NotesPageTab.outline)
+                    Text("Contents").tag(LibraryModel.NotesPageTab.contents)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 220)
+                .help("Toggle outline / contents (t)")
+
                 Button {
                     Task { await ExportNotesPanel.run(model: model, notes: notes) }
                 } label: {
@@ -57,6 +79,13 @@ struct NotesPageView: View {
         }
     }
 
+    private var tabBinding: Binding<LibraryModel.NotesPageTab> {
+        Binding(
+            get: { model.notesPageTab },
+            set: { model.showNotesPageTab($0) }
+        )
+    }
+
     private var emptyState: some View {
         ContentUnavailableView {
             Label("No notes yet", systemImage: "note.text")
@@ -65,49 +94,78 @@ struct NotesPageView: View {
         }
     }
 
-    // MARK: Jump list
+    // MARK: Outline (chapter / title list)
 
-    private func jumpList(_ proxy: ScrollViewProxy) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Contents")
-                .font(.headline)
-            ForEach(notes.chapters) { chapter in
-                Button {
-                    withAnimation {
-                        proxy.scrollTo(chapter.chapterKey, anchor: .top)
-                    }
-                } label: {
-                    Text("\(chapter.chapterIndex + 1). \(chapter.chapterTitle)")
-                        .lineLimit(2)
-                }
-                .buttonStyle(.link)
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    // MARK: Sections
-
-    private var sectionList: some View {
+    private func outlineView(proxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: 0) {
+            Text("Outline")
+                .font(.headline)
+                .padding(.bottom, 6)
             ForEach(notes.chapters) { chapter in
-                sectionRow(chapter, hasNote: true)
-                Divider()
-            }
-            // Gap visibility: note-less chapters stay listed so the page
-            // doubles as a "what's left to annotate" checklist.
-            ForEach(notes.emptyChapters) { chapter in
-                sectionRow(chapter, hasNote: false)
-                if chapter.chapterKey != notes.emptyChapters.last?.chapterKey {
+                outlineRow(chapter, proxy: proxy)
+                if chapter.chapterKey != notes.chapters.last?.chapterKey {
                     Divider()
                 }
             }
         }
     }
 
-    private func sectionRow(_ chapter: CompiledChapter, hasNote: Bool) -> some View {
+    private func outlineRow(
+        _ chapter: CompiledChapter,
+        proxy: ScrollViewProxy
+    ) -> some View {
+        Button {
+            openSection(chapter, proxy: proxy)
+        } label: {
+            HStack(spacing: 12) {
+                Text("\(chapter.chapterIndex + 1)")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 26, alignment: .trailing)
+                Text(chapter.chapterTitle)
+                    .font(.headline)
+                    .lineLimit(2)
+                Spacer(minLength: 12)
+                Text(metaText(chapter))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(.rect)
+            .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+        .help("Show this note")
+    }
+
+    /// Outline → contents: flip the tab, then jump to the section once the
+    /// contents view is mounted.
+    private func openSection(
+        _ chapter: CompiledChapter,
+        proxy: ScrollViewProxy
+    ) {
+        model.showNotesPageTab(.contents)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(60))
+            withAnimation {
+                proxy.scrollTo(chapter.chapterKey, anchor: .top)
+            }
+        }
+    }
+
+    // MARK: Sections (the contents view)
+
+    private var sectionList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(notes.chapters) { chapter in
+                sectionRow(chapter)
+                if chapter.chapterKey != notes.chapters.last?.chapterKey {
+                    Divider()
+                }
+            }
+        }
+    }
+
+    private func sectionRow(_ chapter: CompiledChapter) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Button {
                 openChapter(chapter)
@@ -119,7 +177,6 @@ struct NotesPageView: View {
                         .frame(minWidth: 26, alignment: .trailing)
                     Text(chapter.chapterTitle)
                         .font(.headline)
-                        .foregroundStyle(hasNote ? .primary : .secondary)
                         .lineLimit(2)
                     Spacer(minLength: 12)
                     Image(systemName: "arrow.up.forward")
@@ -130,13 +187,13 @@ struct NotesPageView: View {
                 .padding(.vertical, 8)
             }
             .buttonStyle(.plain)
-            .help(hasNote ? "Open this chapter in the reader" : "No note yet — open the chapter")
+            .help("Open this chapter in the reader")
 
-            Text(metaText(chapter, hasNote: hasNote))
+            Text(metaText(chapter))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if hasNote, !chapter.body.isEmpty {
+            if !chapter.body.isEmpty {
                 // User markdown stays plain text; real markdown rendering
                 // (`AttributedString(markdown:)`) is a stretch goal.
                 Text(chapter.body)
@@ -150,10 +207,7 @@ struct NotesPageView: View {
         .id(chapter.chapterKey)
     }
 
-    private func metaText(_ chapter: CompiledChapter, hasNote: Bool) -> String {
-        if !hasNote {
-            return "No note."
-        }
+    private func metaText(_ chapter: CompiledChapter) -> String {
         var parts = ["\(LibraryModel.groupedCount(chapter.wordCount)) words"]
         if let updated = chapter.updatedAt.flatMap(LibraryModel.parseRFC3339) {
             parts.append("updated \(LibraryModel.dateText(updated))")

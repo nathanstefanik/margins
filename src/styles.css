@@ -438,27 +438,65 @@ mark {
 .notes-page-actions {
   display: flex;
   gap: 0.35rem;
+  align-items: center;
+}
+
+.notes-view-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.notes-view-toggle button {
+  border: none;
+  border-radius: 0;
+}
+
+.notes-view-toggle button.active {
+  background: var(--accent-dim);
+  color: var(--text);
 }
 
 #notes-page-stats {
   margin: -0.5rem 0 1.25rem;
 }
 
-.notes-page-toc {
+.notes-outline {
+  list-style: none;
   margin: 0 0 1.5rem;
-  padding: 0.75rem 0.75rem 0.75rem 1.75rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-elevated);
+  padding: 0;
 }
 
-.notes-page-toc a {
+.notes-outline li {
+  padding: 0.55rem 0.2rem;
+}
+
+.notes-outline li + li {
+  border-top: 1px solid var(--border);
+}
+
+.notes-outline a {
   color: var(--accent);
   text-decoration: none;
+  font-weight: 500;
 }
 
-.notes-page-toc a:hover {
+.notes-outline a:hover {
   text-decoration: underline;
+}
+
+.notes-outline-meta {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  margin-top: 0.15rem;
+}
+
+.notes-outline-empty {
+  color: var(--muted);
 }
 
 .notes-section {
@@ -486,11 +524,6 @@ mark {
   font-size: 0.78rem;
   font-family: var(--font-mono);
   padding-bottom: 0.5rem;
-}
-
-.notes-section-stub .notes-section-header,
-.notes-section-stub .notes-section-meta {
-  color: var(--muted);
 }
 
 .notes-section-body {
