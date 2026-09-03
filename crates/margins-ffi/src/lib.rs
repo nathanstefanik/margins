@@ -258,9 +258,7 @@ impl MarginsCore {
             return Err(CoreError::Message(format!("book not found: {book_id}")));
         }
         let compiled = margins_core::compile::compile_book_notes(&book_dir)?;
-        let core_options = options
-            .map(Into::into)
-            .unwrap_or_else(margins_core::models::ExportOptions::default);
+        let core_options = options.map(Into::into).unwrap_or_default();
         Ok(margins_core::compile::render_markdown(
             &compiled,
             &core_options,
