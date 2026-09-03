@@ -490,6 +490,7 @@ public final class LibraryModel {
                 updatedAt: note.frontmatter.updatedAt,
                 savedBody: body
             )
+            await refreshCompiledNotesAfterSave(bookId: book.id)
         } catch {
             reader.noteFailed(String(describing: error))
         }
@@ -515,9 +516,22 @@ public final class LibraryModel {
                 updatedAt: note.frontmatter.updatedAt,
                 savedBody: body
             )
+            await refreshCompiledNotesAfterSave(bookId: bookId)
         } catch {
             reader?.noteFailed(String(describing: error))
         }
+    }
+
+    /// The compiled notes page keeps its snapshot while a reader session
+    /// is open on top of it (`detailMode` stays `.notes` and Esc falls back
+    /// to the page), so a save recompiles it in the background and
+    /// returning to the page shows the new content. The outline/contents
+    /// tab choice is preserved.
+    private func refreshCompiledNotesAfterSave(bookId: String) async {
+        guard detailMode == .notes, compiledNotes?.bookId == bookId else { return }
+        let tab = notesPageTab
+        guard (await loadCompiledNotes(bookId: bookId)) != nil else { return }
+        notesPageTab = tab
     }
 
     public func searchNotes(_ query: String) async -> [NoteSearchHit] {

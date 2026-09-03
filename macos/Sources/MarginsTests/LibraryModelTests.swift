@@ -104,6 +104,38 @@ struct LibraryModelTests {
         #expect(model.books.first?.notesCount == 0)
     }
 
+    @Test("saving a note recompiles a stale compiled notes page")
+    @MainActor
+    func saveNoteRefreshesCompiledPage() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+
+        let book = try #require(model.selectedBook)
+        await model.loadCompiledNotes(bookId: book.id)
+        #expect(model.detailMode == .notes)
+        #expect(model.compiledNotes?.chaptersWithNotes == 0)
+        model.showNotesPageTab(.outline)
+
+        // Opening a chapter from the notes page leaves the page mounted
+        // underneath the reader (detailMode stays .notes).
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteBody = "a brand new observation"
+        await model.saveChapterNote(reader: reader)
+        #expect(reader.notesError == nil)
+
+        // The save recompiled the page: outline and contents now include
+        // the note, and the outline tab choice survived the reload.
+        let notes = try #require(model.compiledNotes)
+        #expect(notes.chaptersWithNotes == 1)
+        #expect(notes.chapters.first?.body.contains("a brand new observation") == true)
+        #expect(model.detailMode == .notes)
+        #expect(model.notesPageTab == .outline)
+    }
+
     @Test("import failure surfaces an error message")
     @MainActor
     func importFailureSurfacesError() async throws {
