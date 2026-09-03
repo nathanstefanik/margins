@@ -292,7 +292,6 @@ mod tests {
 
     struct TestBook {
         dir: PathBuf,
-        chapter_keys: Vec<String>,
     }
 
     /// Writes a book directory with the given spine; notes are added by the
@@ -330,7 +329,6 @@ mod tests {
         notes::write_empty_index(dir).unwrap();
         TestBook {
             dir: dir.to_path_buf(),
-            chapter_keys: chapters.iter().map(|(k, _)| (*k).to_string()).collect(),
         }
     }
 
