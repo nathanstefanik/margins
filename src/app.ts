@@ -1,10 +1,12 @@
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import {
   api,
   type BookMeta,
   type BookSummary,
   type ChapterMeta,
+  type CompiledNotes,
+  type ExportOptions,
   type ImportProgress,
   type NoteSearchHit,
 } from "./api";
@@ -12,6 +14,13 @@ import { Keymap } from "./keymaps";
 import { EpubReader } from "./reader";
 
 type FileOperation = "import" | "export" | "root";
+
+const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
+  include_toc: true,
+  include_stats: true,
+  include_empty_chapters: false,
+  demote_headings: true,
+};
 
 export class App {
   private books: BookSummary[] = [];
@@ -23,12 +32,16 @@ export class App {
 
   private libraryView = document.getElementById("library-view")!;
   private readerView = document.getElementById("reader-view")!;
+  private notesView = document.getElementById("notes-view")!;
   private bookList = document.getElementById("book-list")!;
   private chapterList = document.getElementById("chapter-list")!;
   private readerPane = document.getElementById("reader-pane")!;
   private notesEditor = document.getElementById("notes-editor") as HTMLTextAreaElement;
   private notesTitle = document.getElementById("notes-title")!;
   private wordCount = document.getElementById("word-count")!;
+  private notesPageTitle = document.getElementById("notes-page-title")!;
+  private notesPageStats = document.getElementById("notes-page-stats")!;
+  private notesPageBody = document.getElementById("notes-page-body")!;
   private status = document.getElementById("status")!;
   private libraryRoot = document.getElementById("library-root")!;
   private importProgress = document.getElementById("import-progress")!;
@@ -44,8 +57,10 @@ export class App {
   private searchSelection = 0;
   private searchTimer: number | null = null;
   private searchGen = 0;
-  private modeBeforeSearch: "library" | "reader" | "notes" = "library";
+  private modeBeforeSearch: "library" | "reader" | "notes" | "notesPage" = "library";
   private fileOperation: FileOperation | null = null;
+  private notesData: CompiledNotes | null = null;
+  private notesBookId: string | null = null;
 
   constructor() {
     this.reader = new EpubReader(this.readerPane, (chapter, cfi) => {
@@ -61,14 +76,17 @@ export class App {
       onExport: () => void this.exportLibrary(),
       onSetRoot: () => void this.setLibraryRoot(),
       onOpenBook: (index) => void this.openBookByIndex(index),
-      onScroll: (delta) => this.reader.scrollBy(delta),
-      onScrollTop: () => this.reader.scrollToTop(),
-      onScrollBottom: () => this.reader.scrollToBottom(),
+      onScroll: (delta) => this.scrollContent(delta),
+      onScrollTop: () => this.scrollContentTop(),
+      onScrollBottom: () => this.scrollContentBottom(),
       onNextChapter: () => void this.reader.nextChapter(),
       onPrevChapter: () => void this.reader.prevChapter(),
       onFocusNotes: () => this.focusNotes(),
       onFocusReader: () => this.focusReader(),
       onSaveNote: () => void this.saveNote(),
+      onNotesPage: () => void this.openNotesPage(),
+      onNotesPageRestore: () => this.showNotesPageView(),
+      onNotesClose: () => this.showReaderFromNotes(),
       onSearch: (query) => this.showSearch(query),
       onCommand: (cmd) => this.showCommand(cmd),
       onStatus: (msg) => this.setStatus(msg),
@@ -85,6 +103,9 @@ export class App {
     document.getElementById("btn-set-root")?.addEventListener("click", () => void this.setLibraryRoot());
     document.getElementById("btn-save-note")?.addEventListener("click", () => void this.saveNote());
     document.getElementById("btn-search")?.addEventListener("click", () => this.showSearch());
+    document.getElementById("btn-all-notes")?.addEventListener("click", () => void this.openNotesPage());
+    document.getElementById("btn-copy-notes")?.addEventListener("click", () => void this.copyNotes());
+    document.getElementById("btn-export-notes")?.addEventListener("click", () => void this.exportNotes());
 
     this.notesEditor.addEventListener("input", () => this.updateWordCount());
 
@@ -175,6 +196,7 @@ export class App {
     await this.reader.open(uint8, meta.chapters, startIndex);
 
     this.libraryView.classList.add("hidden");
+    this.notesView.classList.add("hidden");
     this.readerView.classList.remove("hidden");
     this.keymap.setMode("reader");
     this.focusReader();
@@ -234,10 +256,212 @@ export class App {
     this.currentBook = null;
     this.currentChapter = null;
     this.readerView.classList.add("hidden");
+    this.notesView.classList.add("hidden");
     this.libraryView.classList.remove("hidden");
     this.keymap.setMode("library");
     void this.refreshLibrary();
     this.setStatus("library");
+  }
+
+  // MARK: Notes page
+
+  /// `N` / `:notes` — compiles the current book's notes into one page.
+  private async openNotesPage(): Promise<void> {
+    if (!this.currentBook) {
+      this.setStatus("open a book to see its notes");
+      return;
+    }
+    try {
+      this.notesData = await api.getCompiledNotes(this.currentBook.id);
+    } catch (error) {
+      this.setStatus(`could not compile notes: ${errorMessage(error)}`);
+      return;
+    }
+    this.notesBookId = this.currentBook.id;
+    this.renderNotesPage();
+    this.showNotesPageView();
+  }
+
+  /// Re-shows the already-compiled page (restore after search/command).
+  private showNotesPageView(): void {
+    if (!this.notesData) return;
+    this.libraryView.classList.add("hidden");
+    this.readerView.classList.add("hidden");
+    this.notesView.classList.remove("hidden");
+    this.keymap.setMode("notesPage");
+    this.setStatus(`${this.notesData.book_title} — notes`);
+  }
+
+  /// `Esc` from the notes page: the reader is still open underneath.
+  private showReaderFromNotes(): void {
+    this.notesView.classList.add("hidden");
+    this.readerView.classList.remove("hidden");
+    this.keymap.setMode("reader");
+    this.focusReader();
+    this.setStatus("reader");
+  }
+
+  private renderNotesPage(): void {
+    const notes = this.notesData;
+    if (!notes) return;
+
+    this.notesPageTitle.textContent = `Notes — ${notes.book_title}`;
+    const statParts = [
+      `${notes.chapters_with_notes}/${notes.chapter_count} chapters annotated`,
+      `${notes.total_words} words`,
+    ];
+    if (notes.last_updated_at) {
+      statParts.push(`last updated ${formatDate(notes.last_updated_at)}`);
+    }
+    this.notesPageStats.textContent = statParts.join(" · ");
+
+    this.notesPageBody.innerHTML = "";
+    if (notes.chapters.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "notes-page-empty";
+      empty.textContent = "No notes yet — press `i` in the reader to write one.";
+      this.notesPageBody.appendChild(empty);
+      return;
+    }
+
+    // Jump list.
+    if (notes.chapters.length > 1) {
+      const toc = document.createElement("ul");
+      toc.className = "notes-page-toc";
+      notes.chapters.forEach((chapter) => {
+        const li = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = "#";
+        link.textContent = `${chapter.chapter_index + 1}. ${chapter.chapter_title}`;
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          this.scrollToSection(chapter.chapter_key);
+        });
+        li.appendChild(link);
+        toc.appendChild(li);
+      });
+      this.notesPageBody.appendChild(toc);
+    }
+
+    for (const chapter of notes.chapters) {
+      this.notesPageBody.appendChild(this.buildNotesSection(chapter, false));
+    }
+    // Gap visibility: chapters without notes render as muted stubs, but
+    // still jump to the chapter so the page doubles as a checklist.
+    for (const chapter of notes.empty_chapters) {
+      this.notesPageBody.appendChild(this.buildNotesSection(chapter, true));
+    }
+  }
+
+  private buildNotesSection(
+    chapter: CompiledNotes["chapters"][number],
+    isStub: boolean,
+  ): HTMLElement {
+    const section = document.createElement("section");
+    section.className = isStub ? "notes-section notes-section-stub" : "notes-section";
+    section.dataset.key = chapter.chapter_key;
+
+    const header = document.createElement("h3");
+    header.className = "notes-section-header";
+    header.textContent = `${chapter.chapter_index + 1}. ${chapter.chapter_title}`;
+    header.addEventListener("click", () => void this.openNotesSection(chapter.chapter_key));
+    section.appendChild(header);
+
+    const meta = document.createElement("div");
+    meta.className = "notes-section-meta";
+    if (isStub) {
+      meta.textContent = "No note yet.";
+    } else {
+      const parts = [`${chapter.word_count} words`];
+      if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
+      meta.textContent = parts.join(" · ");
+    }
+    section.appendChild(meta);
+
+    if (!isStub && chapter.body.trim()) {
+      // User markdown stays plain text: textContent only, never innerHTML.
+      const body = document.createElement("pre");
+      body.className = "notes-section-body";
+      body.textContent = chapter.body.trim();
+      section.appendChild(body);
+    }
+    return section;
+  }
+
+  private scrollToSection(chapterKey: string): void {
+    const section = this.notesPageBody.querySelector(`[data-key="${CSS.escape(chapterKey)}"]`);
+    section?.scrollIntoView({ block: "start" });
+  }
+
+  /// Clicking a section header opens the reader at that chapter.
+  private async openNotesSection(chapterKey: string): Promise<void> {
+    const bookId = this.notesBookId;
+    if (!bookId) return;
+    this.showReaderFromNotes();
+    if (this.currentBook?.id === bookId) {
+      const idx = this.currentBook.chapters.findIndex((c) => c.key === chapterKey);
+      if (idx >= 0) {
+        await this.reader.displayChapter(idx);
+      }
+    } else {
+      await this.openBook(bookId, chapterKey);
+    }
+  }
+
+  private async copyNotes(): Promise<void> {
+    if (!this.notesBookId) return;
+    try {
+      const markdown = await api.renderNotesMarkdown(this.notesBookId, DEFAULT_EXPORT_OPTIONS);
+      await navigator.clipboard.writeText(markdown);
+      this.setStatus("markdown copied to clipboard");
+    } catch (error) {
+      this.setStatus(`copy failed: ${errorMessage(error)}`);
+    }
+  }
+
+  private async exportNotes(): Promise<void> {
+    if (!this.notesBookId || !this.notesData) return;
+    const destination = await save({
+      defaultPath: this.notesData.suggested_filename,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    if (!destination) return;
+    try {
+      const path = await api.exportNotesMarkdown(
+        this.notesBookId,
+        destination,
+        DEFAULT_EXPORT_OPTIONS,
+      );
+      this.setStatus(`exported ${path}`);
+    } catch (error) {
+      this.setStatus(`export failed: ${errorMessage(error)}`);
+    }
+  }
+
+  /// `j`/`k` scroll the reader pane normally, but the notes page when it
+  /// is the visible content.
+  private scrollContent(delta: number): void {
+    if (this.keymap.getMode() === "notesPage") {
+      this.notesView.scrollBy({ top: delta });
+    } else {
+      this.reader.scrollBy(delta);
+    }
+  }
+
+  private scrollContentTop(): void {
+    if (this.keymap.getMode() === "notesPage") {
+      this.notesView.scrollTo({ top: 0 });
+    } else {
+      this.reader.scrollToTop();
+    }
+  }
+
+  private scrollContentBottom(): void {
+    if (this.keymap.getMode() === "notesPage") {
+      this.notesView.scrollTo({ top: this.notesView.scrollHeight });
+    } else {
+      this.reader.scrollToBottom();
+    }
   }
 
   private focusNotes(): void {
@@ -259,7 +483,7 @@ export class App {
 
   private showSearch(query = ""): void {
     const mode = this.keymap.getMode();
-    if (mode === "library" || mode === "reader" || mode === "notes") {
+    if (mode === "library" || mode === "reader" || mode === "notes" || mode === "notesPage") {
       this.modeBeforeSearch = mode;
     }
     this.commandBar.classList.add("hidden");
@@ -288,6 +512,8 @@ export class App {
       this.keymap.setMode("library");
     } else if (this.modeBeforeSearch === "notes") {
       this.focusNotes();
+    } else if (this.modeBeforeSearch === "notesPage") {
+      this.showNotesPageView();
     } else {
       this.focusReader();
     }
@@ -514,6 +740,7 @@ export class App {
       this.currentChapter = null;
       this.currentCfi = undefined;
       this.readerView.classList.add("hidden");
+      this.notesView.classList.add("hidden");
       this.libraryView.classList.remove("hidden");
       this.keymap.setMode("library");
 
@@ -538,6 +765,12 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function formatDate(rfc3339: string): string {
+  const date = new Date(rfc3339);
+  if (Number.isNaN(date.getTime())) return rfc3339;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function escapeRegex(value: string): string {

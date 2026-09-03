@@ -108,6 +108,16 @@ Your ~100 word chapter summary here.
 - **`_index.json`** — O(1) lookup of which chapters have notes and word counts
 - **`index.json`** — library-wide catalog for batch operations
 
+## Compiled notes page & markdown export
+
+Both frontends can show a per-book **notes page** that compiles every
+chapter note in spine order (`margins-core`'s `compile.rs`, reading
+`meta.json` + `notes/_index.json` + the note files). Exports are **derived
+artifacts**: the rendered markdown (`{author} — {title} — notes.md`) is
+written wherever the user chooses and nothing new is stored in the library
+tree — recompiling is always possible from the note files, so deleting an
+export never loses data.
+
 ## Sync workflow
 
 1. Set the library directory to your sync folder (`R` or `MARGINS_LIBRARY_ROOT`)

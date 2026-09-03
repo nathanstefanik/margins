@@ -86,6 +86,17 @@ struct ReaderKeymapTests {
         #expect(keymap.handle(ReaderKeyEvent(key: "o"), now: 0) == [.importBook])
     }
 
+    @Test("N opens the compiled notes page from the book view only")
+    func notesPageKey() {
+        let keymap = ReaderKeymap(mode: .library)
+        #expect(keymap.handle(ReaderKeyEvent(key: "N", shift: true), now: 0) == [.openBookNotes])
+        // Reader and modal contexts leave it alone (lowercase n owns chapters).
+        keymap.setMode(.reader)
+        #expect(keymap.handle(ReaderKeyEvent(key: "N", shift: true), now: 0).isEmpty)
+        keymap.setMode(.modal)
+        #expect(keymap.handle(ReaderKeyEvent(key: "N", shift: true), now: 0).isEmpty)
+    }
+
     @Test("modal mode: every key passes through so the overlay handles Esc and typing")
     func modalModePassthrough() {
         let keymap = ReaderKeymap(mode: .modal)

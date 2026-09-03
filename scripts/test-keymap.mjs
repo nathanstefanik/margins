@@ -25,6 +25,12 @@ const keymap = new Keymap({
   onFocusNotes: () => {},
   onFocusReader: () => calls.push("focus-reader"),
   onSaveNote: () => {},
+  onNotesPage: () => {
+    calls.push("notes-page");
+    keymap.setMode("notesPage"); // mirrors App.openNotesPage
+  },
+  onNotesPageRestore: () => calls.push("notes-page-restore"),
+  onNotesClose: () => calls.push("notes-close"),
   onSearch: () => {},
   onCommand: () => {},
   onStatus: () => {},
@@ -51,5 +57,31 @@ assert.equal(keymap.getMode(), "reader", "escaping command mode should restore r
 keymap.setMode("notes");
 keymap.handleKey({ key: "j", preventDefault() {} }, { tagName: "TEXTAREA" });
 assert.equal(scrolls, 0, "typing targets must not trigger reader shortcuts across realms");
+
+// N opens the notes page from the reader; Esc on the page closes it.
+calls.length = 0;
+keymap.setMode("reader");
+keymap.handleKey({ key: "N", preventDefault() {} }, null);
+assert.deepEqual(calls, ["notes-page"], "N in reader mode should open the notes page");
+
+keymap.setMode("reader");
+keymap.handleKey({ key: "n", preventDefault() {} }, null);
+assert.deepEqual(calls, ["notes-page"], "lowercase n must not open the notes page");
+
+calls.length = 0;
+keymap.setMode("notesPage");
+keymap.handleKey({ key: "Escape", preventDefault() {} }, null);
+assert.deepEqual(calls, ["notes-close"], "Esc on the notes page should return to the reader");
+
+calls.length = 0;
+keymap.setMode("reader");
+keymap.handleCommandKey({ key: "Enter", preventDefault() {} }, { value: "notes" });
+assert.deepEqual(calls, ["notes-page"], ":notes should open the notes page");
+assert.equal(keymap.getMode(), "notesPage", ":notes should switch to the notes page mode");
+
+calls.length = 0;
+keymap.setMode("library");
+keymap.handleKey({ key: "N", preventDefault() {} }, null);
+assert.deepEqual(calls, [], "N must not open the notes page from the library");
 
 console.log("keymap regression tests passed");

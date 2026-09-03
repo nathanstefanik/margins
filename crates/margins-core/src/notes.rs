@@ -174,7 +174,7 @@ pub fn count_words(text: &str) -> usize {
         .count()
 }
 
-fn slugify(title: &str) -> String {
+pub(crate) fn slugify(title: &str) -> String {
     let lower = title.to_lowercase();
     let re = Regex::new(r"[^a-z0-9]+").unwrap();
     let slug = re.replace_all(&lower, "-");

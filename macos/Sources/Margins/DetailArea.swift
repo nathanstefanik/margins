@@ -8,6 +8,8 @@ struct DetailArea: View {
     var body: some View {
         if reader.isOpen {
             ReaderView()
+        } else if model.detailMode == .notes, let notes = model.compiledNotes {
+            NotesPageView(notes: notes)
         } else if let book = model.selectedBook {
             BookDetailView(book: book)
         } else if model.books.isEmpty {

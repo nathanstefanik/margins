@@ -17,7 +17,10 @@ public final class LibraryModel {
     /// The selected book's notes index (`notes/_index.json`), loaded with
     /// the book so the detail view can flag chapters that have notes.
     public private(set) var selectedBookNotesIndex: [NoteIndexEntry] = []
-    public private(set) var errorMessage: String?
+    /// The last non-fatal failure, surfaced as a transient banner.
+    /// Model methods set it; AppKit-level flows (save panel, clipboard)
+    /// set it from the view layer so the banner stays the single sink.
+    public var errorMessage: String?
 
     /// The selected book's id. Views may bind to this (e.g. sidebar list
     /// selection) and observe it; use `selectBook(id:)` for programmatic
@@ -59,6 +62,8 @@ public final class LibraryModel {
                 selectedBook = nil
                 selectedBookID = nil
                 selectedBookNotesIndex = []
+                compiledNotes = nil
+                detailMode = .book
             }
         } catch {
             errorMessage = String(describing: error)
@@ -71,6 +76,12 @@ public final class LibraryModel {
         do {
             selectedBook = try await store.getBook(id: selectedBookID)
             selectedBookNotesIndex = try await store.notesIndex(bookId: selectedBookID)
+            // A compiled page for a previous selection must never survive
+            // the selection changing underneath it.
+            if compiledNotes?.bookId != selectedBookID {
+                compiledNotes = nil
+                detailMode = .book
+            }
         } catch {
             errorMessage = String(describing: error)
         }
@@ -84,6 +95,8 @@ public final class LibraryModel {
         } else {
             selectedBook = nil
             selectedBookNotesIndex = []
+            compiledNotes = nil
+            detailMode = .book
         }
     }
 
@@ -96,6 +109,8 @@ public final class LibraryModel {
             selectedBookID = nil
             selectedBook = nil
             selectedBookNotesIndex = []
+            compiledNotes = nil
+            detailMode = .book
             await refresh()
         } catch {
             errorMessage = String(describing: error)
@@ -225,6 +240,105 @@ public final class LibraryModel {
         return { bookID in
             try store.readEpubBytesSync(id: bookID)
         }
+    }
+
+    // MARK: Compiled notes page
+
+    /// What the detail area shows when no reader session is open: the
+    /// book's detail card or its compiled notes page.
+    public enum DetailMode: Equatable, Sendable {
+        case book
+        case notes
+    }
+
+    public private(set) var detailMode: DetailMode = .book
+    /// The selected book's compiled notes; loaded by `loadCompiledNotes`.
+    public private(set) var compiledNotes: CompiledNotes?
+
+    /// Compiles the book's notes and switches the detail area to the notes
+    /// page. Returns the compilation, or `nil` on failure (surfaced in
+    /// `errorMessage`).
+    @discardableResult
+    public func loadCompiledNotes(bookId: String) async -> CompiledNotes? {
+        guard let store else { return nil }
+        do {
+            let notes = try await store.compiledNotes(bookId: bookId)
+            compiledNotes = notes
+            detailMode = .notes
+            return notes
+        } catch {
+            errorMessage = String(describing: error)
+            return nil
+        }
+    }
+
+    /// Back to the book's detail card (kept out of `selectBook` so views
+    /// can return without reloading).
+    public func showBookDetail() {
+        detailMode = .book
+    }
+
+    /// Renders the book's notes as markdown for export/copy. Runs through
+    /// the `CoreStore` actor, so the compile happens off the main actor.
+    public func renderNotesMarkdown(bookId: String) async throws -> String {
+        guard let store else {
+            throw CoreError.Message(message: "library is not open yet")
+        }
+        return try await store.renderNotesMarkdown(bookId: bookId, options: nil)
+    }
+
+    /// One-line coverage summary, e.g.
+    /// "3/5 chapters annotated · 1,240 words · last updated Sep 1, 2026".
+    /// Pure (nonisolated) so tests can cover it without UI; matches the
+    /// export's stats line (modulo the author, which the page shows in its
+    /// header).
+    public nonisolated static func statsLine(for notes: CompiledNotes) -> String {
+        var parts = [
+            "\(notes.chaptersWithNotes)/\(notes.chapterCount) chapters annotated",
+            "\(groupedCount(notes.totalWords)) words",
+        ]
+        if let updated = notes.lastUpdatedAt.flatMap(parseRFC3339) {
+            parts.append("last updated \(dateText(updated))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Thousands-grouped count with a fixed separator so the line does not
+    /// depend on the user's locale.
+    public nonisolated static func groupedCount(_ value: UInt32) -> String {
+        let digits = String(value)
+        var grouped = ""
+        for (offset, char) in digits.reversed().enumerated() {
+            if offset > 0, offset % 3 == 0 {
+                grouped.insert(",", at: grouped.startIndex)
+            }
+            grouped.insert(char, at: grouped.startIndex)
+        }
+        return grouped
+    }
+
+    /// Parses an RFC3339 bridge timestamp (with or without fractional
+    /// seconds), or `nil` when it is missing/unparsable.
+    public nonisolated static func parseRFC3339(_ value: String) -> Date? {
+        for includingFractionalSeconds in [true, false] {
+            let style = Date.ISO8601FormatStyle(
+                dateTimeSeparator: .standard,
+                timeZoneSeparator: .colon,
+                includingFractionalSeconds: includingFractionalSeconds
+            )
+            if let date = try? Date(value, strategy: style) {
+                return date
+            }
+        }
+        return nil
+    }
+
+    /// Fixed-locale "Sep 1, 2026" date text for the stats line.
+    public nonisolated static func dateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter.string(from: date)
     }
 
     // MARK: Notes (Part III)

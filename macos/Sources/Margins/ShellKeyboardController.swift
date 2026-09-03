@@ -181,6 +181,10 @@ final class ShellKeyboardController {
             guard model.selectedBookID != nil else { return false }
             openSelectedBook()
             return true
+        case .openBookNotes:
+            guard let id = model.selectedBookID else { return false }
+            Task { await model.loadCompiledNotes(bookId: id) }
+            return true
         case .backToLibrary:
             guard reader.isOpen else { return false }
             reader.close()

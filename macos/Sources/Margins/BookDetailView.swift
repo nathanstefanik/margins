@@ -46,14 +46,23 @@ struct BookDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 if !book.chapters.isEmpty {
-                    Button {
-                        Task { await model.openBookResuming(id: book.id) }
-                    } label: {
-                        Label("Read", systemImage: "book.fill")
+                    HStack {
+                        Button {
+                            Task { await model.openBookResuming(id: book.id) }
+                        } label: {
+                            Label("Read", systemImage: "book.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .help("Resume reading (Enter)")
+                        Button {
+                            Task { await model.loadCompiledNotes(bookId: book.id) }
+                        } label: {
+                            Label("All Notes", systemImage: "note.text")
+                        }
+                        .controlSize(.large)
+                        .help("Compiled notes page (N)")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .help("Resume reading (Enter)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -39,6 +39,7 @@ public enum ReaderAction: Equatable, Sendable {
     case backToLibrary
     case importBook
     case help
+    case openBookNotes
 }
 
 /// A small vim-style state machine mirroring `src/keymaps.ts`: `j`/`k`
@@ -123,6 +124,10 @@ public final class ReaderKeymap {
             return [.help]
         case "l", "Escape":
             return mode == .reader ? [.backToLibrary] : []
+        case "N":
+            // Book view (reader closed): the compiled notes page. Consistent
+            // with the Tauri app's `N` / `:notes`.
+            return mode == .library ? [.openBookNotes] : []
         case "o":
             return [.importBook]
         case "Enter":

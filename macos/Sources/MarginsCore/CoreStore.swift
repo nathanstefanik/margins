@@ -71,6 +71,17 @@ public actor CoreStore {
         try core.getNotesIndex(bookId: bookId)
     }
 
+    /// The book's notes compiled into one spine-ordered document.
+    public func compiledNotes(bookId: String) throws -> CompiledNotes {
+        try core.getCompiledNotes(bookId: bookId)
+    }
+
+    /// Renders the book's notes as markdown (the export/copy payload).
+    /// `options` of `nil` uses the core defaults.
+    public func renderNotesMarkdown(bookId: String, options: ExportOptions?) throws -> String {
+        try core.renderNotesMarkdown(bookId: bookId, options: options)
+    }
+
     public func saveChapterNote(
         bookId: String,
         chapter: ChapterRef,

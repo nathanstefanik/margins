@@ -11,3 +11,7 @@ extension ChapterMeta: Identifiable {
 extension NoteSearchHit: Identifiable {
     public var id: String { "\(bookId)/\(chapterKey)" }
 }
+
+extension CompiledChapter: Identifiable {
+    public var id: String { chapterKey }
+}
