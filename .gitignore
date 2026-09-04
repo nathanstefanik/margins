@@ -2,38 +2,32 @@
 node_modules/
 
 # Build output
+target/
 dist/
-/target/
-src-tauri/target/
+/build/
+macos/.build/
+
+# Generated UniFFI bindings (regenerate with make core)
 macos/Sources/margins_ffiFFI/include/
 macos/Sources/MarginsCore/Generated/
-macos/.build/
-/build/
+
+# Release artifacts (build/Margins.app, DMGs from the release flow)
+*.dmg
+
+# Icon build intermediates (regenerate with scripts/make-icon.swift)
+scripts/assets/Margins.iconset/
+
+# Tauri
+src-tauri/WixTools/
 
 # Environment and secrets
 .env
 .env.*
 !.env.example
 
-# OS
-.DS_Store
-.AppleDouble
-.LSOverride
-Icon
-._*
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
-.AppleDB
-.AppleDesktop
-Network Trash Folder
-Temporary Items
-.apdisk
-*.icloud
+# Logs
+*.log
+npm-debug.log*
 
 # Editor
 .idea/
@@ -41,12 +35,13 @@ Temporary Items
 *.swo
 *~
 
-# Logs
-*.log
-npm-debug.log*
-
-# Tauri
-src-tauri/WixTools/
-
-# Icon build intermediates (regenerate with scripts/make-icon.swift)
-scripts/assets/Margins.iconset/
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+.TemporaryItems
+*.icloud
