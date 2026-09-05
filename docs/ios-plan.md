@@ -1,0 +1,325 @@
+# Development plan: iOS app
+
+Status: draft — awaiting review · Owner: TBD · Last updated: 2026-09-05
+
+## Goal
+
+An iOS/iPadOS app for Margins that mirrors the macOS app's information
+architecture (library → book → reader, notes everywhere) with a
+touch-first note-taking experience, over the same Rust core and the same
+plain-file storage. Quick marks anchored to CFI ranges live inside the
+existing per-chapter markdown note; nothing else about storage changes.
+
+The macOS app and the Tauri app keep working and their tests stay green at
+every commit.
+
+## Non-goals
+
+- No database, no network layer, no new heavyweight dependencies
+- No shared `ContentView` / forced-common view hierarchies — iOS gets its own
+  scenes; only genuinely shared pieces (model layer, reader glue, compiled-notes
+  rendering helpers) move to shared targets
+- No PDF/HTML export, no sync UI on iOS (sync export/import stays unexposed)
+- No App Store submission work — simulator + ad-hoc device installs only
+- No gamification; chrome stays zathura-minimal
+
+## Answers locked in up front
+
+### Environment prerequisite (stated plainly)
+
+This machine currently has **Command Line Tools only — no full Xcode**
+(`xcode-select -p` → `/Library/Developer/CommandLineTools`; `xcodebuild` and
+`simctl` fail). The macOS-only CLT path keeps working, but **full Xcode is a
+hard prerequisite for every phase that touches the simulator** (Phases 4–7).
+Install Xcode before reviewing Phase 1's exit criteria as "done". Phases 1–3
+(core, FFI, marks) are verifiable on the current toolchain. Rust iOS targets
+also need adding once, up front:
+
+```bash
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios-sim
+```
+
+### iOS deployment target: `.iOS(.v17)`
+
+Not a judgment call once the code is read: `MarginsModel` already uses the
+`@Observable` macro (`LibraryModel.swift:12`, `ReaderModel.swift:20`,
+`ReaderPreferences.swift:12`, `SearchController.swift:17`), which requires iOS
+17. iOS 17 also brings `.onKeyPress` for the iPad hardware-keyboard path the
+iOS prompt asks for, and pairs with the existing `.macOS(.v14)` floor (same
+Xcode 15 SDK generation). No shared model code needs anything newer.
+
+### Mark syntax (exact)
+
+Chapter note files gain an optional marks section after the long-form body,
+separated by a sentinel comment:
+
+```markdown
+---
+book_id: a1b2c3
+chapter_key: '003'
+...existing frontmatter...
+---
+
+The long-form, contemplative chapter note. Unchanged semantics.
+
+<!-- margins:marks -->
+
+<!-- margins:mark id=b01j8q3k2 cfi="epubcfi(/6/14!/4/2/10,/1:0,/1:42)" at=2026-09-05T14:02:11Z percent=38.2 -->
+> optional quoted selection from the book
+
+The quick thought.
+
+<!-- margins:mark id=b01j8qk9x cfi="epubcfi(/6/14!/4/2/24,/1:7,/1:19)" at=2026-09-05T14:07:31Z percent=51.0 -->
+> another selection
+
+(highlight with empty body — the blockquote alone is a valid mark)
+```
+
+Rules:
+
+- The **first** `<!-- margins:marks -->` line after the frontmatter starts
+  the marks section. Everything above it is the long-form body,
+  byte-identical to what a marks-unaware frontend would write.
+- Each mark is one HTML comment carrying attributes: `id`, `cfi` (range CFI),
+  `at` (RFC3339), `percent` (0–100, one decimal). `cfi` may be the empty
+  string for a page-anchored mark with no selection.
+- The mark's content is the lines following its comment up to the next
+  `<!-- margins:mark` comment or end of file: an optional `>`-blockquote
+  (the quoted selection) followed by body paragraphs.
+- `id` is 10 lowercase Crockford-base32 characters, time-ordered (ULID
+  prefix): sortable in files, unique without coordination, safe in HTML
+  comments and shell pipelines.
+- Ordering on disk is append order; readers sort marks by `percent` (then
+  `cfi`, then `id`) when a reading order is needed. Editing or deleting a
+  mark rewrites only its block — other marks keep their bytes.
+- Unparsable content inside the marks section (a user's stray comment, a
+  hand-mangled attribute) is preserved verbatim on round-trip as a raw
+  block rather than silently dropped. Losslessness beats tidiness.
+- A second `<!-- margins:marks -->` line inside a mark body is just text.
+
+Serialization lives in a new `crates/margins-core/src/marks.rs`;
+`ChapterNote` gains `marks: Vec<Mark>` and `body` means **long-form only**.
+`save_chapter_note` re-merges the marks already on disk after the new body,
+so today's blob-editing frontends (macOS notes pane, Tauri editor) can edit
+prose and save without ever seeing or destroying a mark. That merge is the
+mechanism behind the round-trip guarantee, proven by a core test.
+
+### The four settled decisions
+
+No objections. One nuance stated once, inside decision 3's own terms: the
+round-trip property is implemented by *core-side merge on save* (marks live
+on disk, blob frontends edit prose through `save_chapter_note`, mark-aware
+frontends go through `append/update/delete_mark`) rather than by asking
+frontends to round-trip raw file text. That keeps every frontend's save path
+unchanged and puts the guarantee where the format lives.
+
+---
+
+## Architecture
+
+```
+                   crates/margins-core
+        library · epub_meta · notes · marks (NEW) · compile · sync
+                          │                    │
+        src-tauri (thin commands)   crates/margins-ffi (UniFFI, thin)
+                │                            │
+        Tauri frontend            MarginsFFI.xcframework (NEW)
+        (renders marks)                      │
+                        ┌────────────────────┴───────────────────┐
+                  apple/ SwiftPM package (renamed from macos/)
+                  MarginsCore · MarginsModel (+ LibraryLocation NEW)
+                        │                                        │
+              Margins (macOS, unchanged)              MarginsIOS (NEW)
+                                                       Library · Book detail
+                                                       Reader · note capture
+```
+
+- `apple/` (renamed from `macos/`) hosts one shared SwiftPM package. Targets
+  `margins_ffiFFI`, `MarginsCore`, and `MarginsModel` become
+  platform-agnostic (`.macOS(.v14)`, `.iOS(.v17)`); `MarginsModel` is already
+  AppKit-free (verified by grep — the only hit is a doc comment). `Margins`
+  stays the macOS app target; `MarginsIOS` is a new executable target.
+- The `.unsafeFlags` static-lib hack dies. `scripts/build-xcframework.sh`
+  builds `build/MarginsFFI.xcframework` from per-target staticlibs —
+  `aarch64-apple-ios`; `aarch64-apple-ios-sim` + `x86_64-apple-ios-sim`
+  lipo'd; `aarch64-apple-darwin` + `x86_64-apple-darwin` lipo'd — each slice
+  carrying the UniFFI header + module map. `Package.swift` consumes it as a
+  `binaryTarget` (local path, gitignored). `scripts/build-core.sh` keeps
+  building the macOS slice by default so the CLT-only mac path is unchanged.
+- The iOS app is driven by a small committed Xcode project
+  (`apple/ios/Margins.xcodeproj`) that references the local SwiftPM package —
+  the only artifact a SwiftPM executable cannot self-produce on iOS. No
+  XcodeGen; the project is generated once and hand-maintained (it is small:
+  package reference, entitlements, Info.plist, signing team left unset).
+- Library root on iOS lives in the iCloud Documents ubiquity container
+  (`iCloud.io.github.nathanstefanik.margins`), falling back **at runtime** to
+  local `Documents` when no paid team / container is available, with the
+  reason surfaced in the UI. One narrow type, `LibraryLocation` in
+  `MarginsModel`, owns container resolution, materialization of evicted
+  placeholders (`startDownloadingUbiquitousItem` +
+  `ubiquityItemDownloadingStatus` polling), `NSFileCoordinator`-coordinated
+  writes, and `NSFileVersion` conflict detection on note save
+  (last-writer-wins, conflicts surfaced, never silently discarded). The Rust
+  core stays unaware; it just gets a path via `MarginsCore.new(dataDir:)` /
+  `setLibraryRoot`.
+- The reader reuses `Resources/reader/` and `ReaderSchemeHandler` unchanged —
+  the five-resource allowlist, the `HTTPURLResponse`-for-`book.epub` rule,
+  and the navigation policy carry over (they are pure Foundation +
+  WebKit, both available on iOS). `ReaderKeymap` is not wired to touch input;
+  iPad hardware keys go through `.onKeyPress` reusing it where it is free.
+
+## Phases
+
+Each phase is one commit, independently verifiable, and leaves
+`cargo test --workspace` and `make mac-test` green.
+
+### Phase 1 — Shared Apple package + XCFramework
+
+- Rename `macos/` → `apple/`; update `Makefile`, `scripts/build-core.sh`,
+  `scripts/make-app.sh`, `AGENTS.md`, `README.md`, `docs/architecture.md`,
+  and `.github/workflows/release.yml` in the same commit.
+- `Package.swift`: add `.iOS(.v17)` platform; add the `MarginsIOS`
+  executable target (placeholder `MarginsIOSApp` that compiles and does
+  nothing yet) so the target graph is real from day one.
+- `scripts/build-xcframework.sh` + `make ios-core`; consume the framework
+  via `binaryTarget`; delete `.unsafeFlags` from `MarginsCore`.
+- README: full Xcode now required for iOS (and for `xcodebuild test`);
+  CLT-only path still builds the macOS app — verified, not assumed; note
+  that `MarginsTests` stays a runner executable until that is revisited.
+- Exit: `cargo test --workspace`, `make mac-build`, `make mac-test` green on
+  CLT; `make ios-core` produces a valid four-slice framework (requires Xcode
+  + Rust targets).
+
+### Phase 2 — Marks in the core and FFI
+
+- `marks.rs`: parse/serialize the syntax above; `ChapterNote.marks`;
+  `body` = long-form only; `save_chapter_note` merges disk marks.
+- `append_mark`, `update_mark`, `delete_mark` (stable ids; per-mark rewrite);
+  `NotesIndexEntry` gains `mark_count`; `notes/_index.json` stays consistent.
+- `compile.rs`: marks appear in the compiled page and the markdown export in
+  reading order within each chapter (blockquote quote, then body, with the
+  `at`/`percent` line rendered as a quiet italic line, matching the macOS
+  prose style; export marks the section with `> — ` attribution lines, not
+  HTML comments).
+- FFI: `append_mark`, `update_mark`, `delete_mark`, mark counts through the
+  existing record types; `make core` regenerates bindings.
+- `docs/storage.md` updated (format, `_index.json`, losslessness rules).
+- Exit: `cargo test --workspace` green — including the blob round-trip test
+  (load a file with marks as a marks-unaware frontend would, edit prose,
+  save through `save_chapter_note`, marks byte-identical), compile/export
+  ordering, id stability, unparsable-block preservation. `make mac-test`
+  green; Tauri app still builds and its notes pane shows prose only.
+
+### Phase 3 — Render marks in Tauri and macOS
+
+- Compiled notes page (Tauri `notes-view`, macOS `NotesPageView`) and both
+  notes panes render marks as styled quotes/notes — never raw HTML comments.
+  Bodies stay plain `Text` / escaped text (security property, unchanged).
+- Chapter-note editors gain a marks strip (count + list, delete/edit) — read
+  affordances only; capture stays iOS-only this phase.
+- Exit: `npm run tauri build`; `make mac-test`; manual pass against the
+  Karamazov fixture on both platforms.
+
+### Phase 4 — iOS app skeleton + Library scene
+
+- `apple/ios/Margins.xcodeproj` (package reference, entitlements:
+  iCloud Documents + container id; Info.plist:
+  `NSUbiquitousContainerIsDocumentScopePublic`, `UIFileSharingEnabled`,
+  `LSSupportsOpeningDocumentsInPlace`); team ID stays out of the repo.
+- `LibraryLocation` (container resolution, runtime fallback with surfaced
+  reason, materialization, coordinated writes, conflict detection) +
+  `MarginsTests` coverage with a seam for the container lookup.
+- Library scene: cover grid (`BookCoverPlaceholder` fallback), title/author,
+  note count, progress from `progress_percent`; import via
+  `UIDocumentPicker` (`.epub` + `public.data` fallback) with progress;
+  swipe-to-delete with confirmation; `.searchable` notes search over
+  `search_notes`. `NavigationStack` on iPhone, `NavigationSplitView` on iPad.
+- Exit: builds and runs on the simulator via `xcodebuildmcp`; import an EPUB,
+  see covers/progress, search, delete — screenshots in the phase report.
+
+### Phase 5 — Book detail + Reader
+
+- Book detail: cover, metadata, progress, **Continue reading**; segmented
+  Contents / Notes. Contents rows show TOC titles, a notes marker
+  (`get_notes_index`), and the current position; tap opens the reader there.
+  Notes tab: compiled page stats (chapters, words, last updated),
+  empty-chapter toggle, tap-to-jump, `ShareLink` export via
+  `render_notes_markdown`, clear-all behind confirmation.
+- Reader: `WKWebView` + `ReaderSchemeHandler` (allowlist untouched), tap
+  zones (left/right thirds) + horizontal swipe paging, center-tap chrome
+  (chapter title, progress, TOC + notes buttons, auto-hide), typography
+  sheet persisting through `ReaderPreferences`, debounced
+  `save_reading_position` flushed on `scenePhase == .background`, dark mode
+  and Dynamic Type verified for real.
+- Exit: read a book end-to-end on the simulator; position survives
+  backgrounding; screenshots of both detail tabs and the reader (light +
+  dark).
+
+### Phase 6 — Note capture
+
+- epub.js `rendition.on("selected")` wired through a new script-message
+  channel to Swift; edit-menu *Note* / *Highlight* via
+  `UIEditMenuInteraction`; one no-selection gesture (long-press, primary and
+  discoverable; VoiceOver-accessible equivalent button in the chrome).
+- Capture sheet: `.presentationDetents([.height(200), .medium])`,
+  keyboard up on appear, `@FocusState` on appear, dimmed-but-visible page;
+  return/Done commits, swipe-down commits; **draft autosave** so nothing is
+  ever lost; barest inline flash on commit.
+- Highlight-without-note supported (quote, empty body);
+  `rendition.annotations.highlight` used to render highlights, restored on
+  chapter load.
+- Chapter marks sheet (count in the chrome; edit/delete there);
+  full-height chapter-note editor sheet (`.large`) with word count, debounced
+  + dismiss + background autosave, marks strip alongside; quiet, dismissible,
+  silenceable end-of-chapter prompt.
+- Exit: the definition-of-done flow on the simulator — five quick marks and
+  one chapter note while reading — plus round-trip: the same files open
+  correctly in the macOS app and the Tauri app. Screenshots.
+
+### Phase 7 — Integration, accessibility, docs
+
+- "Open EPUB in Margins" from Files/Mail (`CFBundleDocumentTypes` +
+  `onOpenURL`).
+- VoiceOver labels on tap zones and capture affordances; Dynamic Type audit
+  across all four scenes; no gesture-only actions.
+- README (both frontends), `AGENTS.md`, `docs/architecture.md`,
+  `docs/storage.md` final pass; `make ios-*` targets documented; iCloud
+  setup documented (container, entitlement, fallback behavior, conflict
+  behavior).
+- Exit: definition-of-done checklist in the prompt walked end to end.
+
+## Testing
+
+- **Core**: mark parse/serialize round-trip; blob-frontend save preserves
+  marks byte-for-byte; append/update/delete id stability and ordering;
+  unparsable-block preservation; `_index.json` mark counts; compile/export
+  reading order (mirrors existing `notes.rs`/`compile.rs` test fixtures).
+- **macOS (`MarginsTests`)**: existing suites must stay green;
+  `LibraryLocation` fallback + conflict handling via an injected-container
+  seam; mark-strip presentation helpers.
+- **iOS**: same `MarginsTests` suite compiles into the iOS test graph via
+  `xcodebuild test` once Xcode lands; device-interaction passes drive the
+  real gestures with screenshots — unit tests do not certify the capture
+  flow.
+- **Tauri**: builds at every phase; keymap script untouched unless bindings
+  change.
+
+## Risks / open questions
+
+- **Xcode absent on this machine today** — Phases 4–7 are blocked on
+  installing it; Phases 1–3 are not. Stated up front rather than discovered
+  mid-phase.
+- **`binaryTarget` on CLT** — the macOS xcframework slice must link cleanly
+  without full Xcode; if SwiftPM balks on CLT, `build-core.sh` keeps a
+  fallback to today's absolute-path link for macOS only, flagged loudly.
+  Verified in Phase 1, not assumed.
+- **epub.js selection events inside WKWebView** — `selected` fires per
+  rendition; iOS long-press menus can fight the webview's native selection
+  UI. Mitigation: the edit-menu delegate path, tested on-device in Phase 6
+  before the sheet is built.
+- **Ubiquity container without a paid team** — simulator/local fallback is
+  the tested path; container behavior on a real account is documented but
+  only verifiable with signing credentials (user-provided, never committed).
+- **iCloud eviction mid-read** — materialization polls with a timeout and a
+  real error state (never a blank screen); worst case is a book that needs a
+  tap to download, which the UI explains.
