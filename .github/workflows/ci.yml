@@ -77,7 +77,7 @@ jobs:
       - name: Upload Linux bundles
         uses: actions/upload-artifact@v4
         with:
-          name: marginalia-linux-bundles
+          name: margins-linux-bundles
           path: target/release/bundle/
           if-no-files-found: error
 
@@ -96,9 +96,14 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, aarch64-apple-ios-sim
 
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
 
       - name: Build core and run the Swift Testing suite
         run: make mac-test
+
+      - name: Build the FFI xcframework (macOS + iOS slices)
+        run: make ios-core
