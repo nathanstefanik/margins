@@ -2,6 +2,8 @@ use chrono::{DateTime, Utc};
 use margins_core::library::Library;
 use margins_core::models;
 
+use crate::CoreError;
+
 #[derive(uniffi::Record)]
 pub struct BookSummary {
     pub id: String,
@@ -102,10 +104,55 @@ pub struct NoteFrontmatter {
     pub updated_at: Option<String>,
 }
 
+/// One quick, CFI-anchored note from the chapter note file's marks
+/// section. `at` is RFC3339; `cfi`/`percent` are `None` for page-anchored
+/// marks with no known position.
+#[derive(uniffi::Record)]
+pub struct Mark {
+    pub id: String,
+    pub cfi: Option<String>,
+    pub at: String,
+    pub percent: Option<f64>,
+    pub quote: String,
+    pub body: String,
+}
+
+impl From<models::Mark> for Mark {
+    fn from(value: models::Mark) -> Self {
+        Self {
+            id: value.id,
+            cfi: value.cfi,
+            at: rfc3339(value.at),
+            percent: value.percent,
+            quote: value.quote,
+            body: value.body,
+        }
+    }
+}
+
+impl Mark {
+    pub fn into_core(self) -> Result<models::Mark, CoreError> {
+        let at = DateTime::parse_from_rfc3339(&self.at)
+            .map_err(|e| CoreError::Message(format!("invalid mark timestamp: {e}")))?
+            .with_timezone(&Utc);
+        Ok(models::Mark {
+            id: self.id,
+            cfi: self.cfi,
+            at,
+            percent: self.percent,
+            quote: self.quote,
+            body: self.body,
+        })
+    }
+}
+
 #[derive(uniffi::Record)]
 pub struct ChapterNote {
     pub frontmatter: NoteFrontmatter,
+    /// The long-form note body only (everything above the marks sentinel).
     pub body: String,
+    /// The chapter's marks, in file order.
+    pub marks: Vec<Mark>,
     pub path: String,
 }
 
@@ -116,6 +163,8 @@ pub struct NoteIndexEntry {
     pub chapter_index: u32,
     pub chapter_title: String,
     pub word_count: u32,
+    /// Number of marks in the chapter's marks section.
+    pub mark_count: u32,
     pub updated_at: Option<String>,
 }
 
@@ -233,6 +282,7 @@ impl From<models::ChapterNote> for ChapterNote {
         Self {
             frontmatter: value.frontmatter.into(),
             body: value.body,
+            marks: value.marks.into_iter().map(Into::into).collect(),
             path: value.path,
         }
     }
@@ -282,6 +332,7 @@ impl From<models::NotesIndexEntry> for NoteIndexEntry {
             chapter_index: value.chapter_index as u32,
             chapter_title: value.chapter_title,
             word_count: value.word_count as u32,
+            mark_count: value.mark_count as u32,
             updated_at: value.updated_at.map(rfc3339),
         }
     }
@@ -316,6 +367,8 @@ pub struct CompiledChapter {
     pub chapter_title: String,
     /// Markdown, without frontmatter.
     pub body: String,
+    /// The chapter's marks in reading order (percent, then CFI, then id).
+    pub marks: Vec<Mark>,
     pub word_count: u32,
     pub updated_at: Option<String>,
 }
@@ -327,6 +380,7 @@ impl From<models::CompiledChapter> for CompiledChapter {
             chapter_index: value.chapter_index as u32,
             chapter_title: value.chapter_title,
             body: value.body,
+            marks: value.marks.into_iter().map(Into::into).collect(),
             word_count: value.word_count as u32,
             updated_at: value.updated_at.map(rfc3339),
         }

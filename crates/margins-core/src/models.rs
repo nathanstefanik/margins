@@ -95,10 +95,33 @@ pub struct NoteFrontmatter {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
+/// A quick, CFI-anchored note ("mark") stored inside the chapter note
+/// file's marks section (see `docs/storage.md`). `quote` is the quoted
+/// book selection (empty when absent); `body` is the reader's thought
+/// (empty for pure highlights). `cfi`/`percent` are `None` for
+/// page-anchored marks with no known position.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Mark {
+    /// 10 lowercase Crockford-base32 characters, time-ordered; stable for
+    /// the mark's lifetime.
+    pub id: String,
+    /// Range CFI of the selection, or `None` for a page-anchored mark.
+    pub cfi: Option<String>,
+    /// When the mark was taken.
+    pub at: DateTime<Utc>,
+    /// Whole-book percent (0–100) at the mark's position, when known.
+    pub percent: Option<f64>,
+    pub quote: String,
+    pub body: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChapterNote {
     pub frontmatter: NoteFrontmatter,
+    /// The long-form note body only — everything above the
+    /// `<!-- margins:marks -->` sentinel. Marks live in `marks`.
     pub body: String,
+    pub marks: Vec<Mark>,
     pub path: String,
 }
 
@@ -119,6 +142,10 @@ pub struct NotesIndexEntry {
     pub chapter_index: usize,
     pub chapter_title: String,
     pub word_count: usize,
+    /// Number of marks in the chapter's marks section. Absent (0) in
+    /// indexes written before marks existed.
+    #[serde(default)]
+    pub mark_count: usize,
     pub updated_at: Option<DateTime<Utc>>,
 }
 
@@ -178,6 +205,8 @@ pub struct CompiledChapter {
     pub chapter_title: String,
     /// Markdown, without frontmatter.
     pub body: String,
+    /// The chapter's marks in reading order (percent, then CFI, then id).
+    pub marks: Vec<Mark>,
     pub word_count: usize,
     pub updated_at: Option<DateTime<Utc>>,
 }

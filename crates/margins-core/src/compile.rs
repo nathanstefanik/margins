@@ -2,7 +2,8 @@
 //! renders it as markdown. A read/compose layer over the existing note
 //! files — no storage change.
 
-use crate::models::{BookMeta, CompiledChapter, CompiledNotes, ExportOptions};
+use crate::models::{BookMeta, CompiledChapter, CompiledNotes, ExportOptions, Mark};
+use crate::marks;
 use crate::notes::{self, NotesError};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -48,11 +49,14 @@ pub fn compile_book_notes(book_dir: &Path) -> Result<CompiledNotes, NotesError> 
             .get(entry.chapter_key.as_str())
             .map(|title| title.to_string())
             .unwrap_or(note.frontmatter.chapter_title);
+        let mut chapter_marks = note.marks;
+        marks::sort_reading_order(&mut chapter_marks);
         chapters.push(CompiledChapter {
             chapter_key: entry.chapter_key.clone(),
             chapter_index: note.frontmatter.chapter_index,
             chapter_title,
             body: note.body,
+            marks: chapter_marks,
             word_count,
             updated_at: note.frontmatter.updated_at,
         });
@@ -70,6 +74,7 @@ pub fn compile_book_notes(book_dir: &Path) -> Result<CompiledNotes, NotesError> 
             chapter_index: ch.index,
             chapter_title: ch.title.clone(),
             body: String::new(),
+            marks: vec![],
             word_count: 0,
             updated_at: None,
         })
@@ -179,12 +184,45 @@ pub fn render_markdown(notes: &CompiledNotes, opts: &ExportOptions) -> String {
                 out.push('\n');
             }
         }
+        render_marks(&mut out, &chapter.marks, format_date);
         // Always close the section with a blank line so a trailing
         // paragraph never merges with the next `---` (setext heading).
         out.push('\n');
     }
 
     out
+}
+
+/// Renders a chapter's marks (already in reading order) as plain
+/// markdown — blockquote for the selection, body paragraphs, and a quiet
+/// italic attribution line. No HTML comments ever reach the export.
+fn render_marks(out: &mut String, chapter_marks: &[Mark], format_date: fn(DateTime<Utc>) -> String) {
+    if chapter_marks.is_empty() {
+        return;
+    }
+    out.push_str("\n### Marks\n");
+    for mark in chapter_marks {
+        out.push('\n');
+        for line in mark.quote.lines() {
+            out.push_str("> ");
+            out.push_str(line);
+            out.push('\n');
+        }
+        if !mark.body.is_empty() {
+            if !mark.quote.is_empty() {
+                out.push('\n');
+            }
+            out.push_str(&mark.body);
+            out.push('\n');
+        }
+        let mut attribution = String::from("*— ");
+        if let Some(percent) = mark.percent {
+            attribution.push_str(&format!("{percent:.1}% · "));
+        }
+        attribution.push_str(&format_date(mark.at));
+        attribution.push_str("*\n");
+        out.push_str(&attribution);
+    }
 }
 
 /// Shared default export name: `"{author} — {title} — notes.md"`, with
@@ -474,6 +512,74 @@ mod tests {
         assert!(compiled.first_created_at.is_some());
         assert!(compiled.last_updated_at.is_some());
         assert!(!compiled.suggested_filename.is_empty());
+    }
+
+    #[test]
+    fn compile_includes_marks_in_reading_order_and_export() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book = seed_book(tmp.path(), &[("001", "Introduction")]);
+        // Marks written out of reading order on disk; the last one is
+        // page-anchored (no CFI, no percent).
+        let marks_section = format!(
+            "{}\n\n\
+             <!-- margins:mark id=bbbbbbbbbbb cfi=\"epubcfi(/6/4!/4/6)\" at=2026-09-05T11:00:00Z percent=51.0 -->\n\
+             > later quote\n\n\
+             later thought.\n\n\
+             <!-- margins:mark id=ccccccccccc cfi=\"\" at=2026-09-05T12:00:00Z -->\n\n\
+             page-anchored thought.\n\n\
+             <!-- margins:mark id=aaaaaaaaaaa cfi=\"epubcfi(/6/2!/4/2)\" at=2026-09-05T10:00:00Z percent=38.2 -->\n\
+             > a quote\n\n\
+             a thought.\n",
+            crate::marks::SENTINEL
+        );
+        let content = format!(
+            "---\nbook_id: abc123\nchapter_key: '001'\nchapter_index: 0\n\
+             chapter_title: 'Introduction'\nchapter_href: OEBPS/ch0.xhtml\nepub_cfi: null\n\
+             kind: summary\nword_count: 2\ncreated_at: 2026-09-05T09:00:00Z\nupdated_at: 2026-09-05T09:30:00Z\n---\n\n\
+             Prose body.\n\n{}",
+            marks_section
+        );
+        fs::write(book.dir.join("notes/chapters/001-introduction.md"), &content).unwrap();
+        let index_path = book.dir.join("notes/_index.json");
+        let mut doc: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&index_path).unwrap()).unwrap();
+        doc["chapters"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "chapter_key": "001",
+                "file": "chapters/001-introduction.md",
+                "chapter_index": 0,
+                "chapter_title": "Introduction",
+                "word_count": 2,
+                "mark_count": 3,
+                "updated_at": "2026-09-05T09:30:00+00:00",
+            }));
+        fs::write(&index_path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+
+        let compiled = compile_book_notes(&book.dir).unwrap();
+        let chapter = &compiled.chapters[0];
+        assert_eq!(chapter.body, "Prose body.");
+        let percents: Vec<Option<f64>> = chapter.marks.iter().map(|m| m.percent).collect();
+        assert_eq!(
+            percents,
+            vec![Some(38.2), Some(51.0), None],
+            "reading order: percent ascending, page-anchored last"
+        );
+
+        let export = render_markdown(&compiled, &ExportOptions::default());
+        assert!(export.contains("### Marks"));
+        assert!(export.contains("> a quote"));
+        assert!(export.contains("page-anchored thought."));
+        assert!(export.contains("*— 38.2% · "));
+        assert!(
+            export.contains("*— Sep 5, 2026*"),
+            "percent-less mark gets a date-only attribution"
+        );
+        assert!(
+            !export.contains("margins:mark"),
+            "no HTML comments ever reach the export"
+        );
     }
 
     #[test]
