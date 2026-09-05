@@ -1,6 +1,6 @@
 # Development plan: iOS app
 
-Status: Phase 1 implemented · Phases 2–7 pending · Owner: TBD · Last updated: 2026-09-05
+Status: Phase 1–2 implemented · Phases 3–7 pending · Owner: TBD · Last updated: 2026-09-05
 
 ## Goal
 
@@ -27,16 +27,45 @@ every commit.
 
 ### Environment prerequisite (stated plainly)
 
-This machine currently has **Command Line Tools only — no full Xcode**
-(`xcode-select -p` → `/Library/Developer/CommandLineTools`; `xcodebuild` and
-`simctl` fail). The macOS-only CLT path keeps working, but **full Xcode is a
-hard prerequisite for every phase that touches the simulator** (Phases 4–7).
-Install Xcode before reviewing Phase 1's exit criteria as "done". Phases 1–3
-(core, FFI, marks) are verifiable on the current toolchain. Rust iOS targets
-also need adding once, up front:
+Full Xcode **is installed** — Xcode 26.6 (build 17F113) at
+`/Applications/Xcode.app`, carrying `iPhoneOS26.5.sdk` and
+`iPhoneSimulator26.5.sdk`. It is not yet *usable*, for two reasons that both
+need an admin password (verified 2026-09-05):
+
+1. `xcode-select -p` still returns `/Library/Developer/CommandLineTools`.
+2. The Xcode license has not been accepted, so every `xcrun`/`xcodebuild`
+   call — including `xcrun --sdk iphoneos --show-sdk-path`, which `cc-rs`
+   needs — fails with "You have not agreed to the Xcode license agreements."
+   This gate fires even with `DEVELOPER_DIR` set, so it is not a side effect
+   of item 1.
 
 ```bash
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios-sim
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+```
+
+**No iOS simulator runtime is installed** — `/Library/Developer/CoreSimulator/`
+`Profiles/Runtimes/` does not exist and Xcode 26.6 bundles none. Phases 4–7
+therefore need a third step, a multi-gigabyte download gated behind the two
+commands above (no sudo itself):
+
+```bash
+xcodebuild -downloadPlatform iOS
+```
+
+Phases 1–3 (core, FFI, marks) need none of this: verified green on the
+CLT-only toolchain at commit `9f30215` on 2026-09-05 — `make core`,
+`make mac-test` (73 tests / 12 suites), and `npm run build` all pass. The
+claim is pinned to that commit deliberately; it says the CLT path works, not
+that any given working tree is green.
+
+Rust iOS targets need adding once, up front. Note that **only two of the
+three are installable**: Rust 1.96 stable does not ship `x86_64-apple-ios-sim`
+(`rustup target add` errors out), which is why the simulator slice is
+arm64-only — see implementation note 3 under Phase 1.
+
+```bash
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 ```
 
 ### iOS deployment target: `.iOS(.v17)`
@@ -212,7 +241,7 @@ Implementation notes (deviations found while building it):
    which case the script lipo's both (`ios-arm64_x86_64-simulator`). Fine on
    Apple Silicon; revisit if Intel-host simulator builds ever matter.
 
-### Phase 2 — Marks in the core and FFI
+### Phase 2 — Marks in the core and FFI — DONE (2026-09-05)
 
 - `marks.rs`: parse/serialize the syntax above; `ChapterNote.marks`;
   `body` = long-form only; `save_chapter_note` merges disk marks.
@@ -231,6 +260,20 @@ Implementation notes (deviations found while building it):
   save through `save_chapter_note`, marks byte-identical), compile/export
   ordering, id stability, unparsable-block preservation. `make mac-test`
   green; Tauri app still builds and its notes pane shows prose only.
+
+Met 2026-09-05: 82 core tests (+16 marks/compile round-trip), 73 Swift
+tests, Tauri build + keymap regression green. Implementation notes:
+
+- The merge rule is: the incoming body is authoritative for any marks
+  section it carries; a body without a sentinel leaves disk marks
+  untouched. Proven byte-for-byte by `blob_save_preserves_marks_byte_identically`.
+- Per-block raw preservation (`MarkItem::Mark{raw}` / `MarkItem::Raw`) is
+  what keeps untouched marks byte-identical through append/update/delete.
+- `save_chapter_note` reads the existing file from its **final path**
+  (after the retitled-chapter rename), not via the still-stale index
+  entry — reading via the index would silently drop marks on a retitle.
+- `search.rs` indexes long-form bodies only; mark text is not searchable.
+  Deliberate for v1 — revisit if marks search is wanted.
 
 ### Phase 3 — Render marks in Tauri and macOS
 
@@ -328,9 +371,11 @@ Implementation notes (deviations found while building it):
 
 ## Risks / open questions
 
-- **Xcode absent on this machine today** — Phases 4–7 are blocked on
-  installing it; Phases 1–3 are not. Stated up front rather than discovered
-  mid-phase.
+- **Xcode installed but not yet usable** — Xcode 26.6 and the iOS SDKs are on
+  disk, but Phases 4–7 stay blocked until its license is accepted and a
+  simulator runtime is downloaded (see Environment prerequisite). Both need an
+  admin password, so neither is agent-automatable. Phases 1–3 are unblocked
+  and verified green.
 - **`binaryTarget` on CLT** — the macOS xcframework slice must link cleanly
   without full Xcode; if SwiftPM balks on CLT, `build-core.sh` keeps a
   fallback to today's absolute-path link for macOS only, flagged loudly.

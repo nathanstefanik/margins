@@ -179,8 +179,8 @@ struct LibraryModelTests {
         ]
         // Index order must not matter: the spine defines the row order.
         let index = [
-            NoteIndexEntry(chapterKey: "003", chapterIndex: 2, chapterTitle: "Three", wordCount: 41, updatedAt: nil),
-            NoteIndexEntry(chapterKey: "001", chapterIndex: 0, chapterTitle: "One", wordCount: 98, updatedAt: "2026-09-01T12:00:00+00:00"),
+            NoteIndexEntry(chapterKey: "003", chapterIndex: 2, chapterTitle: "Three", wordCount: 41, markCount: 0, updatedAt: nil),
+            NoteIndexEntry(chapterKey: "001", chapterIndex: 0, chapterTitle: "One", wordCount: 98, markCount: 3, updatedAt: "2026-09-01T12:00:00+00:00"),
         ]
 
         let rows = LibraryModel.annotatedChapterRows(chapters: chapters, index: index)
