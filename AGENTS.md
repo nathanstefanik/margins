@@ -1,6 +1,6 @@
 # Margins — agent guide
 
-EPUB reader with two frontends over one Rust core: Tauri 2 + TypeScript (Linux/desktop) and a native SwiftUI app (macOS, `macos/`). Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`.
+EPUB reader with three frontends over one Rust core: Tauri 2 + TypeScript (Linux/desktop), a native SwiftUI macOS app, and an in-progress iOS app — all Apple targets share one SwiftPM package in `apple/`. Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`.
 
 ## Commit messages
 
@@ -39,13 +39,17 @@ src/                   # Tauri frontend
   reader.ts            # epub.js wrapper
   keymaps.ts           # vim-style bindings
   api.ts               # Tauri invoke wrappers
-macos/                 # macOS SwiftUI app (SwiftPM package)
-  Package.swift        # targets: margins_ffiFFI, MarginsCore, MarginsModel, Margins, MarginsTests
+apple/                 # shared Apple SwiftPM package (macOS + iOS)
+  Package.swift        # targets: MarginsFFI (xcframework), margins_ffiFFI,
+                       # MarginsCore, MarginsModel, Margins (macOS app),
+                       # MarginsIOS (iOS app), MarginsTests
   Sources/MarginsCore/ # generated bindings + CoreStore actor
   Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap
-  Sources/Margins/     # SwiftUI views, reader webview glue, key routing
+  Sources/Margins/     # macOS SwiftUI views, reader webview glue, key routing
+  Sources/MarginsIOS/  # iOS SwiftUI app (Phase 4+; see docs/ios-plan.md)
   Sources/MarginsTests/# Swift Testing suite (runner executable)
-scripts/               # build-core.sh, make-app.sh
+build/MarginsFFI.xcframework/  # generated (make core / make ios-core)
+scripts/               # build-core.sh, build-xcframework.sh, make-app.sh
 ```
 
 ## Conventions
@@ -63,13 +67,21 @@ npm run tauri dev
 npm run tauri build
 cargo test --workspace        # from the repo root (covers core + tauri)
 
-make core        # rebuild margins-ffi + regenerate Swift bindings
+make core        # rebuild margins-ffi, regenerate Swift bindings, refresh
+                 # the macOS slice of build/MarginsFFI.xcframework
+make ios-core    # also build the iOS device/simulator xcframework slices
+                 # (needs full Xcode: the zip stack's C deps require the
+                 # iOS SDK, which Command Line Tools do not ship)
 make mac-build   # build the macOS Swift package
 make mac-test    # run the macOS Swift Testing suite
 make mac-run     # assemble + open build/Margins.app
 make mac-app-universal  # universal (arm64 + x86_64) build/Margins.app; needs full Xcode
 make bump VERSION=x.y.z  # bump version everywhere, commit, tag vx.y.z
 ```
+
+The macOS app builds with Command Line Tools alone. Building or running the
+**iOS app on a simulator requires full Xcode** (`xcodebuild`, simulators) —
+see `docs/ios-plan.md`.
 
 macOS tests use Swift Testing (`import Testing`) via the `MarginsTests`
 runner executable — `swift test` silently runs nothing on a CLT-only

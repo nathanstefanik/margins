@@ -1,13 +1,16 @@
-.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run bump
+.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run ios-core bump
 
 core:
 	./scripts/build-core.sh
 
+ios-core:
+	./scripts/build-xcframework.sh
+
 mac-build: core
-	swift build --package-path macos
+	swift build --package-path apple
 
 mac-test: core
-	swift run --package-path macos MarginsTests
+	swift run --package-path apple MarginsTests
 
 mac-app: core
 	./scripts/make-app.sh

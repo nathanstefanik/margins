@@ -1,6 +1,6 @@
 # Development plan: iOS app
 
-Status: draft — awaiting review · Owner: TBD · Last updated: 2026-09-05
+Status: Phase 1 implemented · Phases 2–7 pending · Owner: TBD · Last updated: 2026-09-05
 
 ## Goal
 
@@ -173,7 +173,7 @@ unchanged and puts the guarantee where the format lives.
 Each phase is one commit, independently verifiable, and leaves
 `cargo test --workspace` and `make mac-test` green.
 
-### Phase 1 — Shared Apple package + XCFramework
+### Phase 1 — Shared Apple package + XCFramework — DONE (2026-09-05)
 
 - Rename `macos/` → `apple/`; update `Makefile`, `scripts/build-core.sh`,
   `scripts/make-app.sh`, `AGENTS.md`, `README.md`, `docs/architecture.md`,
@@ -187,8 +187,30 @@ Each phase is one commit, independently verifiable, and leaves
   CLT-only path still builds the macOS app — verified, not assumed; note
   that `MarginsTests` stays a runner executable until that is revisited.
 - Exit: `cargo test --workspace`, `make mac-build`, `make mac-test` green on
-  CLT; `make ios-core` produces a valid four-slice framework (requires Xcode
-  + Rust targets).
+  CLT; `make ios-core` produces a valid multi-slice framework. — Met
+  2026-09-05; the framework itself needed no Xcode (see notes below).
+
+Implementation notes (deviations found while building it):
+
+1. **The `margins_ffiFFI` header-only C target stays.** SwiftPM links a
+   static-library xcframework slice into dependents but does not expose
+   headers/module maps from binary targets, so `canImport(margins_ffiFFI)`
+   fails when the module lives inside the xcframework. The C target remains
+   the module source; the xcframework provides only the archive. The
+   `.unsafeFlags` hack is still gone — the archive now comes from the
+   binaryTarget, selected per destination.
+2. **`make ios-core` requires full Xcode after all** (verified, not
+   assumed): the zip stack's C dependencies (`zstd-sys`, `lzma-sys`,
+   `bzip2-sys`) compile C against the iOS SDK via `cc-rs`, which resolves
+   `xcrun --show-sdk-path --sdk iphoneos` — unavailable on Command Line
+   Tools. The macOS-only path (`make core`, `make mac-build`,
+   `make mac-test`) stays CLT-only; the xcframework *assembly* logic
+   (slices + Info.plist, no `xcodebuild -create-xcframework`) is CLT-safe,
+   but producing the iOS archives needs the SDK.
+3. **Rust 1.96 does not ship `x86_64-apple-ios-sim`**; the simulator slice
+   is arm64-only (`ios-arm64-simulator`) unless the target is available, in
+   which case the script lipo's both (`ios-arm64_x86_64-simulator`). Fine on
+   Apple Silicon; revisit if Intel-host simulator builds ever matter.
 
 ### Phase 2 — Marks in the core and FFI
 

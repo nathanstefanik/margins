@@ -6,9 +6,9 @@ cd "$root"
 
 universal=${UNIVERSAL:-0}
 if [ "$universal" = "1" ]; then
-  build_dir="macos/.build/apple/Products/Release"
+  build_dir="apple/.build/apple/Products/Release"
 else
-  build_dir="macos/.build/release"
+  build_dir="apple/.build/release"
 fi
 
 swift_arch=""
@@ -16,7 +16,7 @@ if [ "$universal" = "1" ]; then
   swift_arch="--arch arm64 --arch x86_64"
 fi
 
-swift build -c release --package-path macos $swift_arch
+swift build -c release --package-path apple $swift_arch
 
 bin="$build_dir/Margins"
 if [ ! -f "$bin" ]; then
