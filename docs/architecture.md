@@ -1,15 +1,19 @@
 # Margins architecture
 
-Margins is one Rust core with two thin frontends: the original Tauri
-(Linux/desktop) app and a native macOS SwiftUI app. Both render EPUBs with
-epub.js and write annotations as plain files — no database anywhere.
+Margins is one Rust core with three thin frontends: the original Tauri
+(Linux/desktop) app, a native macOS SwiftUI app, and a native iOS SwiftUI
+app (in progress — see `docs/ios-plan.md`). The Apple targets share one
+SwiftPM package. All of them render EPUBs with epub.js and write annotations
+as plain files — no database anywhere.
 
 ```
 Linux/Tauri app ── src-tauri (thin #[tauri::command] layer)
                           │
 macOS SwiftUI app ── crates/margins-ffi (UniFFI, thin)
-   macos/                 │
-                  crates/margins-core
+   apple/ (Margins)       │
+iOS SwiftUI app ── MarginsFFI.xcframework
+   apple/ (MarginsIOS)    │
+                   crates/margins-core
         EPUB parsing · library · notes · search · sync
              (plain-text storage, no Tauri, no UI)
 ```
@@ -46,26 +50,45 @@ no `chrono`/`usize`); errors are a flat `CoreError`. Sync export/import is
 not exposed (no UI for it yet on either platform).
 
 `scripts/build-core.sh` release-builds the staticlib and generates the Swift
-bindings into the SwiftPM layout (`macos/Sources/margins_ffiFFI/include/`
-for the C header + module map, `macos/Sources/MarginsCore/Generated/` for
+bindings into the SwiftPM layout (`apple/Sources/margins_ffiFFI/include/`
+for the C header + module map, `apple/Sources/MarginsCore/Generated/` for
 the Swift). Those paths are gitignored; run the script after changing the
 FFI surface.
 
-## The macOS app (`macos/`)
+The same script assembles `build/MarginsFFI.xcframework`: one static-library
+slice per platform (macOS host arch, or arm64 + x86_64 lipo'd with
+`UNIVERSAL=1`; iOS device `aarch64-apple-ios`; iOS simulator
+`aarch64-apple-ios-sim`, lipo'd with `x86_64-apple-ios-sim` when the
+toolchain ships that target), each carrying the UniFFI header and module
+map. `make ios-core` (`scripts/build-xcframework.sh`) builds all slices;
+the framework works on Command Line Tools alone — no Xcode needed to
+assemble it. Package.swift consumes it as a `binaryTarget`; SwiftPM links
+the slice archive into dependents but does not expose headers from binary
+targets, so the `margins_ffiFFI` header-only C target remains the module
+the generated bindings import. The old `.unsafeFlags` link of
+`target/release/libmargins_ffi.a` (an absolute macOS-only path) is gone.
 
-A SwiftPM package (no `.xcodeproj`; builds with Command Line Tools alone —
+## The Apple package (`apple/`)
+
+A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
+`.iOS(.v17)` — iOS 17 because the model layer uses `@Observable`). No
+`.xcodeproj` for the macOS side; builds with Command Line Tools alone —
 note that `swift test` never invokes test bundles on a CLT-only toolchain,
-so tests run through the `MarginsTests` runner executable). Targets:
+so tests run through the `MarginsTests` runner executable. Targets:
 
-- `margins_ffiFFI` — C target carrying the generated FFI header/module map.
+- `margins_ffiFFI` — C target carrying the generated FFI header/module map
+  (module source for the generated bindings; the archive itself comes from
+  the xcframework binaryTarget).
 - `MarginsCore` — generated bindings plus `CoreStore`, an actor wrapper that
   keeps synchronous Rust calls off the main actor.
 - `MarginsModel` — UI-agnostic model layer: `LibraryModel` (catalog,
   selection, import/remove), `ReaderModel` (open book/chapter, notes pane
   state), `ReaderResource` (scheme-handler routing), `ReaderKeymap`
   (vim-style key state machine). Unit-tested via `MarginsTests`.
-- `Margins` — SwiftUI app: library browser, reader (WKWebView + epub.js),
-  notes pane, search overlay, keyboard/trackpad routing.
+- `Margins` — macOS SwiftUI app: library browser, reader (WKWebView +
+  epub.js), notes pane, search overlay, keyboard/trackpad routing.
+- `MarginsIOS` — iOS SwiftUI app (placeholder entry point for now; the
+  scenes land in Phases 4–6 of `docs/ios-plan.md`).
 - `MarginsTests` — a Swift Testing **runner executable** (SwiftPM's test
   runner never invokes test bundles on the CLT toolchain; see the plan doc).
 
@@ -133,7 +156,8 @@ writes the file after an `NSSavePanel`; note bodies render as plain `Text`
 ## Building and running (macOS)
 
 ```bash
-make core        # build margins-ffi + generate Swift bindings
+make core        # build margins-ffi, generate Swift bindings, refresh the
+                 # macOS xcframework slice
 make mac-build   # build the Swift package
 make mac-test    # run the Swift Testing suite
 make mac-app     # assemble build/Margins.app (ad-hoc signed)
@@ -142,4 +166,5 @@ make mac-run     # mac-app + open it
 
 Requirements: Rust (stable) and Apple Command Line Tools. `cargo test
 --workspace` must keep passing at all times — the Tauri app is never broken
-by macOS work.
+by Apple-platform work. The iOS build path (`make ios-core`, Xcode, simulator)
+is described in `docs/ios-plan.md` and `docs/ios-agent-prompt.md`.

@@ -5,11 +5,11 @@ node_modules/
 target/
 dist/
 /build/
-macos/.build/
+apple/.build/
 
 # Generated UniFFI bindings (regenerate with make core)
-macos/Sources/margins_ffiFFI/include/
-macos/Sources/MarginsCore/Generated/
+apple/Sources/margins_ffiFFI/include/
+apple/Sources/MarginsCore/Generated/
 
 # Release artifacts (build/Margins.app, DMGs from the release flow)
 *.dmg
