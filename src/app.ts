@@ -324,7 +324,11 @@ export class App {
     edit.addEventListener("click", () => {
       this.editingMarkId = mark.id;
       this.renderNoteMarks();
-      row.querySelector("textarea")?.focus();
+      // The strip was just rebuilt; focus the textarea in the live DOM,
+      // not the detached row this closure captured.
+      (this.notesMarks.querySelector(
+        `li.mark-row[data-id="${CSS.escape(mark.id)}"] textarea`,
+      ) as HTMLTextAreaElement | null)?.focus();
     });
     const del = document.createElement("button");
     del.textContent = "del";
@@ -342,6 +346,7 @@ export class App {
       this.noteMarks = this.noteMarks.map((m) => (m.id === mark.id ? { ...mark, body } : m));
       this.editingMarkId = null;
       this.renderNoteMarks();
+      this.invalidateNotesPage();
       this.setStatus("saved mark");
     } catch (error) {
       this.setStatus(`could not save mark: ${errorMessage(error)}`);
@@ -354,9 +359,18 @@ export class App {
       await api.deleteMark(this.currentBook.id, this.currentChapter.key, mark.id);
       this.noteMarks = this.noteMarks.filter((m) => m.id !== mark.id);
       this.renderNoteMarks();
+      this.invalidateNotesPage();
       this.setStatus("deleted mark");
     } catch (error) {
       this.setStatus(`could not delete mark: ${errorMessage(error)}`);
+    }
+  }
+
+  /// Mark mutations change the compiled page's content; drop the cache so
+  /// reopening the page recompiles (same contract as prose saves).
+  private invalidateNotesPage(): void {
+    if (this.notesBookId === this.currentBook?.id) {
+      this.notesData = null;
     }
   }
 

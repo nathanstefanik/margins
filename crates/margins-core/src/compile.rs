@@ -2,8 +2,8 @@
 //! renders it as markdown. A read/compose layer over the existing note
 //! files — no storage change.
 
-use crate::models::{BookMeta, CompiledChapter, CompiledNotes, ExportOptions, Mark};
 use crate::marks;
+use crate::models::{BookMeta, CompiledChapter, CompiledNotes, ExportOptions, Mark};
 use crate::notes::{self, NotesError};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -196,7 +196,11 @@ pub fn render_markdown(notes: &CompiledNotes, opts: &ExportOptions) -> String {
 /// Renders a chapter's marks (already in reading order) as plain
 /// markdown — blockquote for the selection, body paragraphs, and a quiet
 /// italic attribution line. No HTML comments ever reach the export.
-fn render_marks(out: &mut String, chapter_marks: &[Mark], format_date: fn(DateTime<Utc>) -> String) {
+fn render_marks(
+    out: &mut String,
+    chapter_marks: &[Mark],
+    format_date: fn(DateTime<Utc>) -> String,
+) {
     if chapter_marks.is_empty() {
         return;
     }
@@ -539,7 +543,11 @@ mod tests {
              Prose body.\n\n{}",
             marks_section
         );
-        fs::write(book.dir.join("notes/chapters/001-introduction.md"), &content).unwrap();
+        fs::write(
+            book.dir.join("notes/chapters/001-introduction.md"),
+            &content,
+        )
+        .unwrap();
         let index_path = book.dir.join("notes/_index.json");
         let mut doc: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&index_path).unwrap()).unwrap();
