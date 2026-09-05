@@ -224,12 +224,53 @@ struct NotesPageView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 8)
             }
+
+            // Marks render as styled quotes/notes — never as the raw HTML
+            // comments they are on disk; plain Text only, like note bodies.
+            let marks = MarkDisplay.sortedForDisplay(chapter.marks)
+            if !marks.isEmpty {
+                Text(MarkDisplay.countText(marks.count))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+                ForEach(marks, id: \.id) { mark in
+                    markBlock(mark)
+                }
+                .padding(.bottom, 8)
+            }
         }
         .id(chapter.chapterKey)
     }
 
+    private func markBlock(_ mark: Mark) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if !mark.quote.isEmpty {
+                Text(mark.quote)
+                    .font(.callout)
+                    .italic()
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            if !mark.body.isEmpty {
+                Text(mark.body)
+                    .font(.system(.callout, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+            let attribution = MarkDisplay.attribution(percent: mark.percent, at: mark.at)
+            if !attribution.isEmpty {
+                Text(attribution)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func metaText(_ chapter: CompiledChapter) -> String {
         var parts = ["\(LibraryModel.groupedCount(chapter.wordCount)) words"]
+        if !chapter.marks.isEmpty {
+            parts.append(MarkDisplay.countText(chapter.marks.count))
+        }
         if let updated = chapter.updatedAt.flatMap(LibraryModel.parseRFC3339) {
             parts.append("updated \(LibraryModel.dateText(updated))")
         }

@@ -195,6 +195,10 @@ public final class ReaderModel {
     public private(set) var notePath: String?
     public private(set) var noteWordCount: UInt32?
     public private(set) var noteUpdatedAt: String?
+    /// The chapter note's quick marks (file order); shown by the notes
+    /// pane strip. Mutated by mark edit/delete, never by note reloads of
+    /// prose.
+    public private(set) var noteMarks: [Mark] = []
     public private(set) var notesError: String?
     public private(set) var noteSaveStatus: NoteSaveStatus = .idle
 
@@ -274,16 +278,29 @@ public final class ReaderModel {
     }
 
     /// Installs a freshly loaded note as the editor baseline.
-    public func noteLoaded(body: String, path: String?, wordCount: UInt32?, updatedAt: String?) {
+    public func noteLoaded(
+        body: String,
+        marks: [Mark] = [],
+        path: String?,
+        wordCount: UInt32?,
+        updatedAt: String?
+    ) {
         noteSaveTask?.cancel()
         noteSaveTask = nil
         noteBody = body
         noteBaseline = body
+        noteMarks = marks
         notePath = path
         noteWordCount = wordCount
         noteUpdatedAt = updatedAt
         notesError = nil
         noteSaveStatus = .idle
+    }
+
+    /// Replaces the pane's marks after an edit/delete on disk. The editor
+    /// body is untouched: prose and marks are disjoint in the note file.
+    public func noteMarksUpdated(_ marks: [Mark]) {
+        noteMarks = marks
     }
 
     /// Marks the current editor content as saved. `savedBody` is the text

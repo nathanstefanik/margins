@@ -39,6 +39,57 @@ struct NotesTests {
         #expect(reloaded.frontmatter.wordCount == saved.frontmatter.wordCount)
     }
 
+    @Test("marks round-trip through the FFI and survive a prose-only save")
+    func marksRoundTripThroughFFI() async throws {
+        let store = try CoreStore(dataDir: try makeTempDataDir())
+        let fixtures = try fixtureEpubs()
+        let fixture = try #require(fixtures.first)
+        let meta = try await store.importEpub(atPath: fixture)
+        let chapter = try #require(meta.chapters.first)
+
+        // Appending creates the note file; ids are core-assigned.
+        let first = try await store.appendMark(
+            bookId: meta.id, chapterKey: chapter.key,
+            cfi: "epubcfi(/6/2!/4/2)", percent: 12.5,
+            quote: "the brothers", body: "who is right?"
+        )
+        let second = try await store.appendMark(
+            bookId: meta.id, chapterKey: chapter.key,
+            cfi: nil, percent: nil,
+            quote: "", body: "page-anchored thought"
+        )
+        #expect(first.id.count == 10)
+        #expect(second.id != first.id)
+
+        // A marks-unaware prose save must not destroy them.
+        _ = try await store.saveChapterNote(
+            bookId: meta.id,
+            chapter: ChapterRef(key: chapter.key, epubCfi: nil),
+            body: "Edited prose.",
+            kind: nil
+        )
+        let reloaded = try await store.getChapterNote(bookId: meta.id, chapterKey: chapter.key)
+        #expect(reloaded.body == "Edited prose.")
+        #expect(reloaded.marks.map(\.id) == [first.id, second.id])
+
+        var edited = reloaded.marks[0]
+        edited.body = "corrected thought"
+        try await store.updateMark(bookId: meta.id, chapterKey: chapter.key, mark: edited)
+        let afterUpdate = try await store.getChapterNote(bookId: meta.id, chapterKey: chapter.key)
+        #expect(afterUpdate.marks[0].body == "corrected thought")
+
+        try await store.deleteMark(bookId: meta.id, chapterKey: chapter.key, markId: first.id)
+        let afterDelete = try await store.getChapterNote(bookId: meta.id, chapterKey: chapter.key)
+        #expect(afterDelete.marks.map(\.id) == [second.id])
+
+        let index = try await store.notesIndex(bookId: meta.id)
+        #expect(index[0].markCount == 1)
+
+        // The compiled page (notes scene / export) carries the survivor.
+        let compiled = try await store.compiledNotes(bookId: meta.id)
+        #expect(compiled.chapters[0].marks.map(\.id) == [second.id])
+    }
+
     @Test("updating a note preserves its creation time")
     func updatePreservesCreatedAt() async throws {
         let store = try CoreStore(dataDir: try makeTempDataDir())

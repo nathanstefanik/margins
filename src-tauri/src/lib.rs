@@ -107,6 +107,75 @@ fn get_chapter_note(
     notes::load_chapter_note(&library.book_dir(&book_id), &chapter_key).map_err(|e| e.to_string())
 }
 
+/// The spine's chapter record for a key, or an error for unknown keys.
+fn resolve_chapter(
+    library: &Library,
+    book_id: &str,
+    chapter_key: &str,
+) -> Result<margins_core::models::ChapterMeta, String> {
+    library
+        .get_book(book_id)
+        .map_err(|e| e.to_string())?
+        .chapters
+        .into_iter()
+        .find(|c| c.key == chapter_key)
+        .ok_or_else(|| format!("unknown chapter key: {chapter_key}"))
+}
+
+/// Appends a quick mark to the chapter's note file (creating the file when
+/// the chapter has no note yet). The id and timestamp are assigned by the
+/// core and returned in the `Mark`.
+#[tauri::command]
+fn append_mark(
+    state: State<'_, AppState>,
+    book_id: String,
+    chapter_key: String,
+    cfi: Option<String>,
+    percent: Option<f64>,
+    quote: String,
+    body: String,
+) -> Result<margins_core::models::Mark, String> {
+    let library = state.library.lock().map_err(|e| e.to_string())?;
+    let book_dir = library.book_dir(&book_id);
+    let chapter = resolve_chapter(&library, &book_id, &chapter_key)?;
+    let mark = notes::append_mark(&book_dir, &chapter, cfi, percent, &quote, &body)
+        .map_err(|e| e.to_string())?;
+    library.refresh_note_index(&book_id);
+    Ok(mark)
+}
+
+/// Replaces the mark (matched by id) in the chapter's note file.
+#[tauri::command]
+fn update_mark(
+    state: State<'_, AppState>,
+    book_id: String,
+    chapter_key: String,
+    mark: margins_core::models::Mark,
+) -> Result<(), String> {
+    let library = state.library.lock().map_err(|e| e.to_string())?;
+    let book_dir = library.book_dir(&book_id);
+    let chapter = resolve_chapter(&library, &book_id, &chapter_key)?;
+    notes::update_mark(&book_dir, &chapter, mark).map_err(|e| e.to_string())?;
+    library.refresh_note_index(&book_id);
+    Ok(())
+}
+
+/// Removes the mark with `mark_id` from the chapter's note file.
+#[tauri::command]
+fn delete_mark(
+    state: State<'_, AppState>,
+    book_id: String,
+    chapter_key: String,
+    mark_id: String,
+) -> Result<(), String> {
+    let library = state.library.lock().map_err(|e| e.to_string())?;
+    let book_dir = library.book_dir(&book_id);
+    let chapter = resolve_chapter(&library, &book_id, &chapter_key)?;
+    notes::delete_mark(&book_dir, &chapter, &mark_id).map_err(|e| e.to_string())?;
+    library.refresh_note_index(&book_id);
+    Ok(())
+}
+
 #[tauri::command]
 fn save_chapter_note(
     state: State<'_, AppState>,
@@ -315,6 +384,9 @@ pub fn run() {
             read_epub_bytes,
             get_chapter_note,
             save_chapter_note,
+            append_mark,
+            update_mark,
+            delete_mark,
             search_notes,
             get_compiled_notes,
             export_notes_markdown,

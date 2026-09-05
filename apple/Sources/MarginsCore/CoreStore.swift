@@ -97,6 +97,36 @@ public actor CoreStore {
         try core.saveChapterNote(bookId: bookId, chapter: chapter, body: body, kind: kind)
     }
 
+    /// Appends a quick mark to the chapter's note file (creating the file
+    /// when the chapter has no note yet); the core assigns id + timestamp.
+    public func appendMark(
+        bookId: String,
+        chapterKey: String,
+        cfi: String?,
+        percent: Double?,
+        quote: String,
+        body: String
+    ) throws -> Mark {
+        try core.appendMark(
+            bookId: bookId,
+            chapterKey: chapterKey,
+            cfi: cfi,
+            percent: percent,
+            quote: quote,
+            body: body
+        )
+    }
+
+    /// Replaces the mark (matched by id) in the chapter's note file.
+    public func updateMark(bookId: String, chapterKey: String, mark: Mark) throws {
+        try core.updateMark(bookId: bookId, chapterKey: chapterKey, mark: mark)
+    }
+
+    /// Removes the mark with `markId` from the chapter's note file.
+    public func deleteMark(bookId: String, chapterKey: String, markId: String) throws {
+        try core.deleteMark(bookId: bookId, chapterKey: chapterKey, markId: markId)
+    }
+
     public func searchNotes(query: String) throws -> [NoteSearchHit] {
         try core.searchNotes(query: query)
     }

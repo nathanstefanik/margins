@@ -44,7 +44,8 @@ files are byte-identical regardless of which app wrote them.
 A thin UniFFI 0.29 (proc-macro mode) wrapper over the core. One exported
 object, `MarginsCore`, with `list_books`, `import_epub`, `get_book`,
 `remove_book`, `read_epub_bytes`, `get_chapter_note`, `save_chapter_note`,
-`get_compiled_notes`, `render_notes_markdown`, `search_notes` — records
+`append_mark`, `update_mark`, `delete_mark`, `get_compiled_notes`,
+`render_notes_markdown`, `search_notes` — records
 mirror `models.rs` with RFC3339 date strings and `u32` counts (UniFFI has
 no `chrono`/`usize`); errors are a flat `CoreError`. Sync export/import is
 not exposed (no UI for it yet on either platform).
