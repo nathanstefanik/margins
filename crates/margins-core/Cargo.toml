@@ -1,9 +1,9 @@
 [package]
 name = "margins-core"
-version = "0.1.0"
+version.workspace = true
 description = "EPUB library, notes, and sync core for Margins"
 edition = "2021"
-license = "GPL-3.0-or-later"
+license.workspace = true
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
