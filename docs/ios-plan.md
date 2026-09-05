@@ -1,6 +1,6 @@
 # Development plan: iOS app
 
-Status: Phase 1–2 implemented · Phases 3–7 pending · Owner: TBD · Last updated: 2026-09-05
+Status: Phase 1–3 implemented · Phases 4–7 pending · Owner: TBD · Last updated: 2026-09-05
 
 ## Goal
 
@@ -275,7 +275,7 @@ tests, Tauri build + keymap regression green. Implementation notes:
 - `search.rs` indexes long-form bodies only; mark text is not searchable.
   Deliberate for v1 — revisit if marks search is wanted.
 
-### Phase 3 — Render marks in Tauri and macOS
+### Phase 3 — Render marks in Tauri and macOS — DONE (2026-09-05)
 
 - Compiled notes page (Tauri `notes-view`, macOS `NotesPageView`) and both
   notes panes render marks as styled quotes/notes — never raw HTML comments.
@@ -284,6 +284,20 @@ tests, Tauri build + keymap regression green. Implementation notes:
   affordances only; capture stays iOS-only this phase.
 - Exit: `npm run tauri build`; `make mac-test`; manual pass against the
   Karamazov fixture on both platforms.
+
+Met 2026-09-05: Tauri gained `append_mark`/`update_mark`/`delete_mark`
+commands + api wrappers, a pane marks strip (edit/delete, edit via inline
+textarea) and compiled-page mark sections; macOS gained the same strip in
+`NotesPane` (edit sheet, delete), compiled-page marks in `NotesPageView`,
+and a tested `MarkDisplay` helper in MarginsModel. Mark text renders via
+`textContent` / plain `Text` only — the security property holds. Strip
+mutations never reload the editor (prose and marks are disjoint), and mark
+ops refresh an open compiled page. Verified: `cargo test --workspace`,
+`make mac-test` (79, incl. a new end-to-end CoreStore marks round-trip),
+`npm run tauri build` (compile + .app bundle green; the DMG sub-bundler
+fails in this headless environment — pre-existing, the release flow builds
+DMGs via `make mac-app-universal`). On-screen clicks remain for the next
+human pass on each platform.
 
 ### Phase 4 — iOS app skeleton + Library scene
 

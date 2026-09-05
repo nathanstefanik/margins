@@ -246,7 +246,7 @@ button:disabled {
 
 .notes-pane {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto;
   border-left: 1px solid var(--border);
   background: var(--bg-elevated);
   min-height: 0;
@@ -540,6 +540,99 @@ mark {
 
 .notes-page-empty {
   color: var(--muted);
+}
+
+/* Marks strip — pane and compiled page. Quote/body/meta are user text:
+   set via textContent only, never innerHTML. */
+.notes-marks {
+  border-top: 1px solid var(--border);
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 0.4rem 0.8rem 0.5rem;
+}
+
+.marks-strip-header {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0.2rem 0 0.3rem;
+}
+
+.marks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mark-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mark-row:last-child {
+  border-bottom: none;
+}
+
+.mark-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.mark-quote {
+  margin: 0 0 0.2rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--border);
+  color: var(--muted);
+  font-style: italic;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mark-body {
+  margin: 0 0 0.15rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mark-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.mark-actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.mark-actions button {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  color: var(--muted);
+}
+
+.mark-actions button:hover {
+  color: var(--text);
+}
+
+.mark-edit {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.mark-edit textarea {
+  resize: vertical;
+  min-height: 2.2rem;
+}
+
+.notes-section-marks {
+  margin: 0.4rem 0 0.75rem;
 }
 
 @media (max-width: 1000px) {

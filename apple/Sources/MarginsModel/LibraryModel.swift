@@ -463,10 +463,41 @@ public final class LibraryModel {
             let note = try await store.getChapterNote(bookId: book.id, chapterKey: chapter.key)
             reader.noteLoaded(
                 body: note.body,
+                marks: note.marks,
                 path: note.path.isEmpty ? nil : note.path,
                 wordCount: note.frontmatter.wordCount,
                 updatedAt: note.frontmatter.updatedAt
             )
+        } catch {
+            reader.noteFailed(String(describing: error))
+        }
+    }
+
+    /// Deletes a quick mark from the reader's current chapter note. The
+    /// editor body is untouched (prose and marks are disjoint); the mark
+    /// list and any open compiled page refresh.
+    public func deleteMark(_ mark: Mark, reader: ReaderModel) async {
+        guard let store, let book = reader.book, let chapter = reader.chapter else { return }
+        do {
+            try await store.deleteMark(bookId: book.id, chapterKey: chapter.key, markId: mark.id)
+            reader.noteMarksUpdated(reader.noteMarks.filter { $0.id != mark.id })
+            await refreshCompiledNotesAfterSave(bookId: book.id)
+        } catch {
+            reader.noteFailed(String(describing: error))
+        }
+    }
+
+    /// Replaces a quick mark's text in the reader's current chapter note.
+    public func updateMark(_ mark: Mark, body: String, reader: ReaderModel) async {
+        guard let store, let book = reader.book, let chapter = reader.chapter else { return }
+        do {
+            var updated = mark
+            updated.body = body
+            try await store.updateMark(bookId: book.id, chapterKey: chapter.key, mark: updated)
+            reader.noteMarksUpdated(
+                reader.noteMarks.map { $0.id == mark.id ? updated : $0 }
+            )
+            await refreshCompiledNotesAfterSave(bookId: book.id)
         } catch {
             reader.noteFailed(String(describing: error))
         }
