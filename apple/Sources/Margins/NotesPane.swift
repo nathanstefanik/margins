@@ -32,6 +32,11 @@ struct NotesPane: View {
         .onChange(of: reader.readerFocusRequest) {
             editorFocused = false
         }
+        .onChange(of: reader.chapter?.key) {
+            // A mark draft belongs to one chapter; switching chapters must
+            // not aim the pending update at the new one.
+            markDraft = nil
+        }
         .sheet(item: $markDraft) { draft in
             markEditSheet(draft)
         }

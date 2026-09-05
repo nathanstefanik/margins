@@ -143,23 +143,26 @@ fn parse_note_content(raw: &str, chapter_key: &str) -> Result<NoteFile, NotesErr
 /// the indexed file when present, else the name the note would get.
 fn note_relative_path(book_dir: &Path, chapter: &ChapterMeta) -> Result<String, NotesError> {
     let index = read_notes_index(book_dir)?;
-    Ok(match index.chapters.iter().find(|e| e.chapter_key == chapter.key) {
-        Some(entry) => entry.file.clone(),
-        None => format!(
-            "chapters/{}-{}.md",
-            chapter.key,
-            slugify(&chapter.title)
-        ),
-    })
+    Ok(
+        match index.chapters.iter().find(|e| e.chapter_key == chapter.key) {
+            Some(entry) => entry.file.clone(),
+            None => format!("chapters/{}-{}.md", chapter.key, slugify(&chapter.title)),
+        },
+    )
 }
 
 /// Reads and parses the chapter's note file, if it exists.
 fn read_note_file(book_dir: &Path, chapter: &ChapterMeta) -> Result<Option<NoteFile>, NotesError> {
-    let path = book_dir.join("notes").join(note_relative_path(book_dir, chapter)?);
+    let path = book_dir
+        .join("notes")
+        .join(note_relative_path(book_dir, chapter)?);
     if !path.is_file() {
         return Ok(None);
     }
-    Ok(Some(parse_note_content(&fs::read_to_string(&path)?, &chapter.key)?))
+    Ok(Some(parse_note_content(
+        &fs::read_to_string(&path)?,
+        &chapter.key,
+    )?))
 }
 
 /// Adds or replaces the index entry for `chapter`, keeping the index
@@ -296,7 +299,10 @@ pub fn append_mark(
 
     let (items, existing_body, ids) = match existing {
         Some(note) => {
-            let ids = marks::marks(&note.items).iter().map(|m| m.id.clone()).collect();
+            let ids = marks::marks(&note.items)
+                .iter()
+                .map(|m| m.id.clone())
+                .collect();
             (note.items, note.body, ids)
         }
         None => (Vec::new(), String::new(), Vec::new()),
@@ -674,10 +680,8 @@ mod tests {
     /// Frontmatter block matching `seed_book`'s chapter, for hand-composed
     /// note files.
     fn frontmatter_block(book_dir: &Path, chapter_key: &str) -> String {
-        let meta: crate::models::BookMeta = serde_json::from_str(
-            &fs::read_to_string(book_dir.join("meta.json")).unwrap(),
-        )
-        .unwrap();
+        let meta: crate::models::BookMeta =
+            serde_json::from_str(&fs::read_to_string(book_dir.join("meta.json")).unwrap()).unwrap();
         let chapter = meta.chapters.iter().find(|c| c.key == chapter_key).unwrap();
         format!(
             "---\nbook_id: {}\nchapter_key: '{}'\nchapter_index: {}\n\
@@ -696,16 +700,10 @@ mod tests {
             body,
             marks_region
         );
-        let meta: crate::models::BookMeta = serde_json::from_str(
-            &fs::read_to_string(book_dir.join("meta.json")).unwrap(),
-        )
-        .unwrap();
+        let meta: crate::models::BookMeta =
+            serde_json::from_str(&fs::read_to_string(book_dir.join("meta.json")).unwrap()).unwrap();
         let chapter = meta.chapters.iter().find(|c| c.key == chapter_key).unwrap();
-        let file = format!(
-            "chapters/{}-{}.md",
-            chapter.key,
-            slugify(&chapter.title)
-        );
+        let file = format!("chapters/{}-{}.md", chapter.key, slugify(&chapter.title));
         fs::write(book_dir.join("notes").join(&file), content).unwrap();
         let index_path = book_dir.join("notes/_index.json");
         let mut doc: serde_json::Value =
@@ -726,17 +724,26 @@ mod tests {
     }
 
     /// The marks region of a note file: sentinel line through end of file.
+    /// The path comes from the index (source of truth after a retitle
+    /// rename), falling back to the slug-derived name for index-less
+    /// fixtures.
     fn marks_region(book_dir: &Path, chapter_key: &str) -> String {
-        let meta: crate::models::BookMeta = serde_json::from_str(
-            &fs::read_to_string(book_dir.join("meta.json")).unwrap(),
-        )
-        .unwrap();
-        let chapter = meta.chapters.iter().find(|c| c.key == chapter_key).unwrap();
-        let file = format!(
-            "chapters/{}-{}.md",
-            chapter.key,
-            slugify(&chapter.title)
-        );
+        let index = read_notes_index(book_dir).unwrap();
+        let file = match index
+            .chapters
+            .iter()
+            .find(|e| e.chapter_key == chapter_key)
+            .map(|e| e.file.clone())
+        {
+            Some(file) => file,
+            None => {
+                let meta: crate::models::BookMeta =
+                    serde_json::from_str(&fs::read_to_string(book_dir.join("meta.json")).unwrap())
+                        .unwrap();
+                let chapter = meta.chapters.iter().find(|c| c.key == chapter_key).unwrap();
+                format!("chapters/{}-{}.md", chapter.key, slugify(&chapter.title))
+            }
+        };
         let raw = fs::read_to_string(book_dir.join("notes").join(&file)).unwrap();
         raw[raw.find(marks::SENTINEL).unwrap()..].to_string()
     }
@@ -771,7 +778,11 @@ mod tests {
 
         assert_eq!(saved.body, "Edited prose.");
         assert_eq!(saved.marks.len(), 2);
-        assert_eq!(marks_region(book_dir, "001"), before, "marks must be byte-identical");
+        assert_eq!(
+            marks_region(book_dir, "001"),
+            before,
+            "marks must be byte-identical"
+        );
 
         // Word count follows the long-form body only.
         assert_eq!(saved.frontmatter.word_count, count_words("Edited prose."));
@@ -790,8 +801,13 @@ mod tests {
         // hand-editing one mark's text in the textarea first.
         let edited = two_mark_section().replace("second thought.", "hand-edited thought.");
         let body = format!("Prose again.\n\n{}", edited);
-        save_chapter_note(book_dir, &chapter, load_chapter_note(book_dir, "001").unwrap().frontmatter, &body)
-            .unwrap();
+        save_chapter_note(
+            book_dir,
+            &chapter,
+            load_chapter_note(book_dir, "001").unwrap().frontmatter,
+            &body,
+        )
+        .unwrap();
 
         let raw = fs::read_to_string(
             book_dir
@@ -848,7 +864,7 @@ mod tests {
         // Both original blocks are byte-identical prefixes of the new file.
         let a_block_start = before.find("id=baaaaaaaaaa").unwrap();
         let b_block_start = before.find("id=bbbbbbbbbbb").unwrap();
-        assert!(after.contains(&before[a_block_start..b_block_start].trim_end()));
+        assert!(after.contains(before[a_block_start..b_block_start].trim_end()));
         assert!(after.ends_with("a fresh thought\n"));
 
         let loaded = load_chapter_note(book_dir, "001").unwrap();
@@ -856,7 +872,10 @@ mod tests {
         assert_eq!(loaded.marks.len(), 3);
         let index = read_notes_index(book_dir).unwrap();
         assert_eq!(index.chapters[0].mark_count, 3);
-        assert_eq!(index.chapters[0].word_count, 3, "long-form word count unchanged");
+        assert_eq!(
+            index.chapters[0].word_count, 3,
+            "long-form word count unchanged"
+        );
     }
 
     #[test]
@@ -897,6 +916,44 @@ mod tests {
         // Unknown ids are errors, not silent no-ops.
         assert!(update_mark(book_dir, &chapter, loaded.marks[0].clone()).is_err());
         assert!(delete_mark(book_dir, &chapter, "zzzzzzzzzzz").is_err());
+    }
+
+    #[test]
+    fn retitled_chapter_save_keeps_marks_byte_identically() {
+        let tmp = tempfile::tempdir().unwrap();
+        let book_dir = tmp.path();
+        let chapter = seed_book(book_dir);
+
+        // First save carries prose plus a marks section (body-authoritative).
+        let marked_body = format!(
+            "Original prose.\n\n{}\n\n<!-- margins:mark id=baaaaaaaaaa cfi=\"epubcfi(/6/2)\" at=2026-09-05T10:00:00Z percent=12.5 -->\n> quote\n\nthought.\n",
+            marks::SENTINEL
+        );
+        let frontmatter = load_chapter_note(book_dir, "001").unwrap().frontmatter;
+        save_chapter_note(book_dir, &chapter, frontmatter.clone(), &marked_body).unwrap();
+        let before = marks_region(book_dir, "001");
+
+        // The library scan re-derived the title; the next save renames the
+        // file. Marks must survive the move byte-for-byte — the save reads
+        // the file from its final path, not the pre-rename index entry.
+        let retitled = ChapterMeta {
+            title: "Opening Remarks".into(),
+            ..chapter.clone()
+        };
+        save_chapter_note(book_dir, &retitled, frontmatter, "Second draft.").unwrap();
+
+        assert!(second_path_exists(book_dir, "001", "opening-remarks"));
+        assert_eq!(marks_region(book_dir, "001"), before);
+        let index = read_notes_index(book_dir).unwrap();
+        assert_eq!(index.chapters[0].file, "chapters/001-opening-remarks.md");
+        assert_eq!(index.chapters[0].mark_count, 1);
+    }
+
+    fn second_path_exists(book_dir: &Path, key: &str, slug: &str) -> bool {
+        book_dir
+            .join("notes")
+            .join(format!("chapters/{key}-{slug}.md"))
+            .is_file()
     }
 
     #[test]

@@ -208,7 +208,11 @@ Rules:
   form above.
 - **Losslessness beats tidiness.** Unparsable content inside the section
   (a stray line, a hand-mangled comment) is preserved verbatim on
-  round-trip as a raw block, never dropped.
+  round-trip as a raw block, never dropped. Note: raw blocks stay on disk
+  and are visible to file editors, but the frontends' strips render parsed
+  marks only — a typed-in-prose `<!-- margins:marks -->` line starts a
+  marks section, so what follows it lives on disk as raw blocks rather
+  than in the long-form body.
 - **Blob frontends cannot destroy marks.** `save_chapter_note` treats the
   incoming body as authoritative for any marks section it contains (so a
   stale frontend saving back what it loaded — possibly with hand edits —

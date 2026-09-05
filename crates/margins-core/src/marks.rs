@@ -68,7 +68,10 @@ pub fn split_body(content: &str) -> (String, Option<String>) {
                 .skip_while(|l| l.trim().is_empty())
                 .collect::<Vec<_>>()
                 .join("\n");
-            while body_lines.last().is_some_and(|l: &&str| l.trim().is_empty()) {
+            while body_lines
+                .last()
+                .is_some_and(|l: &&str| l.trim().is_empty())
+            {
                 body_lines.pop();
             }
             return (body_lines.join("\n"), Some(rest));
@@ -290,7 +293,11 @@ fn parse_comment(comment: &str) -> Option<PartialMark> {
             "cfi" => {
                 cfi = Some(value);
             }
-            "at" => at = DateTime::parse_from_rfc3339(&value).ok().map(|t| t.with_timezone(&Utc)),
+            "at" => {
+                at = DateTime::parse_from_rfc3339(&value)
+                    .ok()
+                    .map(|t| t.with_timezone(&Utc))
+            }
             "percent" => percent = value.parse::<f64>().ok(),
             _ => {}
         }
@@ -416,7 +423,12 @@ mod tests {
 
     #[test]
     fn canonical_block_round_trips_through_parser() {
-        let m = mark("b01j8q3k2m", Some(38.2), "quoted selection", "The quick thought.");
+        let m = mark(
+            "b01j8q3k2m",
+            Some(38.2),
+            "quoted selection",
+            "The quick thought.",
+        );
         let block = canonical_block(&m);
         let items = parse_section(&format!("{SENTINEL}\n\n{block}\n"));
         let parsed = marks(&items);
@@ -473,7 +485,12 @@ mod tests {
     fn sentinel_inside_mark_body_is_just_text() {
         let section = format!(
             "{SENTINEL}\n\n{}\n",
-            canonical_block(&mark("b01j8q3k5q", None, "", "see <!-- margins:marks --> below"))
+            canonical_block(&mark(
+                "b01j8q3k5q",
+                None,
+                "",
+                "see <!-- margins:marks --> below"
+            ))
         );
         let parsed = marks(&parse_section(&section));
         assert_eq!(parsed.len(), 1);
@@ -526,7 +543,9 @@ mod tests {
         let second = new_mark_id();
         assert_eq!(first.len(), 10);
         assert_eq!(second.len(), 10);
-        assert!(first.chars().all(|c| "0123456789abcdefghjkmnpqrstvwxyz".contains(c)));
+        assert!(first
+            .chars()
+            .all(|c| "0123456789abcdefghjkmnpqrstvwxyz".contains(c)));
         assert!(first < second, "ids must sort by time: {first} !< {second}");
     }
 
@@ -566,5 +585,39 @@ mod tests {
         sort_reading_order(&mut list);
         let ids: Vec<&str> = list.iter().map(|m| m.id.as_str()).collect();
         assert_eq!(ids, ["aaaaaaaaaaa", "ccccccccccc", "bbbbbbbbbbb"]);
+    }
+
+    #[test]
+    fn adversarial_input_never_panics_and_stays_lossless() {
+        let nasty = [
+            "",
+            "\n\n\n",
+            "<!-- margins:mark -->",
+            "<!-- margins:mark id=x -->",
+            "<!-- margins:mark id=x at=garbage -->",
+            "<!-- margins:mark id=\"\" cfi=\"unterminated",
+            "<!-- margins:mark percent=abc at=2026-09-05T10:00:00Z id=xx -->\n> q\n\nb",
+            "stray --> fragments <!-- without\nany comment structure",
+            "<!-- margins:mark id=yy at=2026-09-05T10:00:00Z -->\n> \n\n> nested\n\nbody > arrow",
+            "unicode: 中文 — em—dash … emoji 📚\n\n<!-- margins:mark id=zz at=2026-09-05T10:00:00Z percent=100 -->\n> 引用\n\n笔记",
+        ];
+        for section in nasty {
+            let items = parse_section(section);
+            // Whatever was parsed must survive a re-serialization round trip
+            // with the same block count and the same marks.
+            let expected_marks = marks(&items);
+            let round = parse_section(&serialize_items(&items));
+            assert_eq!(marks(&round), expected_marks, "section: {section:?}");
+        }
+    }
+
+    #[test]
+    fn comment_with_cfi_containing_comment_end_survives() {
+        // `-->` inside a quoted cfi is unusual but must not break parsing:
+        // the line-suffix strip takes the final comment end.
+        let section = "<!-- margins:mark id=aa at=2026-09-05T10:00:00Z cfi=\"epubcfi(a-->b)\" -->\n> q\n\nb\n";
+        let parsed = marks(&parse_section(section));
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].cfi.as_deref(), Some("epubcfi(a-->b)"));
     }
 }
