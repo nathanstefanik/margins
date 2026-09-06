@@ -9,8 +9,8 @@ use margins_core::notes;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use types::{
-    BookMeta, BookSummary, ChapterNote, ChapterRef, CompiledNotes, ExportOptions, Mark, NoteIndexEntry,
-    NoteSearchHit, ReadingPosition,
+    BookMeta, BookSummary, ChapterNote, ChapterRef, CompiledNotes, ExportOptions, Mark,
+    NoteIndexEntry, NoteSearchHit, ReadingPosition,
 };
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -246,14 +246,7 @@ impl MarginsCore {
         let library = self.library.lock().map_err(poisoned)?;
         let book_dir = library.book_dir(&book_id);
         let chapter_meta = resolve_chapter(&library, &book_id, &chapter_key)?;
-        let mark = notes::append_mark(
-            &book_dir,
-            &chapter_meta,
-            cfi,
-            percent,
-            &quote,
-            &body,
-        )?;
+        let mark = notes::append_mark(&book_dir, &chapter_meta, cfi, percent, &quote, &body)?;
         library.refresh_note_index(&book_id);
         Ok(mark.into())
     }
