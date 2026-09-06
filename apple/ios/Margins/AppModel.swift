@@ -1,0 +1,53 @@
+import Foundation
+import Observation
+import MarginsModel
+
+/// App-level glue for the iOS target: resolves the library location once
+/// per launch (ubiquity container paths change between installs) and owns
+/// the shared `LibraryModel`.
+@MainActor
+@Observable
+final class AppModel {
+    let library: LibraryModel
+    let libraryLocation: LibraryLocation
+    /// Where the library root resolved to this launch; the scene surfaces
+    /// the reason whenever the runtime fallback kicked in.
+    let locationSource: LibraryLocation.Source
+
+    var locationNotice: String?
+
+    init() {
+        let location = LibraryLocation()
+        libraryLocation = location
+        locationSource = location.resolve()
+
+        // The core's config.json (which remembers the library root) lives
+        // in Application Support; the library itself goes in the resolved
+        // location below.
+        let support = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Margins", isDirectory: true)
+        try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        library = LibraryModel(dataDir: support.path)
+    }
+
+    /// Opens the store, then pins the core to the freshly resolved root.
+    /// Runs every launch: container paths are not stable across installs,
+    /// and the saved root must never go stale.
+    func activate() async {
+        await library.activate()
+        let root: String
+        switch locationSource {
+        case .iCloudDocuments(let path):
+            root = path
+            locationNotice = nil
+        case .localDocuments(let path):
+            root = path
+            locationNotice =
+                "iCloud unavailable — the library is stored locally under On My iPhone."
+        }
+        if library.libraryRoot != root {
+            await library.setLibraryRoot(root)
+        }
+    }
+}

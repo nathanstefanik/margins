@@ -56,6 +56,11 @@ make mac-app     # assemble build/Margins.app (ad-hoc signed)
 make mac-run     # mac-app + open it
 ```
 
+The iOS app itself builds from `apple/ios/Margins.xcodeproj` (open in Xcode,
+or `xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins -destination
+'platform=iOS Simulator,name=iPhone 17 Pro'`). See
+[docs/ios-plan.md](docs/ios-plan.md) for the phased status.
+
 macOS keybindings:
 
 | Key | Action |
