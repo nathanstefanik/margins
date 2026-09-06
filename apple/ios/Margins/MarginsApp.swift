@@ -9,6 +9,7 @@ struct MarginsApp: App {
         WindowGroup {
             LibraryScene()
                 .environment(app.library)
+                .environment(app.reader)
                 .environment(app)
                 .task { await app.activate() }
         }

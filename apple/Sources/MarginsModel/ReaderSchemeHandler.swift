@@ -1,19 +1,23 @@
 import Foundation
 import WebKit
-import MarginsModel
 
 /// Serves the five fixed `margins-reader://` resources. Everything else —
 /// traversal, nested paths, unknown names — fails without touching the
 /// filesystem beyond the vendored reader directory.
-final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
+///
+/// Lives in MarginsModel so the macOS app and the iOS app serve the exact
+/// same allowlist from the same vendored assets (this target's resource
+/// bundle). The load-bearing response-type rules are documented inline and
+/// in docs/architecture.md.
+public final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
     private let bytesProvider: @Sendable (String) throws -> Data
 
-    init(bytesProvider: @escaping @Sendable (String) throws -> Data) {
+    public init(bytesProvider: @escaping @Sendable (String) throws -> Data) {
         self.bytesProvider = bytesProvider
         super.init()
     }
 
-    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+    public func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         guard let url = task.request.url, let resource = ReaderResource(path: url.path) else {
             task.didFailWithError(ReaderError.unknownResource)
             return
@@ -71,7 +75,7 @@ final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
 
-    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {
+    public func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {
         // Responses are delivered synchronously in start; nothing to cancel.
     }
 }

@@ -112,13 +112,29 @@ public final class ReaderModel {
             page: min(max(page, 1), max(safeTotal, 1)),
             totalPages: safeTotal
         )
-        if let href, let book,
-           let match = book.chapters.first(where: { $0.href == href }),
-           match.key != chapter?.key {
-            flushNoteSave()
-            chapter = match
+        if let href, let book, let match = Self.chapter(forHref: href, in: book) {
+            if match.key != chapter?.key {
+                flushNoteSave()
+                chapter = match
+            }
         }
         schedulePositionSave(cfi: cfi)
+    }
+
+    /// epub.js reports section hrefs *manifest-relative* ("wrap0000.html")
+    /// while the core's spine hrefs are *zip-root-relative*
+    /// ("OEBPS/wrap0000.html"). Match exactly, then by path suffix, then by
+    /// basename — mirroring `readerResolveSpineTarget` in reader.js.
+    public nonisolated static func chapter(forHref href: String, in book: BookMeta) -> ChapterMeta? {
+        let chapters = book.chapters
+        if let exact = chapters.first(where: { $0.href == href }) {
+            return exact
+        }
+        if let suffix = chapters.first(where: { $0.href.hasSuffix("/" + href) }) {
+            return suffix
+        }
+        let base = (href as NSString).lastPathComponent
+        return chapters.first(where: { ($0.href as NSString).lastPathComponent == base })
     }
 
     /// Percent complete for the whole book (0–100), interpolated from the

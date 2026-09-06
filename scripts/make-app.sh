@@ -36,12 +36,13 @@ else
   echo "warning: Margins.icns not found at $icon (run scripts/make-icon.swift)" >&2
 fi
 
-resources_bundle="$build_dir/Margins_Margins.bundle"
-if [ -d "$resources_bundle" ]; then
-  cp -R "$resources_bundle" "$app/Contents/Resources/"
-else
-  echo "warning: SwiftPM resource bundle not found at $resources_bundle" >&2
-fi
+for bundle in "$build_dir/Margins_Margins.bundle" "$build_dir/Margins_MarginsModel.bundle"; do
+  if [ -d "$bundle" ]; then
+    cp -R "$bundle" "$app/Contents/Resources/"
+  else
+    echo "warning: expected SwiftPM resource bundle not found at $bundle" >&2
+  fi
+done
 
 version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/Cargo.toml" | head -n 1)
 if [ -z "$version" ]; then

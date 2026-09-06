@@ -123,6 +123,16 @@ struct LibraryScene: View {
                 }
                 query = ProcessInfo.processInfo.environment["MARGINS_SEARCH_FIXTURE"] ?? ""
             }
+            if ProcessInfo.processInfo.environment["MARGINS_OPEN_FIXTURE"] != nil {
+                // Push the first book's detail so the scene flow is
+                // reachable without touch synthesis.
+                for _ in 0..<50 where library.books.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+                if let first = library.books.first {
+                    pushedBook = PushedBook(id: first.id)
+                }
+            }
             if let mode = ProcessInfo.processInfo.environment["MARGINS_DELETE_FIXTURE"] {
                 for _ in 0..<50 where library.books.isEmpty {
                     try? await Task.sleep(for: .milliseconds(200))

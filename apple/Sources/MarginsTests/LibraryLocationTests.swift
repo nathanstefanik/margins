@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import MarginsCore
-@testable import MarginsModel
+import MarginsModel
 
 @Suite("LibraryLocation")
 struct LibraryLocationTests {

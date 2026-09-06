@@ -60,18 +60,20 @@ let package = Package(
         ),
         .executableTarget(
             name: "Margins",
-            dependencies: ["MarginsCore", "MarginsModel"],
+            dependencies: ["MarginsCore", "MarginsModel"]
+        ),
+        // UI-agnostic model layer for the library browser (import, remove,
+        // selection, errors). Separate target so MarginsTests can unit-test
+        // it without touching SwiftUI. Carries the vendored epub.js reader
+        // bundle + scheme handler so both Apple apps serve identical
+        // reader assets.
+        .target(
+            name: "MarginsModel",
+            dependencies: ["MarginsCore"],
             resources: [
                 // Vendored epub.js renderer (see docs/architecture.md).
                 .copy("Resources/reader")
             ]
-        ),
-        // UI-agnostic model layer for the library browser (import, remove,
-        // selection, errors). Separate target so MarginsTests can unit-test
-        // it without touching SwiftUI.
-        .target(
-            name: "MarginsModel",
-            dependencies: ["MarginsCore"]
         ),
         // Swift Testing tests. This is an executable rather than a
         // .testTarget because SwiftPM 6.3.2 on this CLT-only machine links

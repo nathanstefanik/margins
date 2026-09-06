@@ -9,6 +9,7 @@ import MarginsModel
 @Observable
 final class AppModel {
     let library: LibraryModel
+    let reader: ReaderModel
     let libraryLocation: LibraryLocation
     /// Where the library root resolved to this launch; the scene surfaces
     /// the reason whenever the runtime fallback kicked in.
@@ -29,6 +30,14 @@ final class AppModel {
             .appendingPathComponent("Margins", isDirectory: true)
         try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         library = LibraryModel(dataDir: support.path)
+        reader = ReaderModel()
+
+        // Wire the reader into the library: removals close the reader, and
+        // the debounced position saver persists through the store.
+        library.reader = reader
+        reader.positionSaver = { [weak library] bookId, position in
+            await library?.saveReadingPosition(bookId: bookId, position: position)
+        }
     }
 
     /// Opens the store, then pins the core to the freshly resolved root.

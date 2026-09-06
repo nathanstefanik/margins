@@ -128,17 +128,18 @@ Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architectur
 - iOS app skeleton + **Library scene**: cover grid, document-picker import,
   delete with confirmation, notes search; iCloud Documents library root with
   runtime local fallback; simulator-verified (light/dark, iPhone/iPad)
+- iOS **book detail** (Contents / Notes tabs, compiled marks, ShareLink
+  export) and the **Reader**: shared epub.js bundle, tap zones + hardware
+  keys, immersive chrome, typography, CFI position persistence — and a
+  latent macOS chapter-jump bug fixed along the way
 
 **In progress**
 
-- iOS Phase 5: book detail (Contents / Notes tabs) and the Reader — the
-  shared epub.js bundle behind a `WKWebView`, tap-zone paging, minimal
-  chrome, typography, reading-position persistence
+- iOS Phase 6: note capture while reading (selection → mark, capture sheet,
+  highlights, contemplative chapter-note editor)
 
 **Next**
 
-- iOS Phase 6: note capture while reading (selection → mark, capture sheet,
-  highlights, contemplative chapter-note editor)
 - iOS Phase 7: open-EPUB from Files, accessibility pass, docs
 - Later: mark-text search, App Store packaging decisions
 

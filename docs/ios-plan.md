@@ -1,6 +1,6 @@
 # Development plan: iOS app
 
-Status: Phase 1–4 implemented · Phases 5–7 pending · Owner: TBD · Last updated: 2026-09-05
+Status: Phase 1–5 implemented · Phases 6–7 pending · Owner: TBD · Last updated: 2026-09-05
 
 ## Goal
 
@@ -341,7 +341,7 @@ Met 2026-09-05. Implementation notes and deviations:
    conflict detection) ships with 6 tests; the conflict check wires into
    the note-save flow when the iOS note editor lands (Phase 5/6).
 
-### Phase 5 — Book detail + Reader
+### Phase 5 — Book detail + Reader — DONE (2026-09-05)
 
 - Book detail: cover, metadata, progress, **Continue reading**; segmented
   Contents / Notes. Contents rows show TOC titles, a notes marker
@@ -358,6 +358,32 @@ Met 2026-09-05. Implementation notes and deviations:
 - Exit: read a book end-to-end on the simulator; position survives
   backgrounding; screenshots of both detail tabs and the reader (light +
   dark).
+
+Met 2026-09-05. Implementation notes:
+
+1. **The reader bundle + scheme handler moved into `MarginsModel`** — one
+   vendored copy served to both apps; `Bundle.module` resolves per
+   platform. The macOS app is unchanged behaviorally.
+2. **A latent macOS reader bug surfaced and was fixed** (see
+   `docs/architecture.md` → Reader rendering): epub.js ≥ 0.3.93 keys
+   `spineByHref` by manifest-relative hrefs while the core's jump targets
+   are zip-root-relative, so href-based chapter jumps rejected with "No
+   Section Found". Fixed in shared `reader.js`
+   (`readerResolveSpineTarget`) + `ReaderModel.relocated` matching; the
+   macOS app was re-verified against the Karamazov fixture (previously it
+   showed the reader error page on explicit chapter jumps; resume/CFI and
+   `next()/prev()` had masked it).
+3. **Hardware-key page turns** are intercepted in a `WKWebView` subclass
+   (`KeyHandlingWebView.pressesBegan`) — the webview is first responder
+   while reading and would otherwise swallow arrows/space.
+4. Verified on the simulator: import → detail (Contents with note markers,
+   Notes with compiled marks/stats/ShareLink/clear-all) → reader (cover +
+   prose pages, chapter-follow across section boundaries via `relocated`,
+   keyboard paging, debounced position save → kill → relaunch → CFI
+   resume). Chrome auto-hides on page turns; tap zones share the same
+   page-turn path as keys (tap synthesis unavailable here — flagged for
+   the human pass). 87 Swift tests (+2 for href matching), Rust suites
+   untouched and green.
 
 ### Phase 6 — Note capture
 
