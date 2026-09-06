@@ -20,6 +20,13 @@ let package = Package(
         .macOS(.v14),
         .iOS(.v17)
     ],
+    // Library products consumed by the iOS app's Xcode project
+    // (apple/ios/Margins.xcodeproj); the macOS app links the targets
+    // directly from within the package.
+    products: [
+        .library(name: "MarginsCore", targets: ["MarginsCore"]),
+        .library(name: "MarginsModel", targets: ["MarginsModel"]),
+    ],
     targets: [
         // UniFFI static archive, assembled per platform by
         // scripts/build-core.sh (macOS slice) and
@@ -58,13 +65,6 @@ let package = Package(
                 // Vendored epub.js renderer (see docs/architecture.md).
                 .copy("Resources/reader")
             ]
-        ),
-        // iOS app entry point. Phase 1 placeholder: proves the shared
-        // target graph builds on both platforms; the real scenes arrive in
-        // Phase 4 (docs/ios-plan.md).
-        .executableTarget(
-            name: "MarginsIOS",
-            dependencies: ["MarginsCore", "MarginsModel"]
         ),
         // UI-agnostic model layer for the library browser (import, remove,
         // selection, errors). Separate target so MarginsTests can unit-test

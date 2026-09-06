@@ -42,12 +42,14 @@ src/                   # Tauri frontend
 apple/                 # shared Apple SwiftPM package (macOS + iOS)
   Package.swift        # targets: MarginsFFI (xcframework), margins_ffiFFI,
                        # MarginsCore, MarginsModel, Margins (macOS app),
-                       # MarginsIOS (iOS app), MarginsTests
+                       # MarginsTests; products MarginsCore/MarginsModel
+                       # are consumed by the iOS app's Xcode project
   Sources/MarginsCore/ # generated bindings + CoreStore actor
-  Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap
+  Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap,
+                       # LibraryLocation (iCloud root, materialization, conflicts)
   Sources/Margins/     # macOS SwiftUI views, reader webview glue, key routing
-  Sources/MarginsIOS/  # iOS SwiftUI app (Phase 4+; see docs/ios-plan.md)
   Sources/MarginsTests/# Swift Testing suite (runner executable)
+  ios/                 # iOS app: Margins.xcodeproj + Sources (SwiftUI scenes)
 build/MarginsFFI.xcframework/  # generated (make core / make ios-core)
 scripts/               # build-core.sh, build-xcframework.sh, make-app.sh
 ```
@@ -79,9 +81,14 @@ make mac-app-universal  # universal (arm64 + x86_64) build/Margins.app; needs fu
 make bump VERSION=x.y.z  # bump version everywhere, commit, tag vx.y.z
 ```
 
-The macOS app builds with Command Line Tools alone. Building or running the
-**iOS app on a simulator requires full Xcode** (`xcodebuild`, simulators) —
-see `docs/ios-plan.md`.
+The macOS app builds with Command Line Tools alone. The **iOS app needs
+full Xcode**: `make ios-core` for the xcframework slices, then open
+`apple/ios/Margins.xcodeproj` (or `make ios-build`-style `xcodebuild`) —
+see `docs/ios-plan.md`. The iOS library root lives in the iCloud Documents
+container when available, falling back to local `Documents/Library` at
+runtime (`LibraryLocation`); DEBUG launch env vars
+(`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`)
+drive simulator verification flows.
 
 macOS tests use Swift Testing (`import Testing`) via the `MarginsTests`
 runner executable — `swift test` silently runs nothing on a CLT-only

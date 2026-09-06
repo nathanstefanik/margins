@@ -7,6 +7,10 @@ dist/
 /build/
 apple/.build/
 
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+
 # Generated UniFFI bindings (regenerate with make core)
 apple/Sources/margins_ffiFFI/include/
 apple/Sources/MarginsCore/Generated/

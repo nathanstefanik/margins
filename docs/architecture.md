@@ -85,13 +85,33 @@ so tests run through the `MarginsTests` runner executable. Targets:
 - `MarginsModel` — UI-agnostic model layer: `LibraryModel` (catalog,
   selection, import/remove), `ReaderModel` (open book/chapter, notes pane
   state), `ReaderResource` (scheme-handler routing), `ReaderKeymap`
-  (vim-style key state machine). Unit-tested via `MarginsTests`.
+  (vim-style key state machine), `LibraryLocation` (iOS library root:
+  iCloud container resolution with runtime fallback, placeholder
+  materialization, coordinated staging of picked files, conflict
+  detection). Unit-tested via `MarginsTests`.
 - `Margins` — macOS SwiftUI app: library browser, reader (WKWebView +
   epub.js), notes pane, search overlay, keyboard/trackpad routing.
-- `MarginsIOS` — iOS SwiftUI app (placeholder entry point for now; the
-  scenes land in Phases 4–6 of `docs/ios-plan.md`).
 - `MarginsTests` — a Swift Testing **runner executable** (SwiftPM's test
   runner never invokes test bundles on the CLT toolchain; see the plan doc).
+
+## The iOS app (`apple/ios/`)
+
+A small committed Xcode project (`Margins.xcodeproj`, file-system-
+synchronized sources, no XcodeGen) referencing the local SwiftPM package
+through the `MarginsCore`/`MarginsModel` products. The app's SwiftUI scenes
+live in the Xcode target (`apple/ios/Margins/`) rather than the package:
+iOS-only SwiftUI/UIKit code cannot live in a multiplatform SwiftPM package
+without `#if canImport(UIKit)` guards everywhere. The entry point wires the
+shared `LibraryModel`; the library root is resolved per launch by
+`LibraryLocation` (ubiquity container paths change between installs),
+falling back to local `Documents/Library` with the reason surfaced in the
+UI. DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`,
+`MARGINS_DELETE_FIXTURE`) drive deterministic simulator verification flows.
+Entitlements declare the iCloud Documents container
+(`iCloud.io.github.nathanstefanik.margins`); the Info.plist exposes the
+container as a document scope (`NSUbiquitousContainerIsDocumentScopePublic`,
+`UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`). Signing team
+stays unset in the repo — set it locally for device builds.
 
 ### Reader rendering
 

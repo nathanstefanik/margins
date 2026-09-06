@@ -1,6 +1,6 @@
 # Development plan: iOS app
 
-Status: Phase 1–3 implemented · Phases 4–7 pending · Owner: TBD · Last updated: 2026-09-05
+Status: Phase 1–4 implemented · Phases 5–7 pending · Owner: TBD · Last updated: 2026-09-05
 
 ## Goal
 
@@ -299,7 +299,7 @@ fails in this headless environment — pre-existing, the release flow builds
 DMGs via `make mac-app-universal`). On-screen clicks remain for the next
 human pass on each platform.
 
-### Phase 4 — iOS app skeleton + Library scene
+### Phase 4 — iOS app skeleton + Library scene — DONE (2026-09-05)
 
 - `apple/ios/Margins.xcodeproj` (package reference, entitlements:
   iCloud Documents + container id; Info.plist:
@@ -315,6 +315,31 @@ human pass on each platform.
   `search_notes`. `NavigationStack` on iPhone, `NavigationSplitView` on iPad.
 - Exit: builds and runs on the simulator via `xcodebuildmcp`; import an EPUB,
   see covers/progress, search, delete — screenshots in the phase report.
+
+Met 2026-09-05. Implementation notes and deviations:
+
+1. **iOS scenes live in the Xcode target** (`apple/ios/Margins/`), not the
+   SwiftPM package — iOS-only SwiftUI/UIKit code cannot sit in a
+   multiplatform package without `#if canImport(UIKit)` guards at every
+   file. The package exports `MarginsCore`/`MarginsModel` products that the
+   committed, hand-maintained project (file-system-synchronized groups,
+   no XcodeGen) consumes; the Phase-1 `MarginsIOS` placeholder target is
+   gone.
+2. **The header-only `margins_ffiFFI` C target needed a placeholder .c** —
+   Xcode's SwiftPM integration expects every C target to emit an object
+   file (plain `swift build` did not care).
+3. **Delete is context-menu + confirmationDialog, not swipe** — grids have
+   no swipe actions; long-press → Delete… → confirm is the grid-native
+   equivalent, accessible via the VoiceOver actions menu.
+4. **Verification used DEBUG launch env vars** (`MARGINS_IMPORT_FIXTURE`,
+   `MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`) — this environment
+   has no UI-automation tooling, so gestures were driven by deterministic
+   launch seams and screenshots (iPhone light + dark, iPad SplitView).
+   Search ran against a hand-seeded note with marks via the real core.
+5. `LibraryLocation` (container resolution, runtime fallback, bounded
+   materialization, `NSFileCoordinator` staged copies, `NSFileVersion`
+   conflict detection) ships with 6 tests; the conflict check wires into
+   the note-save flow when the iOS note editor lands (Phase 5/6).
 
 ### Phase 5 — Book detail + Reader
 
