@@ -31,15 +31,19 @@ async function readerOpen() {
   if (!readerBookId) {
     throw new Error("missing ?book= parameter");
   }
+  console.log("readerOpen: fetching book.epub");
   const response = await fetch(`book.epub?book=${encodeURIComponent(readerBookId)}`);
   if (!response.ok) {
     throw new Error(`book.epub fetch failed with ${response.status}`);
   }
   const bytes = await response.arrayBuffer();
+  console.log(`readerOpen: fetched ${bytes.byteLength} bytes`);
 
   readerBook = ePub(bytes);
   await readerBook.ready;
+  console.log("readerOpen: book ready");
 
+  console.log("readerOpen: creating rendition");
   readerRendition = readerBook.renderTo("viewer", {
     width: "100%",
     height: "100%",
@@ -52,6 +56,10 @@ async function readerOpen() {
     allowScriptedContent: true,
     allowPopups: true,
   });
+  // Lifecycle diagnostics: epub.js's display promise can stall silently
+  // when a section view never finishes; these mark where it stops.
+  readerRendition.on("started", () => console.log("rendition: started"));
+  readerRendition.on("attached", () => console.log("rendition: attached"));
 
   readerRendition.hooks.content.register(readerPreserveAspectRatio);
   readerRendition.hooks.content.register(readerStyleContents);
@@ -63,9 +71,11 @@ async function readerOpen() {
   });
   // Preferences may have arrived before the book finished opening.
   readerApplyViewerWidth();
+  console.log("readerOpen: rendition created, displaying");
 
   try {
     if (readerStartCfi) {
+      console.log("readerOpen: displaying start CFI");
       await readerRendition.display(readerStartCfi);
     } else {
       await readerDisplayTarget(readerStartHref || undefined);
@@ -80,6 +90,7 @@ async function readerOpen() {
     }
   }
   readerOpened = true;
+  console.log("readerOpen: displayed, rendition live");
 }
 
 // Keeps images at their intrinsic aspect ratio: the paginated columns would
@@ -276,6 +287,30 @@ function readerDisplay(href) {
 // page or two off. Re-issuing the same display once the layout stops moving
 // re-runs that same page math against settled offsets. Exactly one retry,
 // never a loop.
+// Resolves a chapter jump target against the spine. epub.js's
+// `spineByHref` is keyed by the *manifest-relative* href (e.g.
+// "wrap0000.html"), while the core's jump targets are *zip-root-relative*
+// ("OEBPS/wrap0000.html") — the two only agree when the OPF sits at the
+// zip root. Strip leading path segments until the spine matches, keeping
+// any "#fragment"; returns the original target when nothing matches so
+// epub.js's own error path stays authoritative.
+function readerResolveSpineTarget(target) {
+  if (!target || !readerBook || !readerBook.spine) {
+    return target || undefined;
+  }
+  const hashAt = target.indexOf("#");
+  const base = hashAt === -1 ? target : target.slice(0, hashAt);
+  const fragment = hashAt === -1 ? "" : target.slice(hashAt);
+  const segments = base.split("/");
+  for (let strip = 0; strip < segments.length; strip++) {
+    const candidate = segments.slice(strip).join("/") + fragment;
+    if (readerBook.spine.get(candidate)) {
+      return candidate;
+    }
+  }
+  return target;
+}
+
 async function readerDisplayTarget(target) {
   if (!readerRendition) {
     return;
@@ -285,7 +320,10 @@ async function readerDisplayTarget(target) {
   readerCurrentTarget = target || null;
   // No target at all still means "open the book": epub.js starts at the
   // first section.
-  await rendition.display(target || undefined);
+  const displayed = rendition.display(readerResolveSpineTarget(target));
+  setTimeout(() => console.log("readerOpen: display still pending after 6s"), 6000);
+  await displayed;
+  console.log("readerOpen: display resolved for", target || "chapter start");
 
   const hashAt = target ? target.indexOf("#") : -1;
   if (hashAt === -1) {
@@ -409,5 +447,18 @@ window.readerScrollBottom = readerScrollBottom;
 window.readerApplyTypography = readerApplyTypography;
 
 readerOpen().catch((error) => {
+  var detail;
+  try {
+    detail = JSON.stringify({
+      type: typeof error,
+      name: error && error.name,
+      message: error && error.message,
+      text: String(error),
+      target: readerCurrentTarget,
+    });
+  } catch (e) {
+    detail = String(error);
+  }
+  console.error("readerOpen failed:", detail);
   readerShowError(error);
 });

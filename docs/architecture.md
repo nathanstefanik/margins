@@ -115,11 +115,24 @@ stays unset in the repo — set it locally for device builds.
 
 ### Reader rendering
 
-The reader vendors `epub.min.js` + `jszip.min.js` (versions pinned in the
-root `package.json`) plus a hand-written `reader.html`/`reader.js` that
-mirrors the Tauri frontend's `src/reader.ts`: whole-book bytes in, paginated
-flow, `spread: "none"`. Swift drives the page through the `window.reader*`
-functions via `evaluateJavaScript`.
+The vendored `epub.min.js` + `jszip.min.js` (versions pinned in the root
+`package.json`) plus the hand-written `reader.html`/`reader.js` live in
+**`MarginsModel`'s resource bundle** so the macOS app, the iOS app, and the
+scheme handler serve one identical copy. The page mirrors the Tauri
+frontend's `src/reader.ts`: whole-book bytes in, paginated flow,
+`spread: "none"`. Swift drives it through the `window.reader*` functions
+via `evaluateJavaScript`; the page reports `relocated` back through the
+`reader` script message handler.
+
+Two href conventions meet here and must never be conflated: the core's
+spine hrefs are **zip-root-relative** (`OEBPS/chapter1.xhtml`), while
+epub.js ≥ 0.3.93 keys its `spineByHref` by the **manifest-relative** href
+(`chapter1.xhtml`). `reader.js` resolves jump targets against the spine
+(`readerResolveSpineTarget`: exact → progressively stripped path prefixes),
+and `ReaderModel.relocated` matches reported hrefs back onto spine chapters
+(exact → path suffix → basename). Without these bridges, href-based chapter
+jumps reject with "No Section Found" — a bug that shipped silently on macOS
+until the iOS reader surfaced it.
 
 ### `margins-reader://` scheme — security model
 

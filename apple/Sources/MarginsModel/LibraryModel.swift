@@ -265,6 +265,13 @@ public final class LibraryModel {
         try? await store.saveReadingPosition(bookId: bookId, position: position)
     }
 
+    /// The book's saved reading position, or nil when it was never opened.
+    /// Drives the detail view's current-position marker and Continue label.
+    public func readingPosition(bookId: String) async -> ReadingPosition? {
+        guard let store else { return nil }
+        return try? await store.readingPosition(bookId: bookId)
+    }
+
     /// Moves the sidebar selection by `delta` books (shell keyboard j/k).
     public func moveLibrarySelection(_ delta: Int) {
         guard !books.isEmpty else { return }

@@ -27,8 +27,7 @@ struct ReaderModelTests {
     func jumpTargetUsesTheFragment() {
         let book = makeBook()
         // No TOC entry for the file: the top of the file is the chapter.
-        #expect(book.chapters[0].jumpTarget == "one.xhtml")
-        // With one, the jump carries the anchor so a file holding several
+        #expect(book.chapters[0].jumpTarget == "one.xhtml")        // With one, the jump carries the anchor so a file holding several
         // chapters still lands on the right heading.
         #expect(book.chapters[1].jumpTarget == "two.xhtml#part-two")
     }
@@ -182,5 +181,30 @@ struct ReaderModelTests {
         #expect(saved.count == 1)
         #expect(saved.first?.1.chapterKey == "ch2")
         #expect(saved.first?.1.epubCfi == "cfi-late")
+    }
+
+    @Test("relocated follows epub.js manifest-relative hrefs to spine chapters")
+    func relocatedMatchesManifestRelativeHrefs() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+
+        // epub.js reports the section href manifest-relative; the core's
+        // spine href is zip-root-relative. The suffix match must bridge.
+        reader.relocated(page: 1, totalPages: 3, href: "sub/dir/two.xhtml", cfi: "cfi-2")
+        #expect(reader.chapter?.key == "ch2")
+
+        // An unknown href leaves the chapter alone.
+        reader.relocated(page: 2, totalPages: 3, href: "elsewhere.xhtml", cfi: "cfi-3")
+        #expect(reader.chapter?.key == "ch2")
+    }
+
+    @Test("chapter(forHref:) resolves exact, suffix, and basename matches")
+    func chapterForHrefMatching() {
+        let book = makeBook()
+        #expect(ReaderModel.chapter(forHref: "one.xhtml", in: book)?.key == "ch1")
+        #expect(ReaderModel.chapter(forHref: "OEBPS/two.xhtml", in: book)?.key == "ch2")
+        #expect(ReaderModel.chapter(forHref: "deep/dir/two.xhtml", in: book)?.key == "ch2")
+        #expect(ReaderModel.chapter(forHref: "missing.xhtml", in: book) == nil)
     }
 }
