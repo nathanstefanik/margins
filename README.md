@@ -111,6 +111,37 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 | `Enter` | Open selected book (library) or search hit |
 | `:` | Command mode (`:w` save, `:q` library, `:notes` compiled page, `:search`, `:import`, `:export`, `:root`, `:open 3`) |
 
+## Status
+
+Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architecture.md](docs/architecture.md) (shape).
+
+**Done**
+
+- Rust core + Tauri 2 frontend (Linux/desktop): library, reader, notes,
+  search, markdown export, library sync
+- macOS SwiftUI app: library, paginated reader, notes pane, compiled notes
+  page, search overlay, keyboard-first control
+- Anchored **marks** in chapter notes (parse/serialize/CRUD in the core,
+  rendered in both desktop frontends, lossless round-trip)
+- Shared Apple SwiftPM package over a per-platform `MarginsFFI.xcframework`
+  (macOS + iOS slices, `make core` / `make ios-core`)
+- iOS app skeleton + **Library scene**: cover grid, document-picker import,
+  delete with confirmation, notes search; iCloud Documents library root with
+  runtime local fallback; simulator-verified (light/dark, iPhone/iPad)
+
+**In progress**
+
+- iOS Phase 5: book detail (Contents / Notes tabs) and the Reader — the
+  shared epub.js bundle behind a `WKWebView`, tap-zone paging, minimal
+  chrome, typography, reading-position persistence
+
+**Next**
+
+- iOS Phase 6: note capture while reading (selection → mark, capture sheet,
+  highlights, contemplative chapter-note editor)
+- iOS Phase 7: open-EPUB from Files, accessibility pass, docs
+- Later: mark-text search, App Store packaging decisions
+
 ## License
 
 GPL-3.0-or-later — fork freely; derivatives must remain open source under the same license.
