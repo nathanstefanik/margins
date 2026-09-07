@@ -125,12 +125,18 @@ struct LibraryScene: View {
             }
             if ProcessInfo.processInfo.environment["MARGINS_OPEN_FIXTURE"] != nil {
                 // Push the first book's detail so the scene flow is
-                // reachable without touch synthesis.
+                // reachable without touch synthesis. On iPad the detail
+                // column has no push — selecting the book is the
+                // equivalent entry into `BookDetailView`.
                 for _ in 0..<50 where library.books.isEmpty {
                     try? await Task.sleep(for: .milliseconds(200))
                 }
                 if let first = library.books.first {
-                    pushedBook = PushedBook(id: first.id)
+                    if sizeClass == .regular {
+                        await library.selectBook(id: first.id)
+                    } else {
+                        pushedBook = PushedBook(id: first.id)
+                    }
                 }
             }
             if let mode = ProcessInfo.processInfo.environment["MARGINS_DELETE_FIXTURE"] {
@@ -211,7 +217,7 @@ struct LibraryScene: View {
                 Text("No notes match.")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(hits, id: \.bookId) { hit in
+                ForEach(hits) { hit in
                     Button {
                         onSelect(hit.bookId)
                     } label: {

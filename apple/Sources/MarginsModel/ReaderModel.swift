@@ -193,6 +193,14 @@ public final class ReaderModel {
         commitPendingPosition()
     }
 
+    /// `flushPositionSave` for callers that read the position back right
+    /// away (e.g. returning from the reader to the detail view): waits for
+    /// the serialized write chain so the reload cannot race the save.
+    public func flushPositionSaveAndWait() async {
+        flushPositionSave()
+        await positionSaveChain?.value
+    }
+
     // MARK: Notes pane state (Part III)
 
     /// How the notes editor's content relates to the last save.
