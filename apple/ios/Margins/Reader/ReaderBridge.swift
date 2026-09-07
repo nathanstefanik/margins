@@ -161,19 +161,6 @@ final class ReaderBridge: NSObject {
                         + ' iframe0=' + JSON.stringify(ir)
                         + ' bodyH=' + document.body.scrollHeight + ' innerH=' + window.innerHeight);
                 }, 3000);
-                setTimeout(function() {
-                    // epub.js draws highlight overlays via a Pane in the
-                    // OUTER document (positioned over the iframe), not
-                    // inside the section's iframe.
-                    var stats = 'rects=' + document.querySelectorAll('svg rect, rect').length
-                        + ' svgs=' + document.querySelectorAll('svg').length
-                        + ' refs=' + document.querySelectorAll('[ref]').length;
-                    try {
-                        var doc = document.querySelector('iframe').contentDocument;
-                        stats += ' iframeRects=' + doc.querySelectorAll('rect').length;
-                    } catch (e) { stats += ' iframeErr:' + e; }
-                    send('diag-hl', stats);
-                }, 6000);
             })();
             """,
             injectionTime: .atDocumentStart,
@@ -249,7 +236,6 @@ final class ReaderBridge: NSObject {
     /// Renders highlight overlays for mark CFI ranges; epub.js dedupes by
     /// range, so re-adding after chapter loads is safe.
     func restoreHighlights(_ cfiRanges: [String]) {
-        Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("restoreHighlights \(cfiRanges.count) ranges webview=\(self.webView != nil)")
         for cfiRange in cfiRanges where !cfiRange.isEmpty {
             evaluate("readerHighlight(\(Self.javaScriptLiteral(cfiRange)))")
         }
@@ -359,7 +345,6 @@ extension ReaderBridge: WKScriptMessageHandler {
         case "relocated":
             let page = (body["page"] as? NSNumber)?.intValue ?? 1
             let totalPages = (body["totalPages"] as? NSNumber)?.intValue ?? 0
-            Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("relocated page=\(page) href=\((body["href"] as? String) ?? "nil", privacy: .public) cfi=\((body["cfi"] as? String) ?? "nil", privacy: .public)")
             print("[reader-js] relocated: page \(page)/\(totalPages) href=\(body["href"] ?? "nil")")
             currentCfi = body["cfi"] as? String
             reader.relocated(
