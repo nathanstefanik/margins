@@ -26,6 +26,15 @@ let readerNavigationToken = 0;
 // The last target displayed, so `gg` can return to the chapter's anchor
 // rather than the top of the file it happens to share.
 let readerCurrentTarget = null;
+// The most recent text selection (capture UIs consume and clear it).
+let readerLastSelection = null;
+
+function readerPost(payload) {
+  const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.reader;
+  if (handler) {
+    handler.postMessage(payload);
+  }
+}
 
 async function readerOpen() {
   if (!readerBookId) {
@@ -67,6 +76,20 @@ async function readerOpen() {
   readerRendition.on("rendered", (section, view) => {
     if (view && view.contents && view.contents.document && section && section.href) {
       readerAttachLinks(view.contents.document, section.href);
+    }
+  });
+  // Text selection (touch or mouse): remember it so Swift can offer
+  // Note/Highlight and anchor a mark; the message handler on the native
+  // side ignores this on platforms without capture UI.
+  readerRendition.on("selected", (cfiRange, contents) => {
+    try {
+      const text = contents && contents.window
+        ? String(contents.window.getSelection())
+        : "";
+      readerLastSelection = { cfiRange: cfiRange, text: text };
+      readerPost({ type: "selected", cfiRange: cfiRange, text: text });
+    } catch (error) {
+      readerLastSelection = null;
     }
   });
   // Preferences may have arrived before the book finished opening.
@@ -445,6 +468,42 @@ window.readerScrollBy = readerScrollBy;
 window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
 window.readerApplyTypography = readerApplyTypography;
+// Capture support (see readerResolveSpineTarget note): highlight a mark's
+// CFI range (epub.js dedupes by range), collapse the active selection, and
+// hand back the current page's CFI for page-anchored marks.
+window.readerHighlight = function (cfiRange) {
+  if (!readerRendition || !cfiRange) {
+    return;
+  }
+  try {
+    readerRendition.annotations.add("highlight", cfiRange, {}, () => {});
+  } catch (error) {
+    console.error("readerHighlight failed:", error);
+  }
+};
+window.readerClearSelection = function () {
+  try {
+    const selection = window.getSelection();
+    if (selection) {
+      selection.removeAllRanges();
+    }
+    if (readerRendition) {
+      readerRendition.getContents().forEach((contents) => {
+        const selection = contents.window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+        }
+      });
+    }
+  } catch (error) {
+    // A stale selection is nothing to fail over.
+  }
+  readerLastSelection = null;
+};
+window.readerCurrentCfi = function () {
+  const location = readerRendition ? readerRendition.currentLocation() : null;
+  return location && location.start ? location.start.cfi : null;
+};
 
 readerOpen().catch((error) => {
   var detail;

@@ -134,6 +134,12 @@ and `ReaderModel.relocated` matches reported hrefs back onto spine chapters
 jumps reject with "No Section Found" — a bug that shipped silently on macOS
 until the iOS reader surfaced it.
 
+The page also reports text **selections** (`selected` events carry the CFI
+range + quoted text) through the same script channel; the iOS bridge
+extends the native edit menu with *Note* / *Highlight* and applies
+highlight overlays through epub.js's annotations API. The macOS handler
+ignores selection messages.
+
 ### `margins-reader://` scheme — security model
 
 The reader webview loads `margins-reader://app/reader.html?book=<id>`; a

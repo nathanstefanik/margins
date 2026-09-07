@@ -33,10 +33,13 @@ final class AppModel {
         reader = ReaderModel()
 
         // Wire the reader into the library: removals close the reader, and
-        // the debounced position saver persists through the store.
+        // the debounced position/note savers persist through the store.
         library.reader = reader
         reader.positionSaver = { [weak library] bookId, position in
             await library?.saveReadingPosition(bookId: bookId, position: position)
+        }
+        reader.noteSaver = { [weak library] bookId, chapterKey, body in
+            await library?.saveChapterNoteText(bookId: bookId, chapterKey: chapterKey, body: body)
         }
     }
 

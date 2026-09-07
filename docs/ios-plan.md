@@ -1,6 +1,6 @@
 # Development plan: iOS app
 
-Status: Phase 1–5 implemented · Phases 6–7 pending · Owner: TBD · Last updated: 2026-09-05
+Status: Phase 1–6 implemented · Phase 7 pending · device signing + iCloud verification blocked on Apple Developer approval · Last updated: 2026-09-07
 
 ## Goal
 
@@ -385,7 +385,7 @@ Met 2026-09-05. Implementation notes:
    the human pass). 87 Swift tests (+2 for href matching), Rust suites
    untouched and green.
 
-### Phase 6 — Note capture
+### Phase 6 — Note capture — DONE (2026-09-07)
 
 - epub.js `rendition.on("selected")` wired through a new script-message
   channel to Swift; edit-menu *Note* / *Highlight* via
@@ -405,6 +405,34 @@ Met 2026-09-05. Implementation notes:
 - Exit: the definition-of-done flow on the simulator — five quick marks and
   one chapter note while reading — plus round-trip: the same files open
   correctly in the macOS app and the Tauri app. Screenshots.
+
+Met 2026-09-07. Implementation notes:
+
+1. **Selection capture rides the native edit menu**: epub.js's `selected`
+   event posts the CFI range + text through the script channel;
+   `ReaderBridge` (as `WKUIDelegate`) extends the system callout with
+   *Note* / *Highlight* actions (`editMenuForCharactersIn`). The
+   no-selection path is a persistent capture affordance that fades with
+   the chrome, anchoring to the current page's CFI (tracked from
+   `relocated`, no JS round-trip).
+2. **Capture sheet**: 200pt/medium detents, focused on appear, draft
+   autosaved to `UserDefaults` per book+chapter (cleared on commit),
+   return/Done/swipe-down all commit, barest "Mark saved" capsule flash.
+   Highlight-without-note commits instantly (quote + empty body) and
+   paints via `rendition.annotations`.
+3. **Marks sheet + chapter-note editor**: the chrome notes button shows
+   the chapter's mark count; the marks sheet edits/deletes; the editor is
+   a full-height sheet with word count, save status, and the marks strip,
+   sharing the macOS `ReaderModel` autosave machinery (`noteEdited` →
+   debounce → `noteSaver`, flushed on dismiss and backgrounding).
+4. **End-of-chapter prompt**: offered once when paging past a chapter's
+   last page; *Not now* silences per finished chapter (UserDefaults).
+5. Verified on the simulator via the DEBUG seams: capture (quote + typed
+   body → mark on disk with real id/percent), highlight commit (empty-body
+   mark at the page CFI), editor with loaded note + marks strip. **Pending
+   human pass**: the native edit menu, tap zones/swipe, and the highlight
+   overlay's visual paint — all need touch synthesis; the data paths are
+   proven end to end.
 
 ### Phase 7 — Integration, accessibility, docs
 
