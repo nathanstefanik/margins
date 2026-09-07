@@ -33,6 +33,9 @@ public struct LibraryLocation: Sendable {
     /// iCloud entitlement/account).
     private let containerProvider: @Sendable () -> URL?
     private let documentsProvider: @Sendable () -> URL
+    /// Download-poll iterations (100ms each); injectable so tests bound
+    /// the wait instead of running the production timeout.
+    private let downloadPollLimit: Int
 
     public init(
         containerProvider: @escaping @Sendable () -> URL? = {
@@ -42,10 +45,12 @@ public struct LibraryLocation: Sendable {
         },
         documentsProvider: @escaping @Sendable () -> URL = {
             FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        }
+        },
+        downloadPollLimit: Int = 100
     ) {
         self.containerProvider = containerProvider
         self.documentsProvider = documentsProvider
+        self.downloadPollLimit = downloadPollLimit
     }
 
     /// Resolves the library root. The container's directory is created on
@@ -67,18 +72,36 @@ public struct LibraryLocation: Sendable {
     /// evicted placeholders start downloading and the call waits, bounded.
     public func materializedPath(for path: String) async throws -> String {
         let url = URL(fileURLWithPath: path)
-        guard FileManager.default.fileExists(atPath: path) else { return path }
-        let isUbiquitous = (try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?
-            .isUbiquitousItem ?? false
+        let fileManager = FileManager.default
+        let exists = fileManager.fileExists(atPath: path)
+        // An evicted ubiquitous item exists only as a `.name.icloud`
+        // placeholder beside the logical path, so `fileExists` at the
+        // logical path reports missing — exactly the case this method
+        // exists for; it must not early-return there.
+        let evicted = !exists && Self.hasEvictedPlaceholder(for: url)
+        guard exists || evicted else { return path }
+
+        let isUbiquitous = evicted
+            || ((try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?
+                .isUbiquitousItem ?? false)
         guard isUbiquitous else { return path }
 
-        if (try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?
-            .ubiquitousItemDownloadingStatus == URLUbiquitousItemDownloadingStatus.current
+        if !evicted,
+           (try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?
+               .ubiquitousItemDownloadingStatus == URLUbiquitousItemDownloadingStatus.current
         {
             return path
         }
-        try FileManager.default.startDownloadingUbiquitousItem(at: url)
-        for _ in 0..<100 {
+        // `startDownloadingUbiquitousItem` accepts the logical URL of an
+        // evicted placeholder. A throw means "no such item at all", which
+        // passes through like any other missing file (the core owns the
+        // not-found error).
+        do {
+            try fileManager.startDownloadingUbiquitousItem(at: url)
+        } catch {
+            return path
+        }
+        for _ in 0..<downloadPollLimit {
             if (try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?
                 .ubiquitousItemDownloadingStatus == URLUbiquitousItemDownloadingStatus.current
             {
@@ -87,6 +110,16 @@ public struct LibraryLocation: Sendable {
             try await Task.sleep(for: .milliseconds(100))
         }
         throw MaterializationError.timeout(path)
+    }
+
+    /// True when the file at `url` exists only as an evicted iCloud
+    /// placeholder (a `.<name>.icloud` sibling beside the logical path).
+    /// Pure over the filesystem so tests can reproduce eviction with
+    /// fixture files.
+    public static func hasEvictedPlaceholder(for url: URL) -> Bool {
+        let placeholder = url.deletingLastPathComponent()
+            .appendingPathComponent("." + url.lastPathComponent + ".icloud")
+        return FileManager.default.fileExists(atPath: placeholder.path)
     }
 
     /// Copies a security-scoped picked file (document picker) into a

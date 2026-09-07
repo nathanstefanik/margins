@@ -59,6 +59,42 @@ struct LibraryLocationTests {
         #expect(resolved == missing)
     }
 
+    @Test("evicted placeholder detection matches the .name.icloud sibling")
+    func evictedPlaceholderDetection() throws {
+        let dir = tempDirectory()
+        let logical = dir.appendingPathComponent("cover.jpg")
+        #expect(!LibraryLocation.hasEvictedPlaceholder(for: logical))
+
+        // iCloud's eviction naming: a hidden `.<name>.icloud` beside the
+        // logical path, which itself disappears.
+        let placeholder = dir.appendingPathComponent(".cover.jpg.icloud")
+        try Data([0x00]).write(to: placeholder)
+        #expect(LibraryLocation.hasEvictedPlaceholder(for: logical))
+    }
+
+    @Test("a placeholder-only path enters the download path and stays bounded")
+    func placeholderPathIsBounded() async throws {
+        // A local fixture cannot be a real ubiquity item: the download
+        // start either throws (pass-through, the "no such item" case) or
+        // the poll loop runs to its bounded limit and times out. Both are
+        // correct; neither may hang or early-return as "missing".
+        let location = LibraryLocation(
+            containerProvider: { nil },
+            documentsProvider: { tempDirectory() },
+            downloadPollLimit: 3
+        )
+        let dir = tempDirectory()
+        let logical = dir.appendingPathComponent("cover.jpg")
+        try Data([0x00]).write(to: dir.appendingPathComponent(".cover.jpg.icloud"))
+        do {
+            let resolved = try await location.materializedPath(for: logical.path)
+            #expect(resolved == logical.path)
+        } catch {
+            #expect(error is LibraryLocation.MaterializationError)
+            #expect(error.localizedDescription.contains("cover.jpg"))
+        }
+    }
+
     @Test("stagedCopy snapshots a picked file into a readable staging path")
     func stagedCopy() throws {
         let location = LibraryLocation(containerProvider: { nil }, documentsProvider: { tempDirectory() })
