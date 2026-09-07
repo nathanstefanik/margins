@@ -109,7 +109,8 @@ UI. DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`,
 `MARGINS_DELETE_FIXTURE`) drive deterministic simulator verification flows.
 Entitlements declare the iCloud Documents container
 (`iCloud.io.github.nathanstefanik.margins`); the Info.plist exposes the
-container as a document scope (`NSUbiquitousContainerIsDocumentScopePublic`,
+container as a document scope (the `NSUbiquitousContainer*` keys nested
+under `NSUbiquitousContainers` → the container id, plus
 `UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`). Signing team
 stays unset in the repo — set it locally for device builds.
 

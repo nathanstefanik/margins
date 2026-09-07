@@ -237,14 +237,7 @@ public final class LibraryModel {
             // immediately: `refresh()` deliberately keeps `compiledNotes`
             // when the bookId still matches, so the notes view would keep
             // showing deleted notes until the next navigation.
-            if compiledNotes?.bookId == bookId {
-                let mode = detailMode
-                let tab = notesPageTab
-                if (await loadCompiledNotes(bookId: bookId)) != nil {
-                    detailMode = mode
-                    notesPageTab = tab
-                }
-            }
+            await recompileCompiledNotesIfCached(bookId: bookId)
             return cleared
         } catch {
             errorMessage = String(describing: error)
@@ -611,8 +604,19 @@ public final class LibraryModel {
     /// tab choice is preserved.
     private func refreshCompiledNotesAfterSave(bookId: String) async {
         guard detailMode == .notes, compiledNotes?.bookId == bookId else { return }
+        await recompileCompiledNotesIfCached(bookId: bookId)
+    }
+
+    /// Recompiles a cached compiled-notes page for `bookId` in the
+    /// background of a save/clear, without disturbing what the detail area
+    /// shows (`loadCompiledNotes` itself flips `detailMode` and resets the
+    /// tab — recompile-only callers must not).
+    private func recompileCompiledNotesIfCached(bookId: String) async {
+        guard compiledNotes?.bookId == bookId else { return }
+        let mode = detailMode
         let tab = notesPageTab
         guard (await loadCompiledNotes(bookId: bookId)) != nil else { return }
+        detailMode = mode
         notesPageTab = tab
     }
 
