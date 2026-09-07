@@ -54,7 +54,7 @@ struct IOSReaderWebView: UIViewRepresentable {
     let model: LibraryModel
     let reader: ReaderModel
     @Binding var bridge: ReaderBridge?
-    var onUserPageTurn: () -> Void = {}
+    var callbacks: ReaderCallbacks = ReaderCallbacks()
 
     func makeCoordinator() -> ReaderBridge {
         ReaderBridge(model: model, reader: reader)
@@ -67,9 +67,9 @@ struct IOSReaderWebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Keep the callback current: the coordinator was created once, but
-        // the scene's closure captures per-render state.
-        context.coordinator.onUserPageTurn = onUserPageTurn
+        // Keep the hooks current: the coordinator was created once, but
+        // the scene's closures capture per-render state.
+        context.coordinator.callbacks = callbacks
     }
 
     static func dismantleUIView(_ webView: WKWebView, coordinator: ReaderBridge) {
@@ -79,11 +79,22 @@ struct IOSReaderWebView: UIViewRepresentable {
 
 /// Owns the reader webview and exposes page-turn/jump evaluation to the
 /// scene (tap zones, swipes, hardware keys).
+/// Scene-provided hooks, applied to the bridge on every render. Kept as
+/// one struct so the representable takes a single parameter.
+struct ReaderCallbacks {
+    var userPageTurn: () -> Void = {}
+    var captureRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
+    var highlightRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
+}
+
 @MainActor
 final class ReaderBridge: NSObject {
     private let model: LibraryModel
     private let reader: ReaderModel
     private var webView: WKWebView?
+    var callbacks = ReaderCallbacks()
+    /// The latest completed text selection, for the edit-menu actions.
+    private(set) var latestSelection: ReaderSelection?
     /// Set by the scene: any user-driven page turn hides the chrome.
     var onUserPageTurn: (() -> Void)?
 
@@ -149,7 +160,7 @@ final class ReaderBridge: NSObject {
 
         let webView = KeyHandlingWebView(frame: .zero, configuration: configuration)
         webView.onKey = { [weak self] direction in
-            self?.onUserPageTurn?()
+            self?.callbacks.userPageTurn()
             switch direction {
             case .forward: self?.pageForward()
             case .back: self?.pageBack()
@@ -202,6 +213,36 @@ final class ReaderBridge: NSObject {
 
     private func evaluate(_ script: String) {
         webView?.evaluateJavaScript(script, completionHandler: nil)
+    }
+
+    // MARK: Capture support (selections, highlights)
+
+    /// The reader page's latest text selection, if any.
+    struct ReaderSelection {
+        var cfiRange: String
+        var text: String
+    }
+
+    /// Renders highlight overlays for mark CFI ranges; epub.js dedupes by
+    /// range, so re-adding after chapter loads is safe.
+    func restoreHighlights(_ cfiRanges: [String]) {
+        for cfiRange in cfiRanges where !cfiRange.isEmpty {
+            evaluate("readerHighlight(\(Self.javaScriptLiteral(cfiRange)))")
+        }
+    }
+
+    /// Collapses the active selection after a capture commits.
+    func clearSelection() {
+        evaluate("readerClearSelection()")
+    }
+
+    /// The current page's CFI — tracked from `relocated` events rather
+    /// than a JS round-trip, so it is valid the moment a page settles.
+    private(set) var currentCfi: String?
+
+    /// The current page's CFI, for page-anchored marks.
+    func currentPageCfi() -> String? {
+        currentCfi ?? latestSelection?.cfiRange
     }
 
     // MARK: Typography
@@ -280,10 +321,17 @@ extension ReaderBridge: WKScriptMessageHandler {
         case "console":
             // Page diagnostics: visible in the runtime log under the app pid.
             print("[reader-js][\(body["level"] ?? "")] \(body["text"] ?? "")")
+        case "selected":
+            if let cfiRange = body["cfiRange"] as? String,
+               let text = body["text"] as? String,
+               !cfiRange.isEmpty {
+                latestSelection = ReaderSelection(cfiRange: cfiRange, text: text)
+            }
         case "relocated":
             let page = (body["page"] as? NSNumber)?.intValue ?? 1
             let totalPages = (body["totalPages"] as? NSNumber)?.intValue ?? 0
             print("[reader-js] relocated: page \(page)/\(totalPages) href=\(body["href"] ?? "nil")")
+            currentCfi = body["cfi"] as? String
             reader.relocated(
                 page: page,
                 totalPages: totalPages,
@@ -297,6 +345,24 @@ extension ReaderBridge: WKScriptMessageHandler {
 }
 
 extension ReaderBridge: WKUIDelegate {
+    /// Extends the system text-selection callout with Note / Highlight.
+    /// The page's `selected` event fires before this, so `latestSelection`
+    /// holds the CFI range + text the actions act on.
+    func webView(
+        _ webView: WKWebView,
+        editMenuForCharactersIn range: NSRange,
+        recommendedActions: [UIMenuElement]
+    ) -> [UIMenuElement]? {
+        guard let selection = latestSelection else { return nil }
+        let note = UIAction(title: "Note", image: UIImage(systemName: "square.and.pencil")) { [weak self] _ in
+            self?.callbacks.captureRequest(selection)
+        }
+        let highlight = UIAction(title: "Highlight", image: UIImage(systemName: "highlighter")) { [weak self] _ in
+            self?.callbacks.highlightRequest(selection)
+        }
+        return [UIMenu(title: "", options: .displayInline, children: [note, highlight])] + recommendedActions
+    }
+
     func webView(
         _ webView: WKWebView,
         createWebViewWith configuration: WKWebViewConfiguration,

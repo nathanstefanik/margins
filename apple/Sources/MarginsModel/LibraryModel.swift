@@ -480,6 +480,38 @@ public final class LibraryModel {
         }
     }
 
+    /// Appends a quick mark to the reader's current chapter note (creating
+    /// the note file when the chapter has none). The core assigns the id
+    /// and timestamp; the returned `Mark` carries them.
+    @discardableResult
+    public func appendMark(
+        bookId: String,
+        chapterKey: String,
+        cfi: String?,
+        percent: Double?,
+        quote: String,
+        body: String,
+        reader: ReaderModel
+    ) async -> Mark? {
+        guard let store else { return nil }
+        do {
+            let mark = try await store.appendMark(
+                bookId: bookId,
+                chapterKey: chapterKey,
+                cfi: cfi,
+                percent: percent,
+                quote: quote,
+                body: body
+            )
+            reader.noteMarksUpdated(reader.noteMarks + [mark])
+            await refreshCompiledNotesAfterSave(bookId: bookId)
+            return mark
+        } catch {
+            self.reader?.noteFailed(String(describing: error))
+            return nil
+        }
+    }
+
     /// Deletes a quick mark from the reader's current chapter note. The
     /// editor body is untouched (prose and marks are disjoint); the mark
     /// list and any open compiled page refresh.

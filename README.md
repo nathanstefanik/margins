@@ -132,16 +132,31 @@ Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architectur
   export) and the **Reader**: shared epub.js bundle, tap zones + hardware
   keys, immersive chrome, typography, CFI position persistence — and a
   latent macOS chapter-jump bug fixed along the way
+- iOS **note capture while reading**: text selection → *Note* / *Highlight*
+  in the native edit menu, a page-anchored capture affordance with draft
+  autosave, highlight-without-note (epub.js overlays), chapter marks sheet,
+  full-height chapter-note editor, and a silenceable end-of-chapter prompt
 
 **In progress**
 
-- iOS Phase 6: note capture while reading (selection → mark, capture sheet,
-  highlights, contemplative chapter-note editor)
+- iOS Phase 7: "Open EPUB in Margins" from Files (`onOpenURL`),
+  accessibility pass, docs finalization
 
-**Next**
+**Blocked on Apple Developer approval** (enrollment submitted, awaiting
+Team ID)
 
-- iOS Phase 7: open-EPUB from Files, accessibility pass, docs
-- Later: mark-text search, App Store packaging decisions
+- Signing the iOS app for device builds (`DEVELOPMENT_TEAM`; a signing
+  certificate already exists on this machine)
+- Real-iCloud verification: container resolution + Files-app visibility on
+  a signed-in simulator/device, placeholder materialization, conflict
+  surfacing — the runtime local fallback is verified and ships regardless
+- Human gesture pass on real hardware: native edit-menu capture, reader
+  tap zones / swipes, and the highlight overlay's visual paint (data
+  paths verified end-to-end on the simulator via DEBUG launch seams)
+
+**Later**
+
+- Mark-text search, App Store packaging decisions
 
 ## License
 
