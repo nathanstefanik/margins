@@ -49,6 +49,69 @@ struct ReaderModelTests {
         #expect(reader.chapter?.key == "ch2")
     }
 
+    @Test("finishedChapter accepts only the immediate successor after a last page")
+    func finishedChapterPredicate() {
+        let book = makeBook()
+        let chapters = book.chapters
+        let lastPageOfOne = ReaderProgress(page: 4, totalPages: 4)
+        let midOne = ReaderProgress(page: 2, totalPages: 4)
+
+        // Paging past chapter one's last page onto chapter two: finished.
+        #expect(
+            ReaderModel.finishedChapter(
+                previousKey: "ch1", previousProgress: lastPageOfOne,
+                newKey: "ch2", newProgress: ReaderProgress(page: 1, totalPages: 9),
+                chapters: chapters
+            )?.key == "ch1"
+        )
+
+        // Jumping from a last page to a much later chapter (TOC): not
+        // "finishing" the chapter in between.
+        #expect(
+            ReaderModel.finishedChapter(
+                previousKey: "ch1", previousProgress: lastPageOfOne,
+                newKey: "nonexistent", newProgress: ReaderProgress(page: 1, totalPages: 9),
+                chapters: chapters
+            ) == nil
+        )
+
+        // Still on the same chapter.
+        #expect(
+            ReaderModel.finishedChapter(
+                previousKey: "ch1", previousProgress: lastPageOfOne,
+                newKey: "ch1", newProgress: lastPageOfOne,
+                chapters: chapters
+            ) == nil
+        )
+
+        // Not on the previous chapter's last page.
+        #expect(
+            ReaderModel.finishedChapter(
+                previousKey: "ch1", previousProgress: midOne,
+                newKey: "ch2", newProgress: ReaderProgress(page: 1, totalPages: 9),
+                chapters: chapters
+            ) == nil
+        )
+
+        // No page counts (rendition not settled).
+        #expect(
+            ReaderModel.finishedChapter(
+                previousKey: "ch1", previousProgress: ReaderProgress(page: 4, totalPages: 0),
+                newKey: "ch2", newProgress: ReaderProgress(page: 1, totalPages: 9),
+                chapters: chapters
+            ) == nil
+        )
+
+        // No new progress yet (rendition not live for the new chapter).
+        #expect(
+            ReaderModel.finishedChapter(
+                previousKey: "ch1", previousProgress: lastPageOfOne,
+                newKey: "ch2", newProgress: nil,
+                chapters: chapters
+            ) == nil
+        )
+    }
+
     @Test("relocated records clamped page progress")
     func relocatedRecordsProgress() {
         let reader = ReaderModel()

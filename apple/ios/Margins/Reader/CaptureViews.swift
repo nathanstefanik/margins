@@ -21,7 +21,10 @@ struct CaptureSheet: View {
     @FocusState private var focused: Bool
 
     private var draftKey: String {
-        "capture.draft.\(reader.book?.id ?? "").\(reader.chapter?.key ?? "")"
+        // Discriminated by capture type: an abandoned page-note draft must
+        // not pre-fill a selection capture (different quote, same chapter).
+        let kind = selection == nil ? "page" : "sel"
+        return "capture.draft.\(reader.book?.id ?? "").\(reader.chapter?.key ?? "").\(kind)"
     }
 
     var body: some View {
