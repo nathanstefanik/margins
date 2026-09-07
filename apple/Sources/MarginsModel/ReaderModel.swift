@@ -137,6 +137,31 @@ public final class ReaderModel {
         return chapters.first(where: { ($0.href as NSString).lastPathComponent == base })
     }
 
+    /// The chapter just finished by paging past its last page, or nil.
+    /// Requires the previous snapshot to be a different chapter's final
+    /// page (with page counts settled, new progress reported) and the new
+    /// chapter to be the *immediate successor* — a TOC jump from a last
+    /// page to a much later chapter is not finishing the chapter in
+    /// between. Pure so the views and tests share one definition.
+    public nonisolated static func finishedChapter(
+        previousKey: String,
+        previousProgress: ReaderProgress?,
+        newKey: String,
+        newProgress: ReaderProgress?,
+        chapters: [ChapterMeta]
+    ) -> ChapterMeta? {
+        guard let previousProgress,
+              newProgress != nil,
+              previousKey != newKey,
+              previousProgress.totalPages > 0,
+              previousProgress.page >= previousProgress.totalPages,
+              let finished = chapters.first(where: { $0.key == previousKey }),
+              let newChapter = chapters.first(where: { $0.key == newKey }),
+              newChapter.index == finished.index + 1
+        else { return nil }
+        return finished
+    }
+
     /// Percent complete for the whole book (0–100), interpolated from the
     /// chapter index and the page position within the chapter — being on
     /// page k of m means k/m of the chapter is behind you, so the final
