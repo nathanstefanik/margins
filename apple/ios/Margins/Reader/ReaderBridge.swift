@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import WebKit
+import OSLog
 import MarginsCore
 import MarginsModel
 
@@ -65,7 +66,13 @@ struct IOSReaderWebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let webView = context.coordinator.makeWebView()
-        bridge = context.coordinator
+        // Hand the coordinator over on the next tick: writing state here
+        // mutates SwiftUI state during view update, and SwiftUI silently
+        // discards the write - the scene's `bridge` would stay nil for the
+        // lifetime of the reader (chrome buttons and tap zones dead).
+        Task { @MainActor in
+            bridge = context.coordinator
+        }
         return webView
     }
 
@@ -154,6 +161,19 @@ final class ReaderBridge: NSObject {
                         + ' iframe0=' + JSON.stringify(ir)
                         + ' bodyH=' + document.body.scrollHeight + ' innerH=' + window.innerHeight);
                 }, 3000);
+                setTimeout(function() {
+                    // epub.js draws highlight overlays via a Pane in the
+                    // OUTER document (positioned over the iframe), not
+                    // inside the section's iframe.
+                    var stats = 'rects=' + document.querySelectorAll('svg rect, rect').length
+                        + ' svgs=' + document.querySelectorAll('svg').length
+                        + ' refs=' + document.querySelectorAll('[ref]').length;
+                    try {
+                        var doc = document.querySelector('iframe').contentDocument;
+                        stats += ' iframeRects=' + doc.querySelectorAll('rect').length;
+                    } catch (e) { stats += ' iframeErr:' + e; }
+                    send('diag-hl', stats);
+                }, 6000);
             })();
             """,
             injectionTime: .atDocumentStart,
@@ -229,6 +249,7 @@ final class ReaderBridge: NSObject {
     /// Renders highlight overlays for mark CFI ranges; epub.js dedupes by
     /// range, so re-adding after chapter loads is safe.
     func restoreHighlights(_ cfiRanges: [String]) {
+        Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("restoreHighlights \(cfiRanges.count) ranges webview=\(self.webView != nil)")
         for cfiRange in cfiRanges where !cfiRange.isEmpty {
             evaluate("readerHighlight(\(Self.javaScriptLiteral(cfiRange)))")
         }
@@ -323,7 +344,12 @@ extension ReaderBridge: WKScriptMessageHandler {
         switch body["type"] as? String {
         case "console":
             // Page diagnostics: visible in the runtime log under the app pid.
-            print("[reader-js][\(body["level"] ?? "")] \(body["text"] ?? "")")
+            // Also mirrored to the unified log — stdout is not captured for
+            // simulator launches here, and these lines are the reader's
+            // only failure signal.
+            let text = "\(body["text"] ?? "")"
+            Logger(subsystem: "io.github.nathanstefanik.margins", category: "reader-js").log("\(text, privacy: .public)")
+            print("[reader-js][\(body["level"] ?? "")] \(text)")
         case "selected":
             if let cfiRange = body["cfiRange"] as? String,
                let text = body["text"] as? String,
@@ -333,6 +359,7 @@ extension ReaderBridge: WKScriptMessageHandler {
         case "relocated":
             let page = (body["page"] as? NSNumber)?.intValue ?? 1
             let totalPages = (body["totalPages"] as? NSNumber)?.intValue ?? 0
+            Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("relocated page=\(page) href=\((body["href"] as? String) ?? "nil", privacy: .public) cfi=\((body["cfi"] as? String) ?? "nil", privacy: .public)")
             print("[reader-js] relocated: page \(page)/\(totalPages) href=\(body["href"] ?? "nil")")
             currentCfi = body["cfi"] as? String
             reader.relocated(
