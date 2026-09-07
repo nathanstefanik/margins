@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 import MarginsCore
 import MarginsModel
 
@@ -29,6 +30,12 @@ struct ReaderScene: View {
     /// The representable's coordinator, handed over on creation; the
     /// chrome drives the page through it.
     @State private var bridge: ReaderBridge?
+    /// The chapter whose note has been loaded. Highlight restore waits
+    /// for both the note and the rendition (see `restoreHighlightsIfReady`).
+    @State private var noteLoadedFor: String?
+    /// The chapter whose highlights were last restored; the once-per-
+    /// chapter guard keeps re-adding idempotent.
+    @State private var highlightsRestoredFor: String?
 
     var body: some View {
         ZStack {
@@ -96,13 +103,12 @@ struct ReaderScene: View {
             // The chapter note (body + marks) feeds the chrome count, the
             // sheets, and the highlight overlays; reloaded per chapter.
             await library.loadChapterNote(reader: reader)
-            // Highlight overlays need the section's iframe painted before
-            // they can attach; a short settle avoids a silent no-op.
-            try? await Task.sleep(for: .milliseconds(600))
-            bridge?.restoreHighlights(reader.noteMarks.compactMap(\.cfi))
+            noteLoadedFor = reader.chapter?.key
+            restoreHighlightsIfReady()
         }
         .onChange(of: reader.progress, { oldValue, newValue in
             detectChapterFinish(to: newValue)
+            restoreHighlightsIfReady()
         })
         .onAppear {
             chromeVisible = true
@@ -166,6 +172,27 @@ struct ReaderScene: View {
             .background(.thinMaterial, in: Capsule())
             .transition(.opacity)
             .accessibilityIdentifier("reader-flash")
+    }
+
+    // MARK: Highlight restore
+
+    /// Paints the chapter's highlight overlays once both preconditions
+    /// hold: the chapter's note is loaded (`noteLoadedFor` — the marks
+    /// come from it) and the rendition is provably live for this chapter
+    /// (`reader.progress != nil` — `open()` resets progress, and it is
+    /// only set again by a `relocated` for the current chapter). A fixed
+    /// timer cannot do this: first loads routinely outlast any constant
+    /// sleep, and the overlay attach silently no-ops on an unready
+    /// rendition.
+    private func restoreHighlightsIfReady() {
+        guard let key = reader.chapter?.key else { return }
+        Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("restore check key=\(key, privacy: .public) noteLoadedFor=\(noteLoadedFor ?? "nil", privacy: .public) restoredFor=\(highlightsRestoredFor ?? "nil", privacy: .public) page=\(reader.progress?.page ?? -1) marks=\(reader.noteMarks.count) bridge=\(bridge != nil)")
+        guard noteLoadedFor == key,
+              highlightsRestoredFor != key,
+              reader.progress != nil
+        else { return }
+        highlightsRestoredFor = key
+        bridge?.restoreHighlights(reader.noteMarks.compactMap(\.cfi))
     }
 
     // MARK: Capture affordance (no selection)
@@ -379,12 +406,24 @@ struct ReaderScene: View {
             if ProcessInfo.processInfo.environment["MARGINS_EDITOR_FIXTURE"] != nil {
                 editorPresented = true
             } else if ProcessInfo.processInfo.environment["MARGINS_HIGHLIGHT_FIXTURE"] != nil {
+                // Wait for the rendition so the page CFI is meaningful,
+                // then advance to the first text page (the cover has no
+                // text to highlight over).
+                for _ in 0..<40 where reader.progress == nil {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+                let firstKey = reader.chapter?.key
+                bridge?.pageForward()
+                for _ in 0..<40 where reader.chapter?.key == firstKey {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
                 // A relocated CFI is a point (zero-width); extend it into a
                 // range over the first characters so the overlay can paint.
                 var cfi = bridge?.currentPageCfi() ?? ""
                 if !cfi.isEmpty, !cfi.contains(",/1:") {
                     cfi = String(cfi.dropLast()) + "/1:0,/1:5)"
                 }
+                Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("HIGHLIGHT fixture committing cfi=\(cfi, privacy: .public)")
                 highlight(ReaderBridge.ReaderSelection(cfiRange: cfi, text: "PART I"))
             }
             return
