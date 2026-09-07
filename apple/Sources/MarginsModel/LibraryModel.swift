@@ -233,6 +233,18 @@ public final class LibraryModel {
                 await loadChapterNote(reader: reader)
             }
             await refresh()
+            // A compiled page cached for this book must reflect the clear
+            // immediately: `refresh()` deliberately keeps `compiledNotes`
+            // when the bookId still matches, so the notes view would keep
+            // showing deleted notes until the next navigation.
+            if compiledNotes?.bookId == bookId {
+                let mode = detailMode
+                let tab = notesPageTab
+                if (await loadCompiledNotes(bookId: bookId)) != nil {
+                    detailMode = mode
+                    notesPageTab = tab
+                }
+            }
             return cleared
         } catch {
             errorMessage = String(describing: error)
