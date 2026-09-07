@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 import MarginsCore
 import MarginsModel
 
@@ -30,11 +31,12 @@ struct BookDetailView: View {
                 ContentUnavailableView("No book selected", systemImage: "book")
             }
         }
-        .task(id: bookID ?? library.selectedBookID) {
-            // The iPad detail is created with `bookID == nil` and reflects
-            // the sidebar selection, so the effective book — not just the
-            // pushed id — must key this task, or the position never loads
-            // (and never refreshes on reselection).
+        .task(id: bookID ?? library.selectedBook?.id) {
+            // Keyed on the *loaded* book, not the selection id: on iPad the
+            // detail is created with `bookID == nil` and follows the sidebar
+            // selection, whose metadata lands one async hop after
+            // `selectedBookID` changes — keying on the id would run while
+            // `selectedMeta` is still nil (no position load, no reader).
             if let bookID, library.selectedBookID != bookID {
                 await library.selectBook(id: bookID)
             }
@@ -46,7 +48,10 @@ struct BookDetailView: View {
             case "reader":
                 if let meta = selectedMeta {
                     await library.openBookResuming(id: meta.id)
+                    Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("openBookResuming done, setting readerActive")
                     readerActive = true
+                } else {
+                    Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("no selectedMeta, cannot open reader")
                 }
             case "notes":
                 tab = .notes

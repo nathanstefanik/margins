@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import OSLog
 import MarginsCore
 import MarginsModel
 
@@ -23,7 +24,13 @@ struct LibraryScene: View {
             NavigationSplitView {
                 sidebar
             } detail: {
-                BookDetailView()
+                // BookDetailView pushes the reader via
+                // `navigationDestination(isPresented:)`, which is inert
+                // without an enclosing stack (the detail column does not
+                // provide one on its own).
+                NavigationStack {
+                    BookDetailView()
+                }
             }
         } else {
             NavigationStack {
@@ -109,9 +116,16 @@ struct LibraryScene: View {
         }
         #if DEBUG
         .task {
+            // The fixtures must not race the app's library-root pin
+            // (`app.activate()`): importing into the pre-switch root and
+            // then reading from the pinned one leaves ghosts and
+            // not-found errors. Idempotent, and a no-op when the App
+            // task already ran it.
+            await app.activate()
             await importFixtureIfRequested()
         }
         .task {
+            await app.activate()
             // Development seams for simulator verification (no UI-automation
             // tooling in this environment): prefill the search query, and
             // drive the delete-confirmation flow (`prompt` shows the dialog,
@@ -132,6 +146,7 @@ struct LibraryScene: View {
                     try? await Task.sleep(for: .milliseconds(200))
                 }
                 if let first = library.books.first {
+                    Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("OPEN fixture: selecting \(first.id)")
                     if sizeClass == .regular {
                         await library.selectBook(id: first.id)
                     } else {
