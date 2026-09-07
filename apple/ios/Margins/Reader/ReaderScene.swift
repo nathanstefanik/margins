@@ -66,7 +66,11 @@ struct ReaderScene: View {
         .animation(.easeOut(duration: 0.2), value: chromeVisible)
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(chromeVisible ? .visible : .hidden, for: .navigationBar)
+        // The custom chrome carries the back affordance, the title, and
+        // the actions and fades with `chromeVisible`; the system bar would
+        // be a second, always-on header stacked on top of it (and push
+        // the page content down).
+        .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $typographyPresented) {
             TypographySheet(preferences: reader.preferences)
                 .presentationDetents([.medium, .large])
@@ -219,19 +223,23 @@ struct ReaderScene: View {
     // MARK: End-of-chapter prompt
 
     /// Quiet and dismissible: offered once when the reader pages past a
-    /// chapter's last page, silenced per finished chapter.
+    /// chapter's last page, silenced per finished chapter. The predicate
+    /// (shared with the tests) demands the new chapter be the finished
+    /// chapter's immediate successor, so TOC jumps don't trigger it.
     private func detectChapterFinish(to newProgress: ReaderProgress?) {
         defer {
             previousTurn = (reader.chapter?.key ?? "", newProgress)
         }
         // `reader.chapter` has already followed the relocation; the
         // previous snapshot holds the chapter that was just left.
-        guard let previous = previousTurn, let previousProgress = previous.progress, newProgress != nil,
-              previous.key != reader.chapter?.key,
-              previousProgress.totalPages > 0,
-              previousProgress.page >= previousProgress.totalPages,
-              let finished = reader.book?.chapters.first(where: { $0.key == previous.key }),
-              (reader.chapter?.index ?? 0) > finished.index
+        guard let previous = previousTurn,
+              let finished = ReaderModel.finishedChapter(
+                  previousKey: previous.key,
+                  previousProgress: previous.progress,
+                  newKey: reader.chapter?.key ?? "",
+                  newProgress: newProgress,
+                  chapters: reader.book?.chapters ?? []
+              )
         else { return }
         let silencedKey = "notePrompt.dismissed.\(reader.book?.id ?? "").\(finished.key)"
         if !UserDefaults.standard.bool(forKey: silencedKey) {
