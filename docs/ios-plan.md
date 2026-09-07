@@ -446,6 +446,17 @@ Met 2026-09-07. Implementation notes:
   behavior).
 - Exit: definition-of-done checklist in the prompt walked end to end.
 
+## Known limitations
+
+- **Size-class flip rebuilds navigation (iOS)** — the iPhone/iPad branch on
+  `horizontalSizeClass` (`LibraryScene`) swaps a `NavigationStack` for a
+  `NavigationSplitView`, so entering Split View or Slide Over on iPad
+  (regular → compact) rebuilds the whole navigation tree and drops the
+  user's place. A single always-on `NavigationSplitView` would collapse
+  gracefully but would also change the iPhone UX (grid → detail becomes
+  sidebar → detail) and break the pushed-detail DEBUG seams; deferred as a
+  deliberate trade-off.
+
 ## Testing
 
 - **Core**: mark parse/serialize round-trip; blob-frontend save preserves
