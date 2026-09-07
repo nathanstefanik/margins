@@ -17,31 +17,34 @@ final class KeyHandlingWebView: WKWebView {
     override var canBecomeFirstResponder: Bool { true }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if handle(presses) { return }
+        if let direction = Self.pageDirection(for: presses) {
+            onKey?(direction)
+            return
+        }
         super.pressesBegan(presses, with: event)
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        if handle(presses) { return }
+        // Swallow the matching key-up without paging again: the turn
+        // already happened in `pressesBegan`, and the web view must not
+        // see the key either.
+        if Self.pageDirection(for: presses) != nil { return }
         super.pressesEnded(presses, with: event)
     }
 
-    private func handle(_ presses: Set<UIPress>) -> Bool {
-        var handled = false
+    private static func pageDirection(for presses: Set<UIPress>) -> PageDirection? {
         for press in presses {
             guard let key = press.key else { continue }
             switch key.keyCode {
             case .keyboardRightArrow, .keyboardDownArrow, .keyboardSpacebar:
-                onKey?(.forward)
-                handled = true
+                return .forward
             case .keyboardLeftArrow, .keyboardUpArrow:
-                onKey?(.back)
-                handled = true
+                return .back
             default:
                 break
             }
         }
-        return handled
+        return nil
     }
 }
 

@@ -30,7 +30,11 @@ struct BookDetailView: View {
                 ContentUnavailableView("No book selected", systemImage: "book")
             }
         }
-        .task(id: bookID) {
+        .task(id: bookID ?? library.selectedBookID) {
+            // The iPad detail is created with `bookID == nil` and reflects
+            // the sidebar selection, so the effective book — not just the
+            // pushed id — must key this task, or the position never loads
+            // (and never refreshes on reselection).
             if let bookID, library.selectedBookID != bookID {
                 await library.selectBook(id: bookID)
             }
@@ -52,9 +56,14 @@ struct BookDetailView: View {
             #endif
         }
         .onChange(of: readerActive) {
-            // Returning from the reader: progress markers refresh.
+            // Returning from the reader: flush the debounced position
+            // save so the reload reads the page the user actually left,
+            // then refresh the progress markers.
             if !readerActive {
-                Task { await loadPosition() }
+                Task {
+                    await reader.flushPositionSaveAndWait()
+                    await loadPosition()
+                }
             }
         }
         .navigationTitle(selectedMeta?.title ?? "Book")
@@ -261,6 +270,12 @@ private struct NotesTab: View {
         }
         .task(id: bookID) {
             await library.loadCompiledNotes(bookId: bookID)
+        }
+        .onChange(of: library.compiledNotes) {
+            // The cached export is a snapshot: new marks, saved notes, or
+            // a clear-all must invalidate it, or the ShareLink keeps
+            // sharing stale markdown.
+            exportMarkdown = nil
         }
     }
 
