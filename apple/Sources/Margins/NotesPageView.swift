@@ -299,13 +299,11 @@ struct NotesPageView: View {
         }
     }
 
-    /// Clears every note for this book, then reloads the compiled page so
-    /// it reflects the emptied library.
+    /// Clears every note for this book. The model recompiles the cached
+    /// compiled page, so the emptied state shows immediately.
     private func clearAllNotes() {
         Task {
-            if await model.clearNotes(bookId: notes.bookId) != nil {
-                await model.loadCompiledNotes(bookId: notes.bookId)
-            }
+            await model.clearNotes(bookId: notes.bookId)
         }
     }
 }

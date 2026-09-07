@@ -104,6 +104,39 @@ struct LibraryModelTests {
         #expect(model.books.first?.notesCount == 0)
     }
 
+    @Test("clearNotes recompiles a cached compiled notes page")
+    @MainActor
+    func clearNotesRefreshesCompiledPage() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteBody = "a note about chapter one"
+        await model.saveChapterNote(reader: reader)
+        #expect(reader.notesError == nil)
+
+        await model.loadCompiledNotes(bookId: book.id)
+        #expect(model.compiledNotes?.chaptersWithNotes == 1)
+        #expect(model.detailMode == .notes)
+
+        let cleared = await model.clearNotes(bookId: book.id)
+        #expect(cleared == 1)
+        #expect(model.errorMessage == nil)
+
+        // The cached compiled page reflects the clear immediately — no
+        // manual reload, no navigation away and back.
+        let notes = try #require(model.compiledNotes)
+        #expect(notes.bookId == book.id)
+        #expect(notes.chaptersWithNotes == 0)
+        #expect(notes.chapters.isEmpty)
+        #expect(model.detailMode == .notes)
+    }
+
     @Test("saving a note recompiles a stale compiled notes page")
     @MainActor
     func saveNoteRefreshesCompiledPage() async throws {
