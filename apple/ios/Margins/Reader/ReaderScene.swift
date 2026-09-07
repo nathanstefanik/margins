@@ -32,12 +32,14 @@ struct ReaderScene: View {
 
     var body: some View {
         ZStack {
-            IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
-                .ignoresSafeArea(edges: .bottom)
-                .onTapGesture(coordinateSpace: .local) { location in
-                    handleTap(at: location)
-                }
-                .gesture(pageSwipe)
+            GeometryReader { proxy in
+                IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
+                    .onTapGesture(coordinateSpace: .local) { location in
+                        handleTap(at: location, width: proxy.size.width)
+                    }
+                    .gesture(pageSwipe)
+            }
+            .ignoresSafeArea(edges: .bottom)
 
             if chromeVisible {
                 chrome
@@ -322,11 +324,10 @@ struct ReaderScene: View {
 
     // MARK: Input
 
-    private func handleTap(at location: CGPoint) {
-        guard let width = tapZoneWidth else {
-            chromeVisible.toggle()
-            return
-        }
+    private func handleTap(at location: CGPoint, width: CGFloat) {
+        // Thirds of the reader view itself — the window's width is wrong
+        // the moment the reader is narrower (Split View, Slide Over,
+        // Stage Manager).
         if location.x < width / 3 {
             pageBack()
         } else if location.x > width * 2 / 3 {
@@ -334,13 +335,6 @@ struct ReaderScene: View {
         } else {
             chromeVisible.toggle()
         }
-    }
-
-    private var tapZoneWidth: CGFloat? {
-        guard let window = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene }).first?.keyWindow
-        else { return nil }
-        return window.bounds.width
     }
 
     private var pageSwipe: some Gesture {
