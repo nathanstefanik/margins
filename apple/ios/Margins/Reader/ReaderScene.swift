@@ -1,5 +1,4 @@
 import SwiftUI
-import OSLog
 import MarginsCore
 import MarginsModel
 
@@ -189,9 +188,8 @@ struct ReaderScene: View {
     /// sleep, and the overlay attach silently no-ops on an unready
     /// rendition.
     private func restoreHighlightsIfReady() {
-        guard let key = reader.chapter?.key else { return }
-        Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("restore check key=\(key, privacy: .public) noteLoadedFor=\(noteLoadedFor ?? "nil", privacy: .public) restoredFor=\(highlightsRestoredFor ?? "nil", privacy: .public) page=\(reader.progress?.page ?? -1) marks=\(reader.noteMarks.count) bridge=\(bridge != nil)")
-        guard noteLoadedFor == key,
+        guard let key = reader.chapter?.key,
+              noteLoadedFor == key,
               highlightsRestoredFor != key,
               reader.progress != nil
         else { return }
@@ -431,7 +429,6 @@ struct ReaderScene: View {
                 if !cfi.isEmpty, !cfi.contains(",/1:") {
                     cfi = String(cfi.dropLast()) + "/1:0,/1:5)"
                 }
-                Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("HIGHLIGHT fixture committing cfi=\(cfi, privacy: .public)")
                 highlight(ReaderBridge.ReaderSelection(cfiRange: cfi, text: "PART I"))
             }
             return

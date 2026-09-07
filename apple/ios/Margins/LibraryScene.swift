@@ -1,6 +1,5 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import OSLog
 import MarginsCore
 import MarginsModel
 
@@ -146,7 +145,6 @@ struct LibraryScene: View {
                     try? await Task.sleep(for: .milliseconds(200))
                 }
                 if let first = library.books.first {
-                    Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("OPEN fixture: selecting \(first.id)")
                     if sizeClass == .regular {
                         await library.selectBook(id: first.id)
                     } else {

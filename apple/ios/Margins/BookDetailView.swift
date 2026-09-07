@@ -1,5 +1,4 @@
 import SwiftUI
-import OSLog
 import MarginsCore
 import MarginsModel
 
@@ -48,10 +47,7 @@ struct BookDetailView: View {
             case "reader":
                 if let meta = selectedMeta {
                     await library.openBookResuming(id: meta.id)
-                    Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("openBookResuming done, setting readerActive")
                     readerActive = true
-                } else {
-                    Logger(subsystem: "io.github.nathanstefanik.margins", category: "DEBUG-2f1a").log("no selectedMeta, cannot open reader")
                 }
             case "notes":
                 tab = .notes
