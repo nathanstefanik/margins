@@ -88,7 +88,9 @@ see `docs/ios-plan.md`. The iOS library root lives in the iCloud Documents
 container when available, falling back to local `Documents/Library` at
 runtime (`LibraryLocation`); DEBUG launch env vars
 (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`)
-drive simulator verification flows.
+drive simulator verification flows. Device signing uses the team ID in
+`apple/ios/Signing.local.xcconfig` (gitignored — created from
+`Signing.local.xcconfig.example`; never commit it).
 
 macOS tests use Swift Testing (`import Testing`) via the `MarginsTests`
 runner executable — `swift test` silently runs nothing on a CLT-only

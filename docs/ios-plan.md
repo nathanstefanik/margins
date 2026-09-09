@@ -1,6 +1,6 @@
 # Development plan: iOS app
 
-Status: Phase 1–6 implemented · Phase 7 pending · device signing + iCloud verification blocked on Apple Developer approval · Last updated: 2026-09-07
+Status: All phases (1–7) implemented · remaining: on-device gesture pass (see Phase 7 notes) · Last updated: 2026-09-09
 
 ## Goal
 
@@ -434,7 +434,7 @@ Met 2026-09-07. Implementation notes:
    overlay's visual paint — all need touch synthesis; the data paths are
    proven end to end.
 
-### Phase 7 — Integration, accessibility, docs
+### Phase 7 — Integration, accessibility, docs — DONE (2026-09-09)
 
 - "Open EPUB in Margins" from Files/Mail (`CFBundleDocumentTypes` +
   `onOpenURL`).
@@ -445,6 +445,32 @@ Met 2026-09-07. Implementation notes:
   setup documented (container, entitlement, fallback behavior, conflict
   behavior).
 - Exit: definition-of-done checklist in the prompt walked end to end.
+
+Met 2026-09-09. Implementation notes:
+
+1. **Open-EPUB handoff**: `CFBundleDocumentTypes` declares the
+   `org.idpf.epub-container` UTI; `onOpenURL` stages the security-scoped
+   URL under `NSFileCoordinator` and imports a copy into the library
+   (same path as the document picker — duplicate imports surface the
+   core's "already in library" error). The import logic is shared between
+   the picker and the handoff (`AppModel.importSecurityScoped`).
+2. **Accessibility**: the reader's gesture-only paths all gained explicit
+   controls — page-turn buttons in the chrome (which no longer auto-hide
+   the chrome when used from it) and a persistent chrome-toggle button
+   mirroring the capture affordance. Grid delete is reachable via the
+   VoiceOver actions rotor (context menu). Dynamic Type: system text
+   styles throughout; the reading surface's typography is user-controlled
+   via `ReaderPreferences`.
+3. **Device signing documented**: `Signing.local.xcconfig` (gitignored)
+   carries the team; `xcodebuild -allowProvisioningUpdates
+   -allowProvisioningDeviceRegistration` registers the device, creates the
+   profile + certificate, and installs — demonstrated on a paired iPhone,
+   where the app resolved the real ubiquity container
+   (`iCloud~io~github~nathanstefanik~margins`) on first launch.
+4. **Remaining human pass** (touch-only, on device): native edit-menu
+   capture, tap zones/swipes, highlight overlay paint, "Open in Margins"
+   from Files, VoiceOver listen-through, and the definition-of-done walk
+   (import → read → five marks + one chapter note → Notes scene → export).
 
 ## Known limitations
 

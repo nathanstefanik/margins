@@ -59,6 +59,23 @@ struct ReaderScene: View {
                 flashBadge
             }
         }
+        .overlay(alignment: .bottomLeading) {
+            // VoiceOver path to every control: the chrome toggle and page
+            // turns must never be gesture-only.
+            Button {
+                withAnimation { chromeVisible.toggle() }
+            } label: {
+                Image(systemName: chromeVisible ? "eye.slash" : "eye")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(chromeVisible ? .primary : .secondary)
+                    .padding(10)
+                    .background(.thinMaterial, in: .circle)
+            }
+            .opacity(chromeVisible ? 1 : 0.45)
+            .padding(.leading, 14)
+            .padding(.bottom, 60)
+            .accessibilityLabel(chromeVisible ? "Hide reading controls" : "Show reading controls")
+        }
         .overlay(alignment: .bottomTrailing) {
             captureAffordance
         }
@@ -323,6 +340,12 @@ struct ReaderScene: View {
 
     private var bottomBar: some View {
         HStack(spacing: 16) {
+            Button {
+                pageBack(hideChrome: false)
+            } label: {
+                Image(systemName: "chevron.backward")
+            }
+            .accessibilityLabel("Previous page")
             Text(progressText)
                 .font(.caption)
                 .monospacedDigit()
@@ -344,6 +367,12 @@ struct ReaderScene: View {
                     ? "Marks"
                     : "\(reader.noteMarks.count) marks in this chapter"
             )
+            Button {
+                pageForward(hideChrome: false)
+            } label: {
+                Image(systemName: "chevron.forward")
+            }
+            .accessibilityLabel("Next page")
         }
         .padding(.horizontal)
         .padding(.vertical, 10)
@@ -384,13 +413,15 @@ struct ReaderScene: View {
             }
     }
 
-    private func pageForward() {
-        chromeVisible = false
+    /// Explicit chrome controls never hide the chrome they live in; only
+    /// page-surface input (taps, swipes, hardware keys) does.
+    private func pageForward(hideChrome: Bool = true) {
+        if hideChrome { chromeVisible = false }
         bridge?.pageForward()
     }
 
-    private func pageBack() {
-        chromeVisible = false
+    private func pageBack(hideChrome: Bool = true) {
+        if hideChrome { chromeVisible = false }
         bridge?.pageBack()
     }
 
