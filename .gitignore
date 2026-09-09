@@ -7,6 +7,9 @@ dist/
 /build/
 apple/.build/
 
+# iOS signing (local team ID — never committed)
+apple/ios/Signing.local.xcconfig
+
 # Xcode user state
 xcuserdata/
 *.xcuserstate
