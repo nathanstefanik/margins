@@ -135,7 +135,6 @@ struct BookDetailView: View {
                     ContentsList(
                         meta: meta,
                         position: position,
-                        showEmptyChapters: showEmptyChapters,
                         onJump: jump
                     )
                 case .notes:
@@ -164,13 +163,12 @@ struct BookDetailView: View {
 
 // MARK: Contents
 
-/// The spine: chapter titles with a notes marker (from the notes index)
+/// The spine: every chapter, with a notes marker (from the notes index)
 /// and a bookmark on the current reading position. Tapping opens the
-/// reader at that chapter.
+/// reader at that chapter. Empty-chapter filtering belongs on Notes.
 private struct ContentsList: View {
     let meta: BookMeta
     let position: ReadingPosition?
-    let showEmptyChapters: Bool
     let onJump: (ChapterMeta) -> Void
 
     private var notedKeys: Set<String> {
@@ -184,11 +182,9 @@ private struct ContentsList: View {
     }
 
     var body: some View {
-        let chapters = showEmptyChapters
-            ? meta.chapters
-            : meta.chapters.filter { notedKeys.contains($0.key) }
+        let chapters = meta.chapters
         if chapters.isEmpty {
-            Text("No notes yet — jump into a chapter to write one.")
+            Text("This book has no chapters.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 8)
