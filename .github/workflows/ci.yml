@@ -112,7 +112,12 @@ jobs:
         # Compiles the app scenes (apple/ios/Margins), which the SwiftPM
         # package build above never touches. Needs the xcframework's
         # simulator slice from `make ios-core`; no signing on runners.
+        # ARCHS=arm64: the simulator slice is arm64-only (Rust does not
+        # ship x86_64-apple-ios-sim — docs/ios-plan.md Phase 1 note 3),
+        # and the generic destination would otherwise build x86_64 too
+        # and fail to link the FFI symbols.
         run: |
           xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins \
             -destination 'generic/platform=iOS Simulator' \
+            ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO build
