@@ -274,24 +274,7 @@ struct LibraryScene: View {
             library.errorMessage = String(describing: error)
         case .success(let urls):
             guard let picked = urls.first else { return }
-            Task { await importPicked(picked) }
-        }
-    }
-
-    private func importPicked(_ picked: URL) async {
-        let scoped = picked.startAccessingSecurityScopedResource()
-        defer {
-            if scoped {
-                picked.stopAccessingSecurityScopedResource()
-            }
-        }
-        do {
-            // The picker's grant does not outlive this call; snapshot the
-            // file somewhere the core can read freely.
-            let staged = try app.libraryLocation.stagedCopy(of: picked)
-            await library.importEpubs(atPaths: [staged.path])
-        } catch {
-            library.errorMessage = String(describing: error)
+            Task { await app.importSecurityScoped(picked) }
         }
     }
 

@@ -107,6 +107,11 @@ shared `LibraryModel`; the library root is resolved per launch by
 falling back to local `Documents/Library` with the reason surfaced in the
 UI. DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`,
 `MARGINS_DELETE_FIXTURE`) drive deterministic simulator verification flows.
+EPUBs handed over by Files/Mail arrive through `onOpenURL` as
+security-scoped URLs and are staged (`NSFileCoordinator`) before the core
+imports its own copy into the library. The signing team lives in
+`apple/ios/Signing.local.xcconfig` (gitignored; see
+`Signing.local.xcconfig.example`) — never committed.
 Entitlements declare the iCloud Documents container
 (`iCloud.io.github.nathanstefanik.margins`); the Info.plist exposes the
 container as a document scope (the `NSUbiquitousContainer*` keys nested

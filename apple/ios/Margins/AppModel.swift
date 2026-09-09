@@ -65,4 +65,27 @@ final class AppModel {
             await library.setLibraryRoot(root)
         }
     }
+
+    /// Imports an EPUB handed over by Files/Mail (`onOpenURL`) or any other
+    /// security-scoped source: snapshot the bytes under coordination, then
+    /// let the core copy it into the library. Returns whether it landed.
+    @discardableResult
+    func importSecurityScoped(_ picked: URL) async -> Bool {
+        let scoped = picked.startAccessingSecurityScopedResource()
+        defer {
+            if scoped {
+                picked.stopAccessingSecurityScopedResource()
+            }
+        }
+        do {
+            // The opener's grant does not outlive this call; stage a copy
+            // the core can read freely (same path as the document picker).
+            let staged = try libraryLocation.stagedCopy(of: picked)
+            await library.importEpubs(atPaths: [staged.path])
+            return true
+        } catch {
+            library.errorMessage = String(describing: error)
+            return false
+        }
+    }
 }

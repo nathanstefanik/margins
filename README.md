@@ -61,6 +61,19 @@ or `xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins -destination
 'platform=iOS Simulator,name=iPhone 17 Pro'`). See
 [docs/ios-plan.md](docs/ios-plan.md) for the phased status.
 
+**iOS device signing** (never committed): copy
+`apple/ios/Signing.local.xcconfig.example` to `Signing.local.xcconfig` and
+fill in your Team ID — the project loads it via an optional include. In
+Xcode, sign in under *Settings → Accounts* so automatic provisioning can
+register devices and create profiles; on the phone, enable *Settings →
+Privacy & Security → Developer Mode* (the toggle appears after the device
+is paired with Xcode). The library lives in the iCloud Documents container
+`iCloud.io.github.nathanstefanik.margins` when an iCloud account is
+available — visible in the Files app and pointable at from the Mac via
+`MARGINS_LIBRARY_ROOT` — falling back to local `Documents/Library` at
+runtime otherwise; sync happens through iCloud, conflict detection surfaces
+`NSFileVersion` conflicts rather than discarding them.
+
 macOS keybindings:
 
 | Key | Action |
@@ -136,25 +149,22 @@ Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architectur
   in the native edit menu, a page-anchored capture affordance with draft
   autosave, highlight-without-note (epub.js overlays), chapter marks sheet,
   full-height chapter-note editor, and a silenceable end-of-chapter prompt
+- iOS "Open in Margins" from Files/Mail (`onOpenURL`), VoiceOver labels
+  with no gesture-only actions, Dynamic Type throughout
+- **Device signing + real iCloud**: team ID in a gitignored local xcconfig,
+  app installs to a paired iPhone via
+  `xcodebuild -allowProvisioningUpdates`, and the library resolves the real
+  ubiquity container on device (Files-visible, Mac-pointable)
 
 **In progress**
 
-- iOS Phase 7: "Open EPUB in Margins" from Files (`onOpenURL`),
-  accessibility pass, docs finalization
+- Definition-of-done pass on real hardware: walk import → read → five
+  marks + one chapter note → compiled notes → export by hand, including
+  the gesture-only paths (native edit menu, tap zones, swipes) and the
+  highlight overlay's visual paint — the data paths are verified
+  end-to-end on the simulator via DEBUG launch seams
 
-**Blocked on Apple Developer approval** (enrollment submitted, awaiting
-Team ID)
-
-- Signing the iOS app for device builds (`DEVELOPMENT_TEAM`; a signing
-  certificate already exists on this machine)
-- Real-iCloud verification: container resolution + Files-app visibility on
-  a signed-in simulator/device, placeholder materialization, conflict
-  surfacing — the runtime local fallback is verified and ships regardless
-- Human gesture pass on real hardware: native edit-menu capture, reader
-  tap zones / swipes, and the highlight overlay's visual paint (data
-  paths verified end-to-end on the simulator via DEBUG launch seams)
-
-**Later**
+**Next**
 
 - Mark-text search, App Store packaging decisions
 
