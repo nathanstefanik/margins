@@ -2,6 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8">
+<!-- Without this meta the mobile layout viewport stays ~800 CSS px wide
+     and the whole canvas is scaled down: columns misalign with the
+     physical screen, text renders tiny, and the paper shows gutters. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Reader</title>
 <style>
   html, body {
@@ -9,9 +13,20 @@
     height: 100%;
     background: #f4f1ea;
     color: #111;
+    /* Kill the double-tap smart zoom; page turns and selection are the
+       only touch interactions on the reading surface. */
+    touch-action: manipulation;
   }
   #viewer {
-    height: 100%;
+    /* When the reader surface bleeds under the notch / home indicator
+       (viewport-fit=cover), keep pagination clear of them. */
+    height: calc(100% - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    margin-top: env(safe-area-inset-top, 0px);
+  }
+  /* Publisher styles paint section bodies white; the transparent iframe
+     lets the single paper color run edge to edge (Apple Books look). */
+  iframe {
+    background: transparent;
   }
   pre.reader-error {
     margin: 2rem;

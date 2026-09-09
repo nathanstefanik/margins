@@ -2,13 +2,23 @@ import SwiftUI
 import MarginsCore
 import MarginsModel
 
-/// The reader scene: the epub.js page full-bleed, with tap zones for
-/// paging, a horizontally-swiping page turn, hardware-key support, and
-/// immersive chrome. Note capture lives here too: the edit menu offers
-/// Note/Highlight on selections, a persistent affordance anchors a
-/// page-anchored mark, the chrome carries the chapter's mark count, and a
-/// quiet end-of-chapter prompt offers the contemplative note. Saving
-/// positions flushes on backgrounding: iOS will suspend you.
+/// The reader's paper palette, matching `reader.html` (`#f4f1ea` / `#111`).
+/// The Apple-target `Paper` enum lives in the macOS app target, which the
+/// iOS app does not link.
+private enum ReaderPaper {
+    static let background = Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
+}
+
+/// The reader scene, styled after Apple Books: a full-bleed paper page
+/// with immersive chrome. Tap the page's edges to turn, its middle to
+/// show or hide the controls; swipe to page; hardware keys work too.
+/// The chrome carries the back button, chapter marks and quick capture up
+/// top, and Contents / a position slider / typography below — the slider
+/// scrubs to an exact CFI once the book's locations are generated, and
+/// falls back to the nearest chapter before that. Note capture lives here
+/// too: the edit menu offers Note/Highlight on selections, and a quiet
+/// end-of-chapter prompt offers the contemplative note. Saving positions
+/// flushes on backgrounding: iOS will suspend you.
 struct ReaderScene: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
@@ -35,51 +45,15 @@ struct ReaderScene: View {
     /// The chapter whose highlights were last restored; the once-per-
     /// chapter guard keeps re-adding idempotent.
     @State private var highlightsRestoredFor: String?
+    /// Whole-book locations are generated in the background after the
+    /// book opens; once ready the scrubber jumps to an exact CFI.
+    @State private var locationsReady = false
 
     var body: some View {
         ZStack {
-            GeometryReader { proxy in
-                IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
-                    .onTapGesture(coordinateSpace: .local) { location in
-                        handleTap(at: location, width: proxy.size.width)
-                    }
-                    .gesture(pageSwipe)
-            }
-            .ignoresSafeArea(edges: .bottom)
-
-            if chromeVisible {
-                chrome
-                    .transition(.opacity)
-            }
-            if let finished = finishedChapter {
-                notePrompt(for: finished)
-                    .transition(.opacity)
-            }
-            if flashVisible {
-                flashBadge
-            }
+            ReaderPaper.background.ignoresSafeArea()
+            readerSurface
         }
-        .overlay(alignment: .bottomLeading) {
-            // VoiceOver path to every control: the chrome toggle and page
-            // turns must never be gesture-only.
-            Button {
-                withAnimation { chromeVisible.toggle() }
-            } label: {
-                Image(systemName: chromeVisible ? "eye.slash" : "eye")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(chromeVisible ? .primary : .secondary)
-                    .padding(10)
-                    .background(.thinMaterial, in: .circle)
-            }
-            .opacity(chromeVisible ? 1 : 0.45)
-            .padding(.leading, 14)
-            .padding(.bottom, 60)
-            .accessibilityLabel(chromeVisible ? "Hide reading controls" : "Show reading controls")
-        }
-        .overlay(alignment: .bottomTrailing) {
-            captureAffordance
-        }
-        .animation(.easeOut(duration: 0.2), value: chromeVisible)
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
         // The custom chrome carries the back affordance, the title, and
@@ -140,11 +114,64 @@ struct ReaderScene: View {
         #endif
     }
 
+    /// The reading surface. The chrome, the end-of-chapter prompt, and the
+    /// flash badge are overlays of the webview itself — as ZStack siblings
+    /// of a full-bleed `UIViewRepresentable` they render above it but
+    /// never receive touches (the webview's UIKit frame claims them
+    /// first), which leaves the whole chrome dead. The webview itself
+    /// stays inside the safe area; the paper in the ZStack paints the
+    /// status-bar and home-indicator zones, so the page still reads as
+    /// one full-bleed sheet.
+    private var readerSurface: some View {
+        IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
+            .accessibilityLabel("Reading page")
+            .accessibilityAction(named: "Turn page forward") {
+                pageForward()
+            }
+            .accessibilityAction(named: "Turn page back") {
+                pageBack()
+            }
+            .accessibilityAction(named: "Toggle reading controls") {
+                withAnimation { chromeVisible.toggle() }
+            }
+            .overlay {
+                ZStack {
+                    if chromeVisible {
+                        chrome
+                            .transition(.opacity)
+                    }
+                    if let finished = finishedChapter {
+                        notePrompt(for: finished)
+                            .transition(.opacity)
+                    }
+                    if flashVisible {
+                        flashBadge
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: chromeVisible)
+                .animation(.easeOut(duration: 0.2), value: flashVisible)
+            }
+    }
+
     // MARK: Callbacks
 
     private var callbacks: ReaderCallbacks {
         ReaderCallbacks(
             userPageTurn: { chromeVisible = false },
+            pageTap: { x, _ in
+                handleTap(x: x)
+            },
+            pageSwipe: { forward in
+                chromeVisible = false
+                if forward {
+                    bridge?.pageForward()
+                } else {
+                    bridge?.pageBack()
+                }
+            },
+            locationsReady: {
+                locationsReady = true
+            },
             captureRequest: { selection in
                 captureSelection = selection
                 capturePresented = true
@@ -214,27 +241,6 @@ struct ReaderScene: View {
         bridge?.restoreHighlights(reader.noteMarks.compactMap(\.cfi))
     }
 
-    // MARK: Capture affordance (no selection)
-
-    /// The no-selection path: a small persistent affordance that fades but
-    /// never disappears, anchoring the mark to the current page's CFI.
-    private var captureAffordance: some View {
-        Button {
-            captureSelection = nil
-            capturePresented = true
-        } label: {
-            Image(systemName: "square.and.pencil")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(chromeVisible ? .primary : .secondary)
-                .padding(10)
-                .background(.thinMaterial, in: .circle)
-        }
-        .opacity(chromeVisible ? 1 : 0.45)
-        .padding(.trailing, 14)
-        .padding(.bottom, 60)
-        .accessibilityLabel("New note at this page")
-    }
-
     // MARK: End-of-chapter prompt
 
     /// Quiet and dismissible: offered once when the reader pages past a
@@ -295,140 +301,206 @@ struct ReaderScene: View {
         .accessibilityElement(children: .combine)
     }
 
-    // MARK: Chrome
+    // MARK: Chrome (Apple Books style)
 
     @ViewBuilder
     private var chrome: some View {
-        VStack {
+        VStack(spacing: 0) {
             topBar
             Spacer(minLength: 0)
             bottomBar
         }
     }
 
+    /// Back, centered chapter title, and the chapter's annotation
+    /// affordances — the Books top bar, with capture where Books keeps
+    /// its share button.
     private var topBar: some View {
-        HStack(spacing: 16) {
-            Button {
+        HStack(spacing: 4) {
+            chromeButton("chevron.left", "Back to book") {
                 dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
             }
-            .accessibilityLabel("Back to book")
+            Spacer(minLength: 8)
             Text(reader.chapter?.title ?? reader.book?.title ?? "Reader")
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 8)
-            Button {
-                tocPresented = true
-            } label: {
-                Image(systemName: "list.bullet")
-            }
-            .accessibilityLabel("Table of contents")
-            Button {
-                typographyPresented = true
-            } label: {
-                Image(systemName: "textformat")
-            }
-            .accessibilityLabel("Typography")
-        }
-        .buttonStyle(.borderless)
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(.thinMaterial)
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 16) {
-            Button {
-                pageBack(hideChrome: false)
-            } label: {
-                Image(systemName: "chevron.backward")
-            }
-            .accessibilityLabel("Previous page")
-            Text(progressText)
-                .font(.caption)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            if let percent = reader.bookPercent {
-                ProgressView(value: percent, total: 100)
-                    .progressViewStyle(.linear)
-                    .frame(maxWidth: 160)
-            }
-            Spacer(minLength: 8)
-            Button {
-                marksPresented = true
-            } label: {
-                Image(systemName: reader.noteMarks.isEmpty ? "square.and.pencil" : "square.and.pencil.fill")
-            }
-            .accessibilityLabel(
+            chromeButton(
+                reader.noteMarks.isEmpty ? "bookmark" : "bookmark.fill",
                 reader.noteMarks.isEmpty
-                    ? "Marks"
+                    ? "Marks in this chapter"
                     : "\(reader.noteMarks.count) marks in this chapter"
-            )
-            Button {
-                pageForward(hideChrome: false)
-            } label: {
-                Image(systemName: "chevron.forward")
+            ) {
+                marksPresented = true
             }
-            .accessibilityLabel("Next page")
+            chromeButton("square.and.pencil", "New note at this page") {
+                captureSelection = nil
+                capturePresented = true
+            }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(.thinMaterial)
+        .padding(.horizontal, 8)
+        .frame(height: 52)
+        .background(barBackground(top: true))
     }
 
-    private var progressText: String {
-        guard let progress = reader.progress else { return "" }
-        return "\(progress.page) / \(max(progress.totalPages, 1))"
+    /// Contents, the position scrubber, and typography — the Books bottom
+    /// bar. The scrub track is built from SwiftUI primitives rather than
+    /// `Slider`: `Slider` is UISlider-backed, and a platform view stacked
+    /// over the web view's platform layer loses its touches to it.
+    private var bottomBar: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 10) {
+                chromeButton("list.bullet", "Table of contents") {
+                    tocPresented = true
+                }
+                scrubTrack
+                chromeButton("textformat", "Typography") {
+                    typographyPresented = true
+                }
+            }
+            HStack {
+                Text(pageText)
+                Spacer(minLength: 16)
+                Text(percentText)
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .background(barBackground(top: false))
+    }
+
+    /// The whole-book position scrubber: tap anywhere on the track to
+    /// jump there — an exact CFI once the book's locations are ready, the
+    /// nearest chapter before that. Built from SwiftUI primitives rather
+    /// than `Slider` (UISlider-backed platform views stacked over the web
+    /// view lose their touches), and tap-driven because the web view's
+    /// gesture recognizers cancel cross-host drags mid-gesture.
+    private var scrubTrack: some View {
+        GeometryReader { proxy in
+            let width = max(proxy.size.width, 1)
+            let value = reader.bookPercent ?? 0
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary.opacity(0.15))
+                    .frame(height: 4)
+                Capsule()
+                    .fill(.tint)
+                    .frame(width: max(0, width * value / 100), height: 4)
+                Circle()
+                    .fill(ReaderPaper.background)
+                    .overlay(Circle().stroke(Color.primary.opacity(0.2), lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.25), radius: 2)
+                    .frame(width: 22, height: 22)
+                    .offset(x: max(0, min(width - 22, width * value / 100 - 11)))
+            }
+            .frame(maxHeight: .infinity, alignment: .center)
+            .contentShape(.rect)
+            .onTapGesture(coordinateSpace: .local) { location in
+                commitScrub(max(min(location.x / width * 100, 100), 0))
+            }
+        }
+        .frame(height: 28)
+        .accessibilityElement()
+        .accessibilityLabel("Reading position")
+        .accessibilityValue(percentText)
+        .accessibilityAdjustableAction { direction in
+            let current = reader.bookPercent ?? 0
+            switch direction {
+            case .increment: commitScrub(min(current + 5, 100))
+            case .decrement: commitScrub(max(current - 5, 0))
+            @unknown default: return
+            }
+        }
+    }
+
+    /// A chrome button on paper: Books renders plain dark icons with
+    /// full-size touch targets.
+    private func chromeButton(
+        _ systemImage: String,
+        _ label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(minWidth: 40, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// The bars sit on the same paper as the page, with a hairline toward
+    /// the content; each bleeds under its screen edge.
+    private func barBackground(top: Bool) -> some View {
+        Rectangle()
+            .fill(ReaderPaper.background)
+            .overlay(alignment: top ? .bottom : .top) {
+                Rectangle()
+                    .fill(Color.primary.opacity(0.12))
+                    .frame(height: 0.5)
+            }
+            .ignoresSafeArea(edges: top ? .top : .bottom)
+    }
+
+    private var pageText: String {
+        guard let progress = reader.progress, progress.totalPages > 0 else { return "" }
+        return "Page \(progress.page) of \(progress.totalPages)"
+    }
+
+    private var percentText: String {
+        String(format: "%.0f%%", reader.bookPercent ?? 0)
+    }
+
+    /// Scrub finished at `percent` of the book: an exact CFI jump when the
+    /// book's locations are ready, otherwise the nearest chapter.
+    private func commitScrub(_ percent: Double) {
+        guard let book = reader.book else { return }
+        if locationsReady {
+            bridge?.scrubToPercent(percent)
+            return
+        }
+        let count = book.chapters.count
+        guard count > 0 else { return }
+        let index = min(Int(percent / 100 * Double(count)), count - 1)
+        jump(to: book.chapters[index], hideChrome: false)
     }
 
     // MARK: Input
 
-    private func handleTap(at location: CGPoint, width: CGFloat) {
-        // Thirds of the reader view itself — the window's width is wrong
-        // the moment the reader is narrower (Split View, Slide Over,
-        // Stage Manager).
-        if location.x < width / 3 {
+    /// Tap zones in thirds of the reader view (the page reports tap
+    /// fractions itself): edges turn pages, the middle toggles the chrome.
+    private func handleTap(x: Double) {
+        if x < 1.0 / 3.0 {
             pageBack()
-        } else if location.x > width * 2 / 3 {
+        } else if x > 2.0 / 3.0 {
             pageForward()
         } else {
-            chromeVisible.toggle()
+            withAnimation { chromeVisible.toggle() }
         }
     }
 
-    private var pageSwipe: some Gesture {
-        DragGesture(minimumDistance: 40)
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-                guard abs(horizontal) > abs(vertical) * 1.5 else { return }
-                if horizontal < 0 {
-                    pageForward()
-                } else {
-                    pageBack()
-                }
-            }
-    }
-
-    /// Explicit chrome controls never hide the chrome they live in; only
-    /// page-surface input (taps, swipes, hardware keys) does.
-    private func pageForward(hideChrome: Bool = true) {
-        if hideChrome { chromeVisible = false }
+    private func pageForward() {
+        chromeVisible = false
         bridge?.pageForward()
     }
 
-    private func pageBack(hideChrome: Bool = true) {
-        if hideChrome { chromeVisible = false }
+    private func pageBack() {
+        chromeVisible = false
         bridge?.pageBack()
     }
 
-    private func jump(to chapter: ChapterMeta) {
+    private func jump(to chapter: ChapterMeta, hideChrome: Bool = true) {
         guard let book = reader.book else { return }
         tocPresented = false
-        chromeVisible = false
+        if hideChrome {
+            chromeVisible = false
+        }
         reader.open(book: book, chapter: chapter)
         bridge?.jumpToChapter(chapter.jumpTarget)
     }

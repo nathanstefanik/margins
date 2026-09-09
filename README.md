@@ -151,6 +151,11 @@ Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architectur
   full-height chapter-note editor, and a silenceable end-of-chapter prompt
 - iOS "Open in Margins" from Files/Mail (`onOpenURL`), VoiceOver labels
   with no gesture-only actions, Dynamic Type throughout
+- **Books-style iOS reader**: the page-turn input moves into the reader
+  page itself (SwiftUI gestures never fire over a WKWebView), a viewport
+  meta makes pagination and text sizing match the screen, the chrome is a
+  real touch target (top bar + Contents / position scrubber / Aa), and
+  publisher `a:hover` styles can no longer repaint whole chapters red
 - **Device signing + real iCloud**: team ID in a gitignored local xcconfig,
   app installs to a paired iPhone via
   `xcodebuild -allowProvisioningUpdates`, and the library resolves the real

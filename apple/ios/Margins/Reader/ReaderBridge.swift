@@ -93,6 +93,16 @@ struct IOSReaderWebView: UIViewRepresentable {
 /// one struct so the representable takes a single parameter.
 struct ReaderCallbacks {
     var userPageTurn: () -> Void = {}
+    /// A plain tap on the reading surface, as fractions (0–1) of the
+    /// reader view: the WKWebView swallows SwiftUI gestures, so the page
+    /// reports taps itself (left third = back, right third = forward,
+    /// middle = chrome).
+    var pageTap: (Double, Double) -> Void = { _, _ in }
+    /// A horizontal swipe on the page; `true` means forward.
+    var pageSwipe: (Bool) -> Void = { _ in }
+    /// The epub.js locations finished generating: the position slider can
+    /// now scrub to an exact CFI.
+    var locationsReady: () -> Void = {}
     var captureRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
     var highlightRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
 }
@@ -105,8 +115,6 @@ final class ReaderBridge: NSObject {
     var callbacks = ReaderCallbacks()
     /// The latest completed text selection, for the edit-menu actions.
     private(set) var latestSelection: ReaderSelection?
-    /// Set by the scene: any user-driven page turn hides the chrome.
-    var onUserPageTurn: (() -> Void)?
 
     init(model: LibraryModel, reader: ReaderModel) {
         self.model = model
@@ -180,6 +188,14 @@ final class ReaderBridge: NSObject {
         webView.uiDelegate = self
         webView.isOpaque = false
         webView.backgroundColor = .clear
+        // The epub.js stage handles all paging itself (transform-animated
+        // columns); the native scroll view would only allow the outer
+        // canvas to drift out of sync with the rendition's position. Its
+        // pan recognizer must also go: it steals drags from SwiftUI
+        // controls overlaying the web view (the position slider's drag
+        // dies mid-gesture and commits the press-point value).
+        webView.scrollView.isScrollEnabled = false
+        webView.scrollView.panGestureRecognizer.isEnabled = false
         webView.scrollView.bounces = false
         self.webView = webView
 
@@ -219,6 +235,12 @@ final class ReaderBridge: NSObject {
 
     func jumpToChapter(_ target: String) {
         evaluate("readerDisplay(\(Self.javaScriptLiteral(target)))")
+    }
+
+    /// Scrubs to a whole-book percentage (0–100) via the generated epub.js
+    /// locations; the page no-ops until they are ready.
+    func scrubToPercent(_ percent: Double) {
+        evaluate("readerScrubToPercent(\(percent))")
     }
 
     private func evaluate(_ script: String) {
@@ -342,6 +364,14 @@ extension ReaderBridge: WKScriptMessageHandler {
                !cfiRange.isEmpty {
                 latestSelection = ReaderSelection(cfiRange: cfiRange, text: text)
             }
+        case "tap":
+            let x = (body["x"] as? NSNumber)?.doubleValue ?? -1
+            let y = (body["y"] as? NSNumber)?.doubleValue ?? -1
+            callbacks.pageTap(x, y)
+        case "swipe":
+            callbacks.pageSwipe((body["forward"] as? NSNumber)?.boolValue == true)
+        case "locations":
+            callbacks.locationsReady()
         case "relocated":
             let page = (body["page"] as? NSNumber)?.intValue ?? 1
             let totalPages = (body["totalPages"] as? NSNumber)?.intValue ?? 0

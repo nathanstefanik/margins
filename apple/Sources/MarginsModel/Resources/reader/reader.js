@@ -75,7 +75,11 @@ async function readerOpen() {
   readerRendition.on("relocated", readerReportRelocated);
   readerRendition.on("rendered", (section, view) => {
     if (view && view.contents && view.contents.document && section && section.href) {
-      readerAttachLinks(view.contents.document, section.href);
+      // The iframe element lives in the outer document; its rect turns
+      // tap coordinates inside the section into reader-view fractions.
+      const iframeEl = view.iframe || view.contents.window.frameElement;
+      readerAttachInteractions(view.contents.document, section.href, iframeEl);
+      readerAttachTouches(view.contents.document);
     }
   });
   // Text selection (touch or mouse): remember it so Swift can offer
@@ -114,6 +118,26 @@ async function readerOpen() {
   }
   readerOpened = true;
   console.log("readerOpen: displayed, rendition live");
+  readerGenerateLocations();
+}
+
+// Whole-book locations, generated off the critical path: once ready the
+// shell's position slider scrubs to an exact CFI instead of the nearest
+// chapter. Generation loads every spine item, so it must never block the
+// first display.
+function readerGenerateLocations() {
+  if (!readerBook || !readerBook.locations) {
+    return;
+  }
+  readerBook.locations
+    .generate(1024)
+    .then((total) => {
+      console.log("locations: ready, total=" + (Array.isArray(total) ? total.length : total));
+      readerPost({ type: "locations" });
+    })
+    .catch((error) => {
+      console.error("locations.generate failed:", error);
+    });
 }
 
 // Keeps images at their intrinsic aspect ratio: the paginated columns would
@@ -196,12 +220,30 @@ function readerStyleContents(contents) {
   const doc = contents.document;
   if (doc.documentElement) {
     doc.documentElement.style.setProperty("font-size", `${readerTypography.fontSize}%`, "important");
+    // Publisher styles paint sections white; the shell's paper color must
+    // show through so the page reads as one continuous surface.
+    doc.documentElement.style.setProperty("background", "transparent", "important");
   }
   const body = contents.content || doc.body;
   if (body) {
     body.style.setProperty("font-size", "inherit", "important");
     body.style.setProperty("line-height", String(readerTypography.lineHeight), "important");
+    body.style.setProperty("background", "transparent", "important");
+    body.style.setProperty("touch-action", "manipulation", "important");
   }
+  // Publisher `a:hover` rules (Project Gutenberg's is `color: red`) repaint
+  // whole chapters on touch: section files close their heading anchors in
+  // XHTML (`<a id="x"/>`), which HTML parsing leaves OPEN — one anchor ends
+  // up wrapping the rest of the document — and iOS latches the touched
+  // chain's :hover state. Hover styling is meaningless on the reading
+  // surface; strip it.
+  contents.addStylesheetRules({
+    "a:hover": {
+      color: "inherit !important",
+      "text-decoration": "none !important",
+      background: "transparent !important",
+    },
+  });
 }
 
 // Forward relocation to the shell: page position within the chapter for the
@@ -234,27 +276,136 @@ function readerReportRelocated(location) {
 // WKUIDelegate to the system browser. A dead link must not break the
 // reader, so display failures are swallowed instead of raising the
 // error page.
-function readerAttachLinks(doc, sectionHref) {
+//
+// The same listener reports plain taps (no anchor, collapsed selection)
+// back to the shell as fractions of the whole reader view: on iOS the
+// WKWebView swallows the shell's SwiftUI gestures, so the page itself is
+// the only reliable source for tap zones.
+let readerSwipeFired = false;
+
+// A tap only pages / toggles chrome when it is not part of a text
+// selection and not the tail end of a swipe.
+function readerTapAllowed(doc) {
+  if (readerSwipeFired) {
+    return false;
+  }
+  try {
+    const selection = doc.getSelection ? doc.getSelection() : null;
+    return !selection || selection.isCollapsed;
+  } catch (error) {
+    return true;
+  }
+}
+
+// Touch coordinates are per-document; translate a point inside a section
+// iframe into the outer page's coordinate space, then normalize to the
+// reader view's 0–1 range.
+function readerOuterFraction(iframeEl, clientX, clientY) {
+  let x = clientX;
+  let y = clientY;
+  if (iframeEl) {
+    const rect = iframeEl.getBoundingClientRect();
+    x += rect.left;
+    y += rect.top;
+  }
+  return { x: x / window.innerWidth, y: y / window.innerHeight };
+}
+
+function readerAttachInteractions(doc, sectionHref, iframeEl) {
   doc.addEventListener(
     "click",
     (event) => {
       const target = event.target;
       const anchor = target && target.closest ? target.closest("a[href]") : null;
-      if (!anchor) {
+      if (anchor) {
+        const href = anchor.getAttribute("href");
+        if (!href || /^(https?:|mailto:)/i.test(href)) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const resolved = readerResolveHref(sectionHref, href);
+        if (resolved) {
+          readerDisplayTarget(resolved).catch(() => {});
+        }
         return;
       }
-      const href = anchor.getAttribute("href");
-      if (!href || /^(https?:|mailto:)/i.test(href)) {
+      if (!readerTapAllowed(doc)) {
         return;
       }
-      event.preventDefault();
-      event.stopPropagation();
-      const resolved = readerResolveHref(sectionHref, href);
-      if (resolved) {
-        readerDisplayTarget(resolved).catch(() => {});
-      }
+      const point = readerOuterFraction(iframeEl, event.clientX, event.clientY);
+      readerPost({ type: "tap", x: point.x, y: point.y });
     },
     true,
+  );
+}
+
+// Swipe page turns (touch surfaces only, so sections only): the shell's
+// SwiftUI drag gesture never fires over a WKWebView, and epub.js's own
+// stage-level swipe handler cannot see touches that land inside a
+// section iframe — which is where the text is. A quick, mostly
+// horizontal drag turns the page; selection drags and slow scrolls do
+// not. The outer page keeps no touch listeners: gutter swipes are rare
+// and epub.js handles them natively there.
+const READER_SWIPE_MIN_DISTANCE_PX = 50;
+const READER_SWIPE_MAX_DURATION_MS = 700;
+
+// Collapse every text selection in `doc` — a swipe that crossed text can
+// leave a selection whose paint then sticks to the transformed column.
+function readerCollapseSelectionIn(doc) {
+  try {
+    const selection = doc.getSelection();
+    if (selection && !selection.isCollapsed) {
+      selection.removeAllRanges();
+    }
+  } catch (error) {
+    // A stale selection is nothing to fail over.
+  }
+}
+
+function readerAttachTouches(doc) {
+  let start = null;
+  doc.addEventListener(
+    "touchstart",
+    (event) => {
+      readerSwipeFired = false;
+      start = null;
+      if (event.touches.length !== 1) {
+        return;
+      }
+      const touch = event.touches[0];
+      start = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    },
+    { passive: true, capture: true },
+  );
+  doc.addEventListener(
+    "touchend",
+    (event) => {
+      if (!start) {
+        return;
+      }
+      const touch = event.changedTouches[0];
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      const elapsed = Date.now() - start.time;
+      start = null;
+      if (elapsed > READER_SWIPE_MAX_DURATION_MS) {
+        return;
+      }
+      if (Math.abs(dx) < READER_SWIPE_MIN_DISTANCE_PX) {
+        return;
+      }
+      if (Math.abs(dx) < Math.abs(dy) * 1.2) {
+        return;
+      }
+      if (!readerTapAllowed(doc)) {
+        return;
+      }
+      readerCollapseSelectionIn(doc);
+      readerSwipeFired = true;
+      readerPost({ type: "swipe", forward: dx < 0 });
+    },
+    { passive: true, capture: true },
   );
 }
 
@@ -475,6 +626,12 @@ window.readerHighlight = function (cfiRange) {
   if (!readerRendition || !cfiRange) {
     return;
   }
+  // epub.js's CFI parser fails opaquely on malformed ranges (a mark whose
+  // cfi was written by an older build, say); skip them instead of throwing.
+  if (typeof cfiRange !== "string" || !cfiRange.startsWith("epubcfi(")) {
+    console.error("readerHighlight skipped: not an epubcfi:", cfiRange);
+    return;
+  }
   try {
     readerRendition.annotations.add("highlight", cfiRange, {}, () => {});
   } catch (error) {
@@ -504,6 +661,28 @@ window.readerCurrentCfi = function () {
   const location = readerRendition ? readerRendition.currentLocation() : null;
   return location && location.start ? location.start.cfi : null;
 };
+
+// Position-slider scrubbing: map a book percentage (0–100) to its CFI via
+// the generated locations and display it. No-op until locations are ready;
+// the shell falls back to jumping to the nearest chapter before that.
+window.readerScrubToPercent = function (percent) {
+  if (!readerRendition || !readerBook || !readerBook.locations) {
+    return;
+  }
+  if (!readerBook.locations.length()) {
+    return;
+  }
+  const cfi = readerBook.locations.cfiFromPercentage(percent / 100);
+  console.log("scrub: percent=" + percent + " total=" + readerBook.locations.length());
+  if (cfi) {
+    readerDisplayTarget(cfi).catch(() => {});
+  }
+};
+
+// Gutter taps (the paper margins outside the section iframe) reach the
+// outer document; no href context exists there and no iframe rect is
+// needed. Section iframes get their own listeners when they render.
+readerAttachInteractions(document, "", null);
 
 readerOpen().catch((error) => {
   var detail;
