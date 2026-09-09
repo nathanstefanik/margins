@@ -35,6 +35,12 @@ struct ReaderScene: View {
     /// The chapter whose highlights were last restored; the once-per-
     /// chapter guard keeps re-adding idempotent.
     @State private var highlightsRestoredFor: String?
+    /// Last `passageJumpGeneration` applied via JS/reload, so the initial
+    /// URL load is not doubled when the reader is first pushed.
+    @State private var appliedJumpGeneration = 0
+    /// Book currently loaded in the webview; a passage jump to another
+    /// book reloads the scheme URL instead of displaying a foreign CFI.
+    @State private var loadedBookId: String?
 
     var body: some View {
         ZStack {
@@ -101,6 +107,9 @@ struct ReaderScene: View {
             MarksSheet(onEditChapterNote: {
                 marksPresented = false
                 editorPresented = true
+            }, onOpen: { mark in
+                marksPresented = false
+                jumpToMark(mark)
             })
         }
         .sheet(isPresented: $editorPresented) {
@@ -132,6 +141,11 @@ struct ReaderScene: View {
         })
         .onAppear {
             chromeVisible = true
+            appliedJumpGeneration = library.passageJumpGeneration
+            loadedBookId = reader.book?.id
+        }
+        .onChange(of: library.passageJumpGeneration) {
+            applyPassageJumpIfNeeded()
         }
         #if DEBUG
         .task {
@@ -431,6 +445,39 @@ struct ReaderScene: View {
         chromeVisible = false
         reader.open(book: book, chapter: chapter)
         bridge?.jumpToChapter(chapter.jumpTarget)
+    }
+
+    /// Lands on a mark's CFI (or stays put for a page-anchored mark with
+    /// no range). The marks sheet is always the current chapter.
+    private func jumpToMark(_ mark: Mark) {
+        if let cfi = mark.cfi, !cfi.isEmpty {
+            chromeVisible = false
+            bridge?.jumpToChapter(cfi)
+        }
+    }
+
+    /// Retarget an already-visible reader after `openPassage`. Same book:
+    /// `rendition.display` of the CFI or chapter href. Different book:
+    /// reload the scheme URL (it carries the book id and resume CFI).
+    private func applyPassageJumpIfNeeded() {
+        guard bridge != nil,
+              appliedJumpGeneration != library.passageJumpGeneration
+        else { return }
+        appliedJumpGeneration = library.passageJumpGeneration
+        let bookId = reader.book?.id
+        if loadedBookId != bookId {
+            highlightsRestoredFor = nil
+            noteLoadedFor = nil
+            loadedBookId = bookId
+            bridge?.loadCurrentBook()
+            return
+        }
+        if let cfi = reader.resumeCfi, !cfi.isEmpty {
+            bridge?.jumpToChapter(cfi)
+        } else if let chapter = reader.chapter {
+            bridge?.jumpToChapter(chapter.jumpTarget)
+        }
+        chromeVisible = false
     }
 
     #if DEBUG

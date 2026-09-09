@@ -221,6 +221,15 @@ final class ReaderBridge: NSObject {
         evaluate("readerDisplay(\(Self.javaScriptLiteral(target)))")
     }
 
+    /// Reloads the reader page for the current book/chapter/CFI. Used when
+    /// a passage jump switches books while the webview is already showing.
+    func loadCurrentBook() {
+        guard let book = reader.book, let chapter = reader.chapter,
+              let url = readerURL(bookID: book.id, chapterHref: chapter.jumpTarget)
+        else { return }
+        webView?.load(URLRequest(url: url))
+    }
+
     private func evaluate(_ script: String) {
         webView?.evaluateJavaScript(script, completionHandler: nil)
     }

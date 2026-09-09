@@ -114,12 +114,13 @@ struct CaptureSheet: View {
 }
 
 /// The chapter's marks on demand: the chrome shows the count, this sheet
-/// lists them with edit/delete.
+/// lists them; tap a mark to land on it, or edit/delete.
 struct MarksSheet: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
 
     let onEditChapterNote: () -> Void
+    var onOpen: (Mark) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @State private var markDraft: MarkDraft?
@@ -162,25 +163,32 @@ struct MarksSheet: View {
 
     private func markRow(_ mark: Mark) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                if !mark.quote.isEmpty {
-                    Text(mark.quote)
-                        .font(.callout)
-                        .italic()
-                        .foregroundStyle(.secondary)
+            Button {
+                onOpen(mark)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    if !mark.quote.isEmpty {
+                        Text(mark.quote)
+                            .font(.callout)
+                            .italic()
+                            .foregroundStyle(.secondary)
+                    }
+                    if !mark.body.isEmpty {
+                        Text(mark.body)
+                            .font(.callout)
+                    }
+                    let attribution = MarkDisplay.attribution(percent: mark.percent, at: mark.at)
+                    if !attribution.isEmpty {
+                        Text(attribution)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
-                if !mark.body.isEmpty {
-                    Text(mark.body)
-                        .font(.callout)
-                }
-                let attribution = MarkDisplay.attribution(percent: mark.percent, at: mark.at)
-                if !attribution.isEmpty {
-                    Text(attribution)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
             }
-            Spacer(minLength: 8)
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens this mark in the reader")
             Button {
                 markDraft = MarkDraft(mark: mark)
             } label: {

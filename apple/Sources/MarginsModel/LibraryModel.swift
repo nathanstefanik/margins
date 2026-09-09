@@ -264,6 +264,34 @@ public final class LibraryModel {
         reader.resume(at: cfi)
     }
 
+    /// Opens a book at a specific chapter (and CFI, when one is known).
+    /// Search hits and compiled-note marks share this so a thought lands
+    /// on the sentence rather than the book card. `chapterKey` empty means
+    /// a book-level target: first chapter, no CFI.
+    public func openPassage(bookId: String, chapterKey: String, cfi: String?) async {
+        await selectBook(id: bookId)
+        guard let book = selectedBook, let reader else { return }
+        let chapter: ChapterMeta?
+        if chapterKey.isEmpty {
+            chapter = book.chapters.first
+        } else {
+            chapter = book.chapters.first(where: { $0.key == chapterKey })
+        }
+        guard let chapter else { return }
+        reader.open(book: book, chapter: chapter)
+        reader.resume(at: (cfi?.isEmpty ?? true) ? nil : cfi)
+        pendingReaderPresent = true
+        passageJumpGeneration += 1
+    }
+
+    /// True when a passage jump should also push the reader scene. Views
+    /// consume it by presenting, then clear it.
+    public var pendingReaderPresent = false
+
+    /// Bumped on every `openPassage` so an already-visible reader can
+    /// retarget (JS display or a fresh book load) without rebuilding.
+    public private(set) var passageJumpGeneration = 0
+
     /// Persists a reading position (called from the reader's debounce).
     public func saveReadingPosition(bookId: String, position: ReadingPosition) async {
         guard let store else { return }

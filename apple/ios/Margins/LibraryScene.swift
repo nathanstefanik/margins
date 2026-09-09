@@ -232,7 +232,14 @@ struct LibraryScene: View {
             } else {
                 ForEach(hits) { hit in
                     Button {
-                        onSelect(hit.bookId)
+                        Task {
+                            await library.openPassage(
+                                bookId: hit.bookId,
+                                chapterKey: hit.chapterKey,
+                                cfi: nil
+                            )
+                            onSelect(hit.bookId)
+                        }
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(hit.chapterTitle)

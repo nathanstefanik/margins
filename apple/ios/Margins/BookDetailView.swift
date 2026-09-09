@@ -40,6 +40,7 @@ struct BookDetailView: View {
                 await library.selectBook(id: bookID)
             }
             await loadPosition()
+            presentReaderIfPending()
             #if DEBUG
             // Development seam: jump straight into the reader, or preselect
             // the Notes tab, for simulator verification.
@@ -66,6 +67,9 @@ struct BookDetailView: View {
                     await loadPosition()
                 }
             }
+        }
+        .onChange(of: library.passageJumpGeneration) {
+            presentReaderIfPending()
         }
         .navigationTitle(selectedMeta?.title ?? "Book")
         .navigationBarTitleDisplayMode(.inline)
@@ -135,10 +139,10 @@ struct BookDetailView: View {
                     ContentsList(
                         meta: meta,
                         position: position,
-                        onJump: jump
+                        onJump: { jump(to: $0, cfi: $1) }
                     )
                 case .notes:
-                    NotesTab(bookID: meta.id, showEmptyChapters: $showEmptyChapters, onJump: jump)
+                    NotesTab(bookID: meta.id, showEmptyChapters: $showEmptyChapters, onJump: { jump(to: $0, cfi: $1) })
                 }
             }
             .padding()
@@ -152,11 +156,19 @@ struct BookDetailView: View {
         position != nil ? "Continue reading" : "Start reading"
     }
 
-    private func jump(to chapter: ChapterMeta) {
+    private func presentReaderIfPending() {
+        guard library.pendingReaderPresent,
+              reader.book?.id == selectedMeta?.id
+        else { return }
+        library.pendingReaderPresent = false
+        readerActive = true
+    }
+
+    private func jump(to chapter: ChapterMeta, cfi: String? = nil) {
         guard let book = selectedMeta else { return }
         Task {
-            reader.open(book: book, chapter: chapter)
-            readerActive = true
+            await library.openPassage(bookId: book.id, chapterKey: chapter.key, cfi: cfi)
+            presentReaderIfPending()
         }
     }
 }
@@ -169,7 +181,7 @@ struct BookDetailView: View {
 private struct ContentsList: View {
     let meta: BookMeta
     let position: ReadingPosition?
-    let onJump: (ChapterMeta) -> Void
+    let onJump: (ChapterMeta, String?) -> Void
 
     private var notedKeys: Set<String> {
         Set(libraryNotesIndex.map(\.chapterKey))
@@ -202,7 +214,7 @@ private struct ContentsList: View {
 
     private func row(_ chapter: ChapterMeta) -> some View {
         Button {
-            onJump(chapter)
+            onJump(chapter, nil)
         } label: {
             HStack(spacing: 12) {
                 Text("\(chapter.index + 1)")
@@ -246,7 +258,7 @@ private struct NotesTab: View {
     @Environment(LibraryModel.self) private var library
     let bookID: String
     @Binding var showEmptyChapters: Bool
-    let onJump: (ChapterMeta) -> Void
+    let onJump: (ChapterMeta, String?) -> Void
 
     @State private var exportMarkdown: String?
     @State private var showClearDialog = false
@@ -340,7 +352,7 @@ private struct NotesTab: View {
             Button {
                 if let meta = library.selectedBook,
                    let target = meta.chapters.first(where: { $0.key == chapter.chapterKey }) {
-                    onJump(target)
+                    onJump(target, nil)
                 }
             } label: {
                 HStack(spacing: 8) {
@@ -367,39 +379,49 @@ private struct NotesTab: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             ForEach(MarkDisplay.sortedForDisplay(chapter.marks), id: \.id) { mark in
-                markBlock(mark)
+                markBlock(mark, chapter: chapter)
             }
         }
         .padding(.vertical, 6)
     }
 
-    private func markBlock(_ mark: Mark) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if !mark.quote.isEmpty {
-                Text(mark.quote)
-                    .font(.callout)
-                    .italic()
-                    .foregroundStyle(.secondary)
+    private func markBlock(_ mark: Mark, chapter: CompiledChapter) -> some View {
+        Button {
+            if let meta = library.selectedBook,
+               let target = meta.chapters.first(where: { $0.key == chapter.chapterKey }) {
+                onJump(target, mark.cfi)
             }
-            if !mark.body.isEmpty {
-                Text(mark.body)
-                    .font(.callout)
-                    .textSelection(.enabled)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                if !mark.quote.isEmpty {
+                    Text(mark.quote)
+                        .font(.callout)
+                        .italic()
+                        .foregroundStyle(.secondary)
+                }
+                if !mark.body.isEmpty {
+                    Text(mark.body)
+                        .font(.callout)
+                }
+                let attribution = MarkDisplay.attribution(percent: mark.percent, at: mark.at)
+                if !attribution.isEmpty {
+                    Text(attribution)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
-            let attribution = MarkDisplay.attribution(percent: mark.percent, at: mark.at)
-            if !attribution.isEmpty {
-                Text(attribution)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            .padding(.leading, 8)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(.quaternary)
+                    .frame(width: 2)
             }
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
         }
-        .padding(.leading, 8)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(.quaternary)
-                .frame(width: 2)
-        }
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the reader at this mark")
     }
 
     private func emptyStub(_ chapter: CompiledChapter) -> some View {
