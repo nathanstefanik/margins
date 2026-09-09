@@ -107,3 +107,12 @@ jobs:
 
       - name: Build the FFI xcframework (macOS + iOS slices)
         run: make ios-core
+
+      - name: Build the iOS app for the simulator
+        # Compiles the app scenes (apple/ios/Margins), which the SwiftPM
+        # package build above never touches. Needs the xcframework's
+        # simulator slice from `make ios-core`; no signing on runners.
+        run: |
+          xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build
