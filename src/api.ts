@@ -29,6 +29,16 @@ export interface BookMeta {
   chapters: ChapterMeta[];
 }
 
+export interface Mark {
+  id: string;
+  /** Range CFI of the selection, or null for a page-anchored mark. */
+  cfi?: string | null;
+  at: string;
+  percent?: number | null;
+  quote: string;
+  body: string;
+}
+
 export interface ChapterNote {
   frontmatter: {
     book_id: string;
@@ -43,6 +53,7 @@ export interface ChapterNote {
     updated_at?: string;
   };
   body: string;
+  marks: Mark[];
   path: string;
 }
 
@@ -68,6 +79,7 @@ export interface CompiledChapter {
   chapter_index: number;
   chapter_title: string;
   body: string;
+  marks: Mark[];
   word_count: number;
   updated_at?: string;
 }
@@ -114,6 +126,15 @@ export const api = {
       body,
       kind: "summary",
     }),
+  appendMark: (
+    bookId: string,
+    chapterKey: string,
+    mark: { cfi?: string | null; percent?: number | null; quote: string; body: string },
+  ) => invoke<Mark>("append_mark", { bookId, chapterKey, ...mark }),
+  updateMark: (bookId: string, chapterKey: string, mark: Mark) =>
+    invoke<void>("update_mark", { bookId, chapterKey, mark }),
+  deleteMark: (bookId: string, chapterKey: string, markId: string) =>
+    invoke<void>("delete_mark", { bookId, chapterKey, markId }),
   searchNotes: (query: string) => invoke<NoteSearchHit[]>("search_notes", { query }),
   getCompiledNotes: (bookId: string) => invoke<CompiledNotes>("get_compiled_notes", { bookId }),
   exportNotesMarkdown: (bookId: string, destination: string, options?: ExportOptions) =>

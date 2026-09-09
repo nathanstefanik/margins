@@ -8,6 +8,7 @@ import {
   type CompiledNotes,
   type ExportOptions,
   type ImportProgress,
+  type Mark,
   type NoteSearchHit,
 } from "./api";
 import { Keymap } from "./keymaps";
@@ -39,6 +40,9 @@ export class App {
   private notesEditor = document.getElementById("notes-editor") as HTMLTextAreaElement;
   private notesTitle = document.getElementById("notes-title")!;
   private wordCount = document.getElementById("word-count")!;
+  private notesMarks = document.getElementById("notes-marks")!;
+  private noteMarks: Mark[] = [];
+  private editingMarkId: string | null = null;
   private notesPageTitle = document.getElementById("notes-page-title")!;
   private notesPageStats = document.getElementById("notes-page-stats")!;
   private notesPageBody = document.getElementById("notes-page-body")!;
@@ -232,7 +236,142 @@ export class App {
     const note = await api.getChapterNote(this.currentBook.id, chapter.key);
     this.notesEditor.value = note.body;
     this.notesTitle.textContent = `${chapter.title} — notes`;
+    this.noteMarks = note.marks ?? [];
+    this.editingMarkId = null;
+    this.renderNoteMarks();
     this.updateWordCount();
+  }
+
+  // MARK: Marks strip (notes pane)
+
+  /// The chapter note's marks, listed under the editor with edit/delete
+  /// affordances. The editor body never contains marks (long-form only),
+  /// so strip mutations touch this state — never a reload that would
+  /// clobber unsaved prose.
+  private renderNoteMarks(): void {
+    this.notesMarks.replaceChildren();
+    this.notesMarks.classList.toggle("hidden", this.noteMarks.length === 0);
+    if (this.noteMarks.length === 0) return;
+
+    const header = document.createElement("div");
+    header.className = "marks-strip-header";
+    header.textContent = `${this.noteMarks.length} mark${this.noteMarks.length === 1 ? "" : "s"} in this chapter`;
+    this.notesMarks.appendChild(header);
+
+    const list = document.createElement("ul");
+    list.className = "marks-list";
+    for (const mark of this.noteMarks) {
+      list.appendChild(this.buildMarkRow(mark, mark.id === this.editingMarkId));
+    }
+    this.notesMarks.appendChild(list);
+  }
+
+  private buildMarkRow(mark: Mark, editing: boolean): HTMLElement {
+    const row = document.createElement("li");
+    row.className = "mark-row";
+    row.dataset.id = mark.id;
+
+    if (editing) {
+      const edit = document.createElement("div");
+      edit.className = "mark-edit";
+      const textarea = document.createElement("textarea");
+      textarea.value = mark.body;
+      textarea.rows = 2;
+      textarea.placeholder = "Mark text";
+      const actions = document.createElement("div");
+      actions.className = "mark-actions";
+      const save = document.createElement("button");
+      save.textContent = "Save";
+      save.className = "primary";
+      save.addEventListener("click", () => void this.saveMarkEdit(mark, textarea.value));
+      const cancel = document.createElement("button");
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", () => {
+        this.editingMarkId = null;
+        this.renderNoteMarks();
+      });
+      actions.append(save, cancel);
+      edit.append(textarea, actions);
+      row.appendChild(edit);
+      return row;
+    }
+
+    const content = document.createElement("div");
+    content.className = "mark-content";
+    if (mark.quote) {
+      const quote = document.createElement("blockquote");
+      quote.className = "mark-quote";
+      quote.textContent = mark.quote;
+      content.appendChild(quote);
+    }
+    if (mark.body) {
+      const body = document.createElement("p");
+      body.className = "mark-body";
+      body.textContent = mark.body;
+      content.appendChild(body);
+    }
+    const meta = document.createElement("span");
+    meta.className = "mark-meta";
+    meta.textContent = markMetaText(mark);
+    content.appendChild(meta);
+    row.appendChild(content);
+
+    const actions = document.createElement("span");
+    actions.className = "mark-actions";
+    const edit = document.createElement("button");
+    edit.textContent = "edit";
+    edit.title = "Edit this mark";
+    edit.addEventListener("click", () => {
+      this.editingMarkId = mark.id;
+      this.renderNoteMarks();
+      // The strip was just rebuilt; focus the textarea in the live DOM,
+      // not the detached row this closure captured.
+      (this.notesMarks.querySelector(
+        `li.mark-row[data-id="${CSS.escape(mark.id)}"] textarea`,
+      ) as HTMLTextAreaElement | null)?.focus();
+    });
+    const del = document.createElement("button");
+    del.textContent = "del";
+    del.title = "Delete this mark";
+    del.addEventListener("click", () => void this.deleteMark(mark));
+    actions.append(edit, del);
+    row.appendChild(actions);
+    return row;
+  }
+
+  private async saveMarkEdit(mark: Mark, body: string): Promise<void> {
+    if (!this.currentBook || !this.currentChapter) return;
+    try {
+      await api.updateMark(this.currentBook.id, this.currentChapter.key, { ...mark, body });
+      this.noteMarks = this.noteMarks.map((m) => (m.id === mark.id ? { ...mark, body } : m));
+      this.editingMarkId = null;
+      this.renderNoteMarks();
+      this.invalidateNotesPage();
+      this.setStatus("saved mark");
+    } catch (error) {
+      this.setStatus(`could not save mark: ${errorMessage(error)}`);
+    }
+  }
+
+  private async deleteMark(mark: Mark): Promise<void> {
+    if (!this.currentBook || !this.currentChapter) return;
+    try {
+      await api.deleteMark(this.currentBook.id, this.currentChapter.key, mark.id);
+      this.noteMarks = this.noteMarks.filter((m) => m.id !== mark.id);
+      this.renderNoteMarks();
+      this.invalidateNotesPage();
+      this.setStatus("deleted mark");
+    } catch (error) {
+      this.setStatus(`could not delete mark: ${errorMessage(error)}`);
+    }
+  }
+
+  /// Mark mutations change the compiled page's content; drop the cache so
+  /// reopening the page recompiles (same contract as prose saves).
+  private invalidateNotesPage(): void {
+    if (this.notesBookId === this.currentBook?.id) {
+      this.notesData = null;
+    }
   }
 
   private async saveNote(): Promise<void> {
@@ -365,9 +504,7 @@ export class App {
         });
         const meta = document.createElement("span");
         meta.className = "notes-outline-meta";
-        const parts = [`${chapter.word_count} words`];
-        if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
-        meta.textContent = parts.join(" · ");
+        meta.textContent = sectionMetaText(chapter);
         li.append(link, meta);
         this.notesPageOutline.appendChild(li);
       }
@@ -409,9 +546,7 @@ export class App {
 
     const meta = document.createElement("div");
     meta.className = "notes-section-meta";
-    const parts = [`${chapter.word_count} words`];
-    if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
-    meta.textContent = parts.join(" · ");
+    meta.textContent = sectionMetaText(chapter);
     section.appendChild(meta);
 
     if (chapter.body.trim()) {
@@ -420,6 +555,25 @@ export class App {
       body.className = "notes-section-body";
       body.textContent = chapter.body.trim();
       section.appendChild(body);
+    }
+
+    // Marks render as styled quotes/notes — never as the raw HTML
+    // comments they are on disk; textContent only, like note bodies.
+    const marks = chapter.marks ?? [];
+    if (marks.length > 0) {
+      const strip = document.createElement("div");
+      strip.className = "notes-section-marks";
+      const label = document.createElement("div");
+      label.className = "marks-strip-header";
+      label.textContent = `${marks.length} mark${marks.length === 1 ? "" : "s"}`;
+      strip.appendChild(label);
+      const list = document.createElement("ul");
+      list.className = "marks-list";
+      for (const mark of marks) {
+        list.appendChild(this.buildMarkRow(mark, false));
+      }
+      strip.appendChild(list);
+      section.appendChild(strip);
     }
     return section;
   }
@@ -841,6 +995,23 @@ function formatDate(rfc3339: string): string {
   const date = new Date(rfc3339);
   if (Number.isNaN(date.getTime())) return rfc3339;
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+/// One mark's quiet attribution line: "38.2% · Sep 5, 2026".
+function markMetaText(mark: Mark): string {
+  const parts: string[] = [];
+  if (typeof mark.percent === "number") parts.push(`${mark.percent.toFixed(1)}%`);
+  parts.push(formatDate(mark.at));
+  return parts.join(" · ");
+}
+
+/// Chapter meta line on the compiled page: words, mark count, updated date.
+function sectionMetaText(chapter: CompiledNotes["chapters"][number]): string {
+  const parts = [`${chapter.word_count} words`];
+  const markCount = chapter.marks?.length ?? 0;
+  if (markCount > 0) parts.push(`${markCount} mark${markCount === 1 ? "" : "s"}`);
+  if (chapter.updated_at) parts.push(`updated ${formatDate(chapter.updated_at)}`);
+  return parts.join(" · ");
 }
 
 function escapeRegex(value: string): string {

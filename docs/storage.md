@@ -161,6 +161,69 @@ Your notes on this chapter.
 - **`_index.json`** — O(1) lookup of which chapters have notes and word counts
 - **`index.json`** — library-wide catalog for batch operations
 
+### Marks section
+
+Quick, CFI-anchored notes ("marks") live inside the chapter note file,
+below an optional sentinel — no parallel store, still one file per chapter:
+
+```markdown
+---
+book_id: a1b2c3
+chapter_key: '003'
+...existing frontmatter...
+---
+
+The long-form, contemplative chapter note. Unchanged semantics: this is
+exactly what the notes panes and Tauri editor edit.
+
+<!-- margins:marks -->
+
+<!-- margins:mark id=b01j8q3k2m cfi="epubcfi(/6/14!/4/2/10,/1:0,/1:42)" at=2026-09-05T14:02:11Z percent=38.2 -->
+> optional quoted selection from the book
+
+The quick thought.
+
+<!-- margins:mark id=b01j8qk9xn cfi="" at=2026-09-05T14:07:31Z -->
+> a highlight with no note: the blockquote alone is the whole mark
+```
+
+Rules:
+
+- **Everything above the first `<!-- margins:marks -->` line is the
+  long-form body**, byte-identical to what a frontend that knows nothing
+  about marks would write. A second sentinel inside a mark body is just
+  text.
+- Each mark is one HTML comment with attributes: `id`, `cfi` (range CFI,
+  empty string when page-anchored), `at` (RFC3339, second precision), and
+  optional `percent` (0–100, one decimal). The block's content is an
+  optional `>`-blockquote (the quoted selection) followed by body
+  paragraphs; a block with neither is invalid.
+- **`id` is 10 lowercase Crockford-base32 characters, time-ordered** —
+  sortable in files, unique without coordination, safe in HTML comments and
+  shell pipelines.
+- **Ordering on disk is append order.** Readers needing reading order sort
+  by `percent` (then `cfi`, then `id`); marks without a percent go last.
+- **Editing or deleting a mark rewrites only its block** — untouched marks
+  keep their exact bytes. New/edited blocks are written in the canonical
+  form above.
+- **Losslessness beats tidiness.** Unparsable content inside the section
+  (a stray line, a hand-mangled comment) is preserved verbatim on
+  round-trip as a raw block, never dropped. Note: raw blocks stay on disk
+  and are visible to file editors, but the frontends' strips render parsed
+  marks only — a typed-in-prose `<!-- margins:marks -->` line starts a
+  marks section, so what follows it lives on disk as raw blocks rather
+  than in the long-form body.
+- **Blob frontends cannot destroy marks.** `save_chapter_note` treats the
+  incoming body as authoritative for any marks section it contains (so a
+  stale frontend saving back what it loaded — possibly with hand edits —
+  still lands those marks); a body without a sentinel leaves the marks on
+  disk untouched. Marks-aware frontends go through `append_mark`,
+  `update_mark`, and `delete_mark` instead of rewriting prose.
+
+`_index.json` entries carry `mark_count` alongside `word_count` (absent
+field reads as 0 in indexes written before marks existed). `word_count`
+counts the long-form body only; marks are not included.
+
 ### Clearing a book's notes
 
 Clearing all notes for a book (both frontends expose it behind a confirmation

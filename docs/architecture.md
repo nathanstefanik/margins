@@ -1,15 +1,19 @@
 # Margins architecture
 
-Margins is one Rust core with two thin frontends: the original Tauri
-(Linux/desktop) app and a native macOS SwiftUI app. Both render EPUBs with
-epub.js and write annotations as plain files — no database anywhere.
+Margins is one Rust core with three thin frontends: the original Tauri
+(Linux/desktop) app, a native macOS SwiftUI app, and a native iOS SwiftUI
+app (in progress — see `docs/ios-plan.md`). The Apple targets share one
+SwiftPM package. All of them render EPUBs with epub.js and write annotations
+as plain files — no database anywhere.
 
 ```
 Linux/Tauri app ── src-tauri (thin #[tauri::command] layer)
                           │
 macOS SwiftUI app ── crates/margins-ffi (UniFFI, thin)
-   macos/                 │
-                  crates/margins-core
+   apple/ (Margins)       │
+iOS SwiftUI app ── MarginsFFI.xcframework
+   apple/ (MarginsIOS)    │
+                   crates/margins-core
         EPUB parsing · library · notes · search · sync
              (plain-text storage, no Tauri, no UI)
 ```
@@ -40,42 +44,107 @@ files are byte-identical regardless of which app wrote them.
 A thin UniFFI 0.29 (proc-macro mode) wrapper over the core. One exported
 object, `MarginsCore`, with `list_books`, `import_epub`, `get_book`,
 `remove_book`, `read_epub_bytes`, `get_chapter_note`, `save_chapter_note`,
-`get_compiled_notes`, `render_notes_markdown`, `search_notes` — records
+`append_mark`, `update_mark`, `delete_mark`, `get_compiled_notes`,
+`render_notes_markdown`, `search_notes` — records
 mirror `models.rs` with RFC3339 date strings and `u32` counts (UniFFI has
 no `chrono`/`usize`); errors are a flat `CoreError`. Sync export/import is
 not exposed (no UI for it yet on either platform).
 
 `scripts/build-core.sh` release-builds the staticlib and generates the Swift
-bindings into the SwiftPM layout (`macos/Sources/margins_ffiFFI/include/`
-for the C header + module map, `macos/Sources/MarginsCore/Generated/` for
+bindings into the SwiftPM layout (`apple/Sources/margins_ffiFFI/include/`
+for the C header + module map, `apple/Sources/MarginsCore/Generated/` for
 the Swift). Those paths are gitignored; run the script after changing the
 FFI surface.
 
-## The macOS app (`macos/`)
+The same script assembles `build/MarginsFFI.xcframework`: one static-library
+slice per platform (macOS host arch, or arm64 + x86_64 lipo'd with
+`UNIVERSAL=1`; iOS device `aarch64-apple-ios`; iOS simulator
+`aarch64-apple-ios-sim`, lipo'd with `x86_64-apple-ios-sim` when the
+toolchain ships that target), each carrying the UniFFI header and module
+map. `make ios-core` (`scripts/build-xcframework.sh`) builds all slices;
+the framework works on Command Line Tools alone — no Xcode needed to
+assemble it. Package.swift consumes it as a `binaryTarget`; SwiftPM links
+the slice archive into dependents but does not expose headers from binary
+targets, so the `margins_ffiFFI` header-only C target remains the module
+the generated bindings import. The old `.unsafeFlags` link of
+`target/release/libmargins_ffi.a` (an absolute macOS-only path) is gone.
 
-A SwiftPM package (no `.xcodeproj`; builds with Command Line Tools alone —
+## The Apple package (`apple/`)
+
+A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
+`.iOS(.v17)` — iOS 17 because the model layer uses `@Observable`). No
+`.xcodeproj` for the macOS side; builds with Command Line Tools alone —
 note that `swift test` never invokes test bundles on a CLT-only toolchain,
-so tests run through the `MarginsTests` runner executable). Targets:
+so tests run through the `MarginsTests` runner executable. Targets:
 
-- `margins_ffiFFI` — C target carrying the generated FFI header/module map.
+- `margins_ffiFFI` — C target carrying the generated FFI header/module map
+  (module source for the generated bindings; the archive itself comes from
+  the xcframework binaryTarget).
 - `MarginsCore` — generated bindings plus `CoreStore`, an actor wrapper that
   keeps synchronous Rust calls off the main actor.
 - `MarginsModel` — UI-agnostic model layer: `LibraryModel` (catalog,
   selection, import/remove), `ReaderModel` (open book/chapter, notes pane
   state), `ReaderResource` (scheme-handler routing), `ReaderKeymap`
-  (vim-style key state machine). Unit-tested via `MarginsTests`.
-- `Margins` — SwiftUI app: library browser, reader (WKWebView + epub.js),
-  notes pane, search overlay, keyboard/trackpad routing.
+  (vim-style key state machine), `LibraryLocation` (iOS library root:
+  iCloud container resolution with runtime fallback, placeholder
+  materialization, coordinated staging of picked files, conflict
+  detection). Unit-tested via `MarginsTests`.
+- `Margins` — macOS SwiftUI app: library browser, reader (WKWebView +
+  epub.js), notes pane, search overlay, keyboard/trackpad routing.
 - `MarginsTests` — a Swift Testing **runner executable** (SwiftPM's test
   runner never invokes test bundles on the CLT toolchain; see the plan doc).
 
+## The iOS app (`apple/ios/`)
+
+A small committed Xcode project (`Margins.xcodeproj`, file-system-
+synchronized sources, no XcodeGen) referencing the local SwiftPM package
+through the `MarginsCore`/`MarginsModel` products. The app's SwiftUI scenes
+live in the Xcode target (`apple/ios/Margins/`) rather than the package:
+iOS-only SwiftUI/UIKit code cannot live in a multiplatform SwiftPM package
+without `#if canImport(UIKit)` guards everywhere. The entry point wires the
+shared `LibraryModel`; the library root is resolved per launch by
+`LibraryLocation` (ubiquity container paths change between installs),
+falling back to local `Documents/Library` with the reason surfaced in the
+UI. DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`,
+`MARGINS_DELETE_FIXTURE`) drive deterministic simulator verification flows.
+EPUBs handed over by Files/Mail arrive through `onOpenURL` as
+security-scoped URLs and are staged (`NSFileCoordinator`) before the core
+imports its own copy into the library. The signing team lives in
+`apple/ios/Signing.local.xcconfig` (gitignored; see
+`Signing.local.xcconfig.example`) — never committed.
+Entitlements declare the iCloud Documents container
+(`iCloud.io.github.nathanstefanik.margins`); the Info.plist exposes the
+container as a document scope (the `NSUbiquitousContainer*` keys nested
+under `NSUbiquitousContainers` → the container id, plus
+`UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`). Signing team
+stays unset in the repo — set it locally for device builds.
+
 ### Reader rendering
 
-The reader vendors `epub.min.js` + `jszip.min.js` (versions pinned in the
-root `package.json`) plus a hand-written `reader.html`/`reader.js` that
-mirrors the Tauri frontend's `src/reader.ts`: whole-book bytes in, paginated
-flow, `spread: "none"`. Swift drives the page through the `window.reader*`
-functions via `evaluateJavaScript`.
+The vendored `epub.min.js` + `jszip.min.js` (versions pinned in the root
+`package.json`) plus the hand-written `reader.html`/`reader.js` live in
+**`MarginsModel`'s resource bundle** so the macOS app, the iOS app, and the
+scheme handler serve one identical copy. The page mirrors the Tauri
+frontend's `src/reader.ts`: whole-book bytes in, paginated flow,
+`spread: "none"`. Swift drives it through the `window.reader*` functions
+via `evaluateJavaScript`; the page reports `relocated` back through the
+`reader` script message handler.
+
+Two href conventions meet here and must never be conflated: the core's
+spine hrefs are **zip-root-relative** (`OEBPS/chapter1.xhtml`), while
+epub.js ≥ 0.3.93 keys its `spineByHref` by the **manifest-relative** href
+(`chapter1.xhtml`). `reader.js` resolves jump targets against the spine
+(`readerResolveSpineTarget`: exact → progressively stripped path prefixes),
+and `ReaderModel.relocated` matches reported hrefs back onto spine chapters
+(exact → path suffix → basename). Without these bridges, href-based chapter
+jumps reject with "No Section Found" — a bug that shipped silently on macOS
+until the iOS reader surfaced it.
+
+The page also reports text **selections** (`selected` events carry the CFI
+range + quoted text) through the same script channel; the iOS bridge
+extends the native edit menu with *Note* / *Highlight* and applies
+highlight overlays through epub.js's annotations API. The macOS handler
+ignores selection messages.
 
 ### `margins-reader://` scheme — security model
 
@@ -133,7 +202,8 @@ writes the file after an `NSSavePanel`; note bodies render as plain `Text`
 ## Building and running (macOS)
 
 ```bash
-make core        # build margins-ffi + generate Swift bindings
+make core        # build margins-ffi, generate Swift bindings, refresh the
+                 # macOS xcframework slice
 make mac-build   # build the Swift package
 make mac-test    # run the Swift Testing suite
 make mac-app     # assemble build/Margins.app (ad-hoc signed)
@@ -142,4 +212,5 @@ make mac-run     # mac-app + open it
 
 Requirements: Rust (stable) and Apple Command Line Tools. `cargo test
 --workspace` must keep passing at all times — the Tauri app is never broken
-by macOS work.
+by Apple-platform work. The iOS build path (`make ios-core`, Xcode, simulator)
+is described in `docs/ios-plan.md` and `docs/ios-agent-prompt.md`.

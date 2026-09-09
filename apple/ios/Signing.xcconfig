@@ -1,0 +1,6 @@
+// Optional local signing overrides. Committed: carries no secrets.
+// Real values (DEVELOPMENT_TEAM, CODE_SIGN_IDENTITY, …) belong in
+// Signing.local.xcconfig, which is gitignored — create it from
+// Signing.local.xcconfig.example. `#include?` tolerates the file being
+// absent so fresh clones build unconfigured.
+#include? "Signing.local.xcconfig"

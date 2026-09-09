@@ -9,8 +9,8 @@ use margins_core::notes;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use types::{
-    BookMeta, BookSummary, ChapterNote, ChapterRef, CompiledNotes, ExportOptions, NoteIndexEntry,
-    NoteSearchHit, ReadingPosition,
+    BookMeta, BookSummary, ChapterNote, ChapterRef, CompiledNotes, ExportOptions, Mark,
+    NoteIndexEntry, NoteSearchHit, ReadingPosition,
 };
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -39,6 +39,19 @@ impl From<margins_core::notes::NotesError> for CoreError {
 
 fn poisoned(error: impl std::fmt::Display) -> CoreError {
     CoreError::Message(error.to_string())
+}
+
+/// The spine's chapter record for a key, or an error for unknown keys.
+fn resolve_chapter(
+    library: &Library,
+    book_id: &str,
+    chapter_key: &str,
+) -> Result<margins_core::models::ChapterMeta, CoreError> {
+    let meta = library.get_book(book_id)?;
+    meta.chapters
+        .into_iter()
+        .find(|c| c.key == chapter_key)
+        .ok_or_else(|| CoreError::Message(format!("unknown chapter key: {chapter_key}")))
 }
 
 #[derive(uniffi::Object)]
@@ -197,13 +210,7 @@ impl MarginsCore {
     ) -> Result<ChapterNote, CoreError> {
         let library = self.library.lock().map_err(poisoned)?;
         let book_dir = library.book_dir(&book_id);
-        let meta = library.get_book(&book_id)?;
-        let chapter_meta = meta
-            .chapters
-            .iter()
-            .find(|c| c.key == chapter.key)
-            .cloned()
-            .ok_or_else(|| CoreError::Message(format!("unknown chapter key: {}", chapter.key)))?;
+        let chapter_meta = resolve_chapter(&library, &book_id, &chapter.key)?;
 
         let frontmatter = NoteFrontmatter {
             book_id: book_id.clone(),
@@ -222,6 +229,56 @@ impl MarginsCore {
         // Keep the search index warm: update this book's docs in place.
         library.refresh_note_index(&book_id);
         Ok(saved.into())
+    }
+
+    /// Appends a quick mark to the chapter's note file (creating the file
+    /// when the chapter has no note yet). The id and timestamp are
+    /// assigned by the core and returned in the `Mark`.
+    pub fn append_mark(
+        &self,
+        book_id: String,
+        chapter_key: String,
+        cfi: Option<String>,
+        percent: Option<f64>,
+        quote: String,
+        body: String,
+    ) -> Result<Mark, CoreError> {
+        let library = self.library.lock().map_err(poisoned)?;
+        let book_dir = library.book_dir(&book_id);
+        let chapter_meta = resolve_chapter(&library, &book_id, &chapter_key)?;
+        let mark = notes::append_mark(&book_dir, &chapter_meta, cfi, percent, &quote, &body)?;
+        library.refresh_note_index(&book_id);
+        Ok(mark.into())
+    }
+
+    /// Replaces the mark (matched by id) in the chapter's note file.
+    pub fn update_mark(
+        &self,
+        book_id: String,
+        chapter_key: String,
+        mark: Mark,
+    ) -> Result<(), CoreError> {
+        let library = self.library.lock().map_err(poisoned)?;
+        let book_dir = library.book_dir(&book_id);
+        let chapter_meta = resolve_chapter(&library, &book_id, &chapter_key)?;
+        notes::update_mark(&book_dir, &chapter_meta, mark.into_core()?)?;
+        library.refresh_note_index(&book_id);
+        Ok(())
+    }
+
+    /// Removes the mark with `mark_id` from the chapter's note file.
+    pub fn delete_mark(
+        &self,
+        book_id: String,
+        chapter_key: String,
+        mark_id: String,
+    ) -> Result<(), CoreError> {
+        let library = self.library.lock().map_err(poisoned)?;
+        let book_dir = library.book_dir(&book_id);
+        let chapter_meta = resolve_chapter(&library, &book_id, &chapter_key)?;
+        notes::delete_mark(&book_dir, &chapter_meta, &mark_id)?;
+        library.refresh_note_index(&book_id);
+        Ok(())
     }
 
     pub fn get_notes_index(&self, book_id: String) -> Result<Vec<NoteIndexEntry>, CoreError> {

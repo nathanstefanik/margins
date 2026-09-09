@@ -6,9 +6,9 @@ cd "$root"
 
 universal=${UNIVERSAL:-0}
 if [ "$universal" = "1" ]; then
-  build_dir="macos/.build/apple/Products/Release"
+  build_dir="apple/.build/apple/Products/Release"
 else
-  build_dir="macos/.build/release"
+  build_dir="apple/.build/release"
 fi
 
 swift_arch=""
@@ -16,7 +16,7 @@ if [ "$universal" = "1" ]; then
   swift_arch="--arch arm64 --arch x86_64"
 fi
 
-swift build -c release --package-path macos $swift_arch
+swift build -c release --package-path apple $swift_arch
 
 bin="$build_dir/Margins"
 if [ ! -f "$bin" ]; then
@@ -36,12 +36,13 @@ else
   echo "warning: Margins.icns not found at $icon (run scripts/make-icon.swift)" >&2
 fi
 
-resources_bundle="$build_dir/Margins_Margins.bundle"
-if [ -d "$resources_bundle" ]; then
-  cp -R "$resources_bundle" "$app/Contents/Resources/"
-else
-  echo "warning: SwiftPM resource bundle not found at $resources_bundle" >&2
-fi
+for bundle in "$build_dir/Margins_Margins.bundle" "$build_dir/Margins_MarginsModel.bundle"; do
+  if [ -d "$bundle" ]; then
+    cp -R "$bundle" "$app/Contents/Resources/"
+  else
+    echo "warning: expected SwiftPM resource bundle not found at $bundle" >&2
+  fi
+done
 
 version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/Cargo.toml" | head -n 1)
 if [ -z "$version" ]; then

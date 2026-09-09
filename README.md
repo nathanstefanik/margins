@@ -1,6 +1,6 @@
 # Margins
 
-Minimal cross-platform EPUB reader (Linux + macOS) with file-based, AI-friendly annotations.
+Minimal cross-platform EPUB reader (Linux, macOS, iOS) with file-based, AI-friendly annotations.
 
 Inspired by zathura's restraint: keyboard-first navigation, no clutter, your library stays on disk in plain formats you can sync, grep, and hand to an agent.
 
@@ -30,21 +30,49 @@ Build a release binary:
 npm run tauri build
 ```
 
-## macOS app
+## Apple apps (macOS + iOS)
 
-A native SwiftUI frontend sharing the same Rust core (see
-[docs/architecture.md](docs/architecture.md)).
+Native SwiftUI frontends sharing the same Rust core through one SwiftPM
+package (`apple/`) and a per-platform static-library XCFramework (see
+[docs/architecture.md](docs/architecture.md) and
+[docs/ios-plan.md](docs/ios-plan.md)).
 
-Requirements: Rust (stable) and Apple Command Line Tools (`xcode-select
---install`). Full Xcode is not required.
+Requirements:
+
+- macOS app: Rust (stable) and Apple Command Line Tools (`xcode-select
+  --install`). Full Xcode is not required.
+- iOS app: **full Xcode** (the iOS SDK, `xcodebuild`, simulators — the zip
+  stack's C dependencies compile against the iOS SDK, so Command Line Tools
+  are not enough even for `make ios-core`) plus the Rust iOS targets
+  (`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`).
 
 ```bash
-make core        # build margins-ffi + generate Swift bindings
-make mac-build   # build the Swift package
+make core        # build margins-ffi, generate Swift bindings, refresh the
+                 # macOS slice of build/MarginsFFI.xcframework
+make ios-core    # additionally build the iOS device/simulator xcframework slices
+make mac-build   # build the Swift package (macOS)
 make mac-test    # run the Swift Testing suite
 make mac-app     # assemble build/Margins.app (ad-hoc signed)
 make mac-run     # mac-app + open it
 ```
+
+The iOS app itself builds from `apple/ios/Margins.xcodeproj` (open in Xcode,
+or `xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins -destination
+'platform=iOS Simulator,name=iPhone 17 Pro'`). See
+[docs/ios-plan.md](docs/ios-plan.md) for the phased status.
+
+**iOS device signing** (never committed): copy
+`apple/ios/Signing.local.xcconfig.example` to `Signing.local.xcconfig` and
+fill in your Team ID — the project loads it via an optional include. In
+Xcode, sign in under *Settings → Accounts* so automatic provisioning can
+register devices and create profiles; on the phone, enable *Settings →
+Privacy & Security → Developer Mode* (the toggle appears after the device
+is paired with Xcode). The library lives in the iCloud Documents container
+`iCloud.io.github.nathanstefanik.margins` when an iCloud account is
+available — visible in the Files app and pointable at from the Mac via
+`MARGINS_LIBRARY_ROOT` — falling back to local `Documents/Library` at
+runtime otherwise; sync happens through iCloud, conflict detection surfaces
+`NSFileVersion` conflicts rather than discarding them.
 
 macOS keybindings:
 
@@ -95,6 +123,50 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 | `R` | Choose the library directory |
 | `Enter` | Open selected book (library) or search hit |
 | `:` | Command mode (`:w` save, `:q` library, `:notes` compiled page, `:search`, `:import`, `:export`, `:root`, `:open 3`) |
+
+## Status
+
+Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architecture.md](docs/architecture.md) (shape).
+
+**Done**
+
+- Rust core + Tauri 2 frontend (Linux/desktop): library, reader, notes,
+  search, markdown export, library sync
+- macOS SwiftUI app: library, paginated reader, notes pane, compiled notes
+  page, search overlay, keyboard-first control
+- Anchored **marks** in chapter notes (parse/serialize/CRUD in the core,
+  rendered in both desktop frontends, lossless round-trip)
+- Shared Apple SwiftPM package over a per-platform `MarginsFFI.xcframework`
+  (macOS + iOS slices, `make core` / `make ios-core`)
+- iOS app skeleton + **Library scene**: cover grid, document-picker import,
+  delete with confirmation, notes search; iCloud Documents library root with
+  runtime local fallback; simulator-verified (light/dark, iPhone/iPad)
+- iOS **book detail** (Contents / Notes tabs, compiled marks, ShareLink
+  export) and the **Reader**: shared epub.js bundle, tap zones + hardware
+  keys, immersive chrome, typography, CFI position persistence — and a
+  latent macOS chapter-jump bug fixed along the way
+- iOS **note capture while reading**: text selection → *Note* / *Highlight*
+  in the native edit menu, a page-anchored capture affordance with draft
+  autosave, highlight-without-note (epub.js overlays), chapter marks sheet,
+  full-height chapter-note editor, and a silenceable end-of-chapter prompt
+- iOS "Open in Margins" from Files/Mail (`onOpenURL`), VoiceOver labels
+  with no gesture-only actions, Dynamic Type throughout
+- **Device signing + real iCloud**: team ID in a gitignored local xcconfig,
+  app installs to a paired iPhone via
+  `xcodebuild -allowProvisioningUpdates`, and the library resolves the real
+  ubiquity container on device (Files-visible, Mac-pointable)
+
+**In progress**
+
+- Definition-of-done pass on real hardware: walk import → read → five
+  marks + one chapter note → compiled notes → export by hand, including
+  the gesture-only paths (native edit menu, tap zones, swipes) and the
+  highlight overlay's visual paint — the data paths are verified
+  end-to-end on the simulator via DEBUG launch seams
+
+**Next**
+
+- Mark-text search, App Store packaging decisions
 
 ## License
 
