@@ -58,6 +58,9 @@ final class AppModel {
             locationNotice =
                 "iCloud unavailable — the library is stored locally under On My iPhone."
         }
+        #if DEBUG
+        print("[library] resolved \(locationSource)")
+        #endif
         if library.libraryRoot != root {
             await library.setLibraryRoot(root)
         }
