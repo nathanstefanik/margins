@@ -181,6 +181,8 @@ final class ReaderBridge: NSObject {
         webView.isOpaque = false
         webView.backgroundColor = .clear
         webView.scrollView.bounces = false
+        webView.scrollView.delaysContentTouches = false
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         self.webView = webView
 
         observeTypography()
@@ -219,6 +221,12 @@ final class ReaderBridge: NSObject {
 
     func jumpToChapter(_ target: String) {
         evaluate("readerDisplay(\(Self.javaScriptLiteral(target)))")
+    }
+
+    /// Re-measure paginated columns after the webview's layout changes
+    /// (chrome show/hide resizes the page).
+    func relayout() {
+        evaluate("readerRelayout()")
     }
 
     /// Reloads the reader page for the current book/chapter/CFI. Used when

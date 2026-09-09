@@ -20,7 +20,9 @@ every commit.
   scenes; only genuinely shared pieces (model layer, reader glue, compiled-notes
   rendering helpers) move to shared targets
 - No PDF/HTML export, no sync UI on iOS (sync export/import stays unexposed)
-- No App Store submission work — simulator + ad-hoc device installs only
+- TestFlight / App Store distribution is a separate plan:
+  `docs/app-store-plan.md`. This document stops at simulator + ad-hoc
+  device installs.
 - No gamification; chrome stays zathura-minimal
 
 ## Answers locked in up front

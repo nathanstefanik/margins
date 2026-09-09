@@ -14,11 +14,18 @@ public final class ReaderPreferences {
     public static let minFontSize = 70.0
     public static let maxFontSize = 200.0
     public static let fontSizeStep = 10.0
+    #if os(iOS)
+    /// A step larger than the publisher default: phone columns are narrow,
+    /// and 110% still reads small against typical EPUB body sizes.
+    public static let defaultFontSize = 130.0
+    public static let defaultLineHeight = 1.7
+    #else
     /// One step above the publisher default: on common laptop aspect ratios
     /// the column scales with font size, so this also widens the measure
     /// enough to keep the side margins modest.
     public static let defaultFontSize = 110.0
     public static let defaultLineHeight = 1.6
+    #endif
     public static let defaultLineWidth = 72.0
 
     public static let lineWidthRange = 50.0...110.0
@@ -53,6 +60,25 @@ public final class ReaderPreferences {
             Self.lineWidthRange.lowerBound,
             Self.lineWidthRange.upperBound
         )
+        migrateIOSReadingDefaultsIfNeeded()
+    }
+
+    /// iOS 130%/1.7 replaced 110%/1.6. Users who never changed typography
+    /// should pick up the new defaults; anyone who already tuned stays put.
+    private func migrateIOSReadingDefaultsIfNeeded() {
+        #if os(iOS)
+        let schemaKey = "reader.typographySchema"
+        guard defaults.integer(forKey: schemaKey) < 2 else { return }
+        defaults.set(2, forKey: schemaKey)
+        if abs(_fontSize - 110) < 0.01 {
+            _fontSize = Self.defaultFontSize
+            defaults.set(_fontSize, forKey: Self.fontSizeKey)
+        }
+        if abs(_lineHeight - 1.6) < 0.01 {
+            _lineHeight = Self.defaultLineHeight
+            defaults.set(_lineHeight, forKey: Self.lineHeightKey)
+        }
+        #endif
     }
 
     public var fontSize: Double {

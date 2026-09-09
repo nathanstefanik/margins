@@ -2,8 +2,9 @@
 
 Margins is one Rust core with three thin frontends: the original Tauri
 (Linux/desktop) app, a native macOS SwiftUI app, and a native iOS SwiftUI
-app (in progress — see `docs/ios-plan.md`). The Apple targets share one
-SwiftPM package. All of them render EPUBs with epub.js and write annotations
+app (see `docs/ios-plan.md`; TestFlight / App Store in
+`docs/app-store-plan.md`). The Apple targets share one SwiftPM
+package. All of them render EPUBs with epub.js and write annotations
 as plain files — no database anywhere.
 
 ```

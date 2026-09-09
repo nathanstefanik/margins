@@ -468,6 +468,7 @@ window.readerScrollBy = readerScrollBy;
 window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
 window.readerApplyTypography = readerApplyTypography;
+window.readerRelayout = readerQueueRelayout;
 // Capture support (see readerResolveSpineTarget note): highlight a mark's
 // CFI range (epub.js dedupes by range), collapse the active selection, and
 // hand back the current page's CFI for page-anchored marks.

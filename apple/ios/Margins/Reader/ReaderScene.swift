@@ -44,18 +44,14 @@ struct ReaderScene: View {
 
     var body: some View {
         ZStack {
+            Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
+                .ignoresSafeArea()
             GeometryReader { proxy in
                 IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
                     .onTapGesture(coordinateSpace: .local) { location in
                         handleTap(at: location, width: proxy.size.width)
                     }
                     .gesture(pageSwipe)
-            }
-            .ignoresSafeArea(edges: .bottom)
-
-            if chromeVisible {
-                chrome
-                    .transition(.opacity)
             }
             if let finished = finishedChapter {
                 notePrompt(for: finished)
@@ -65,27 +61,26 @@ struct ReaderScene: View {
                 flashBadge
             }
         }
-        .overlay(alignment: .bottomLeading) {
-            // VoiceOver path to every control: the chrome toggle and page
-            // turns must never be gesture-only.
-            Button {
-                withAnimation { chromeVisible.toggle() }
-            } label: {
-                Image(systemName: chromeVisible ? "eye.slash" : "eye")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(chromeVisible ? .primary : .secondary)
-                    .padding(10)
-                    .background(.thinMaterial, in: .circle)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if chromeVisible {
+                topBar
             }
-            .opacity(chromeVisible ? 1 : 0.45)
-            .padding(.leading, 14)
-            .padding(.bottom, 60)
-            .accessibilityLabel(chromeVisible ? "Hide reading controls" : "Show reading controls")
         }
-        .overlay(alignment: .bottomTrailing) {
-            captureAffordance
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if chromeVisible {
+                    bottomBar
+                }
+                persistentBar
+            }
+            .background(.thinMaterial)
         }
         .animation(.easeOut(duration: 0.2), value: chromeVisible)
+        .onChange(of: chromeVisible) {
+            // The page's layout box just changed; epub.js only relayouts
+            // on window resize, so drive one from here.
+            bridge?.relayout()
+        }
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
         // The custom chrome carries the back affordance, the title, and
@@ -230,23 +225,45 @@ struct ReaderScene: View {
 
     // MARK: Capture affordance (no selection)
 
-    /// The no-selection path: a small persistent affordance that fades but
-    /// never disappears, anchoring the mark to the current page's CFI.
+    /// The no-selection path: always in the bottom inset so it is never
+    /// under the webview's tap zones.
     private var captureAffordance: some View {
         Button {
             captureSelection = nil
             capturePresented = true
         } label: {
             Image(systemName: "square.and.pencil")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(chromeVisible ? .primary : .secondary)
-                .padding(10)
-                .background(.thinMaterial, in: .circle)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
         }
-        .opacity(chromeVisible ? 1 : 0.45)
-        .padding(.trailing, 14)
-        .padding(.bottom, 60)
+        .buttonStyle(.plain)
         .accessibilityLabel("New note at this page")
+    }
+
+    private var chromeToggle: some View {
+        Button {
+            chromeVisible.toggle()
+        } label: {
+            Image(systemName: chromeVisible ? "eye.slash" : "eye")
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(chromeVisible ? "Hide reading controls" : "Show reading controls")
+    }
+
+    /// Eye + capture sit in layout space below the page, not over it:
+    /// WKWebView eats SwiftUI overlay taps in its bounds.
+    private var persistentBar: some View {
+        HStack {
+            chromeToggle
+            Spacer(minLength: 8)
+            captureAffordance
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
     }
 
     // MARK: End-of-chapter prompt
@@ -304,21 +321,12 @@ struct ReaderScene: View {
         }
         .padding(14)
         .background(.thinMaterial, in: .rect(cornerRadius: 12))
-        .padding(.bottom, 90)
+        .padding(.bottom, 16)
         .frame(maxHeight: .infinity, alignment: .bottom)
         .accessibilityElement(children: .combine)
     }
 
     // MARK: Chrome
-
-    @ViewBuilder
-    private var chrome: some View {
-        VStack {
-            topBar
-            Spacer(minLength: 0)
-            bottomBar
-        }
-    }
 
     private var topBar: some View {
         HStack(spacing: 16) {
@@ -349,7 +357,6 @@ struct ReaderScene: View {
         .buttonStyle(.borderless)
         .padding(.horizontal)
         .padding(.vertical, 10)
-        .background(.thinMaterial)
     }
 
     private var bottomBar: some View {
@@ -389,8 +396,7 @@ struct ReaderScene: View {
             .accessibilityLabel("Next page")
         }
         .padding(.horizontal)
-        .padding(.vertical, 10)
-        .background(.thinMaterial)
+        .padding(.vertical, 8)
     }
 
     private var progressText: String {
