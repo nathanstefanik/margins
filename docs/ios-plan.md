@@ -472,17 +472,6 @@ Met 2026-09-09. Implementation notes:
    from Files, VoiceOver listen-through, and the definition-of-done walk
    (import → read → five marks + one chapter note → Notes scene → export).
 
-## Known limitations
-
-- **Size-class flip rebuilds navigation (iOS)** — the iPhone/iPad branch on
-  `horizontalSizeClass` (`LibraryScene`) swaps a `NavigationStack` for a
-  `NavigationSplitView`, so entering Split View or Slide Over on iPad
-  (regular → compact) rebuilds the whole navigation tree and drops the
-  user's place. A single always-on `NavigationSplitView` would collapse
-  gracefully but would also change the iPhone UX (grid → detail becomes
-  sidebar → detail) and break the pushed-detail DEBUG seams; deferred as a
-  deliberate trade-off.
-
 ## Testing
 
 - **Core**: mark parse/serialize round-trip; blob-frontend save preserves

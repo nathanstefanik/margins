@@ -9,12 +9,12 @@ import MarginsModel
 struct BookDetailView: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
+    @Environment(AppModel.self) private var app
 
-    var bookID: BookSummary.ID?
+    @Binding var readerActive: Bool
 
     @State private var tab: Tab = .contents
     @State private var showEmptyChapters = false
-    @State private var readerActive = false
     @State private var position: ReadingPosition?
 
     enum Tab: Hashable {
@@ -30,15 +30,10 @@ struct BookDetailView: View {
                 ContentUnavailableView("No book selected", systemImage: "book")
             }
         }
-        .task(id: bookID ?? library.selectedBook?.id) {
-            // Keyed on the *loaded* book, not the selection id: on iPad the
-            // detail is created with `bookID == nil` and follows the sidebar
-            // selection, whose metadata lands one async hop after
-            // `selectedBookID` changes — keying on the id would run while
-            // `selectedMeta` is still nil (no position load, no reader).
-            if let bookID, library.selectedBookID != bookID {
-                await library.selectBook(id: bookID)
-            }
+        .task(id: library.selectedBook?.id) {
+            // Keyed on the *loaded* book: selection id flips one hop
+            // before metadata arrives, and a nil meta would skip the
+            // position load and a pending reader present.
             await loadPosition()
             presentReaderIfPending()
             #if DEBUG
@@ -47,6 +42,7 @@ struct BookDetailView: View {
             switch ProcessInfo.processInfo.environment["MARGINS_OPEN_FIXTURE"] {
             case "reader":
                 if let meta = selectedMeta {
+                    guard await app.prepareForReading(bookId: meta.id) else { return }
                     await library.openBookResuming(id: meta.id)
                     readerActive = true
                 }
@@ -76,8 +72,7 @@ struct BookDetailView: View {
     }
 
     private var selectedMeta: BookMeta? {
-        guard let bookID else { return library.selectedBook }
-        return library.selectedBook?.id == bookID ? library.selectedBook : nil
+        library.selectedBook
     }
 
     private func loadPosition() async {
@@ -119,6 +114,7 @@ struct BookDetailView: View {
                 }
                 Button {
                     Task {
+                        guard await app.prepareForReading(bookId: meta.id) else { return }
                         await library.openBookResuming(id: meta.id)
                         readerActive = true
                     }
@@ -147,9 +143,6 @@ struct BookDetailView: View {
             }
             .padding()
         }
-        .navigationDestination(isPresented: $readerActive) {
-            ReaderScene()
-        }
     }
 
     private var continueLabel: String {
@@ -167,6 +160,7 @@ struct BookDetailView: View {
     private func jump(to chapter: ChapterMeta, cfi: String? = nil) {
         guard let book = selectedMeta else { return }
         Task {
+            guard await app.prepareForReading(bookId: book.id) else { return }
             await library.openPassage(bookId: book.id, chapterKey: chapter.key, cfi: cfi)
             presentReaderIfPending()
         }

@@ -264,6 +264,16 @@ public final class LibraryModel {
         reader.resume(at: cfi)
     }
 
+    /// Absolute path of `books/{id}/source.epub` under the current library
+    /// root. The iOS app materializes this before the core reads it.
+    public func sourceEpubPath(for bookId: String) -> String {
+        URL(fileURLWithPath: libraryRoot)
+            .appendingPathComponent("books", isDirectory: true)
+            .appendingPathComponent(bookId, isDirectory: true)
+            .appendingPathComponent("source.epub")
+            .path
+    }
+
     /// Opens a book at a specific chapter (and CFI, when one is known).
     /// Search hits and compiled-note marks share this so a thought lands
     /// on the sentence rather than the book card. `chapterKey` empty means

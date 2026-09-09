@@ -5,38 +5,41 @@ import MarginsModel
 
 /// The Library scene: every imported book as a cover grid, import via the
 /// document picker, delete with confirmation, and library-wide notes
-/// search. NavigationStack on iPhone, NavigationSplitView on iPad.
+/// search. One `NavigationSplitView` on every size class so Split View /
+/// Slide Over does not rebuild the tree and drop the reader's place;
+/// compact collapses to sidebar → detail.
 struct LibraryScene: View {
     @Environment(LibraryModel.self) private var library
     @Environment(AppModel.self) private var app
-
-    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var query = ""
     @State private var hits: [NoteSearchHit] = []
     @State private var importPresented = false
     @State private var bookPendingDeletion: BookSummary?
-    @State private var pushedBook: PushedBook?
+    @State private var readerActive = false
+    @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
 
     var body: some View {
-        if sizeClass == .regular {
-            NavigationSplitView {
-                sidebar
-            } detail: {
-                // BookDetailView pushes the reader via
-                // `navigationDestination(isPresented:)`, which is inert
-                // without an enclosing stack (the detail column does not
-                // provide one on its own).
-                NavigationStack {
-                    BookDetailView()
-                }
-            }
-        } else {
+        NavigationSplitView(preferredCompactColumn: $preferredCompactColumn) {
+            sidebar
+        } detail: {
             NavigationStack {
-                content(onSelect: { pushedBook = PushedBook(id: $0) })
-                    .navigationDestination(item: $pushedBook) { pushed in
-                        BookDetailView(bookID: pushed.id)
+                BookDetailView(readerActive: $readerActive)
+                    .navigationDestination(isPresented: $readerActive) {
+                        ReaderScene()
                     }
+            }
+        }
+        .overlay {
+            if app.isMaterializing {
+                ZStack {
+                    Color.black.opacity(0.2).ignoresSafeArea()
+                    ProgressView("Downloading book…")
+                        .padding(20)
+                        .background(.thinMaterial, in: .rect(cornerRadius: 12))
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Downloading book from iCloud")
             }
         }
     }
@@ -45,10 +48,14 @@ struct LibraryScene: View {
 
     private var sidebar: some View {
         NavigationStack {
-            content(onSelect: { id in Task { await library.selectBook(id: id) } })
-                .navigationTitle("Margins")
+            content(onSelect: selectFromSidebar)
         }
         .navigationSplitViewColumnWidth(min: 280, ideal: 320)
+    }
+
+    private func selectFromSidebar(_ id: String) {
+        Task { await library.selectBook(id: id) }
+        preferredCompactColumn = .detail
     }
 
     @ViewBuilder
@@ -137,19 +144,14 @@ struct LibraryScene: View {
                 query = ProcessInfo.processInfo.environment["MARGINS_SEARCH_FIXTURE"] ?? ""
             }
             if ProcessInfo.processInfo.environment["MARGINS_OPEN_FIXTURE"] != nil {
-                // Push the first book's detail so the scene flow is
-                // reachable without touch synthesis. On iPad the detail
-                // column has no push — selecting the book is the
-                // equivalent entry into `BookDetailView`.
+                // Select the first book so the detail column (and its
+                // DEBUG reader/notes seams) is reachable without touch.
                 for _ in 0..<50 where library.books.isEmpty {
                     try? await Task.sleep(for: .milliseconds(200))
                 }
                 if let first = library.books.first {
-                    if sizeClass == .regular {
-                        await library.selectBook(id: first.id)
-                    } else {
-                        pushedBook = PushedBook(id: first.id)
-                    }
+                    await library.selectBook(id: first.id)
+                    preferredCompactColumn = .detail
                 }
             }
             if let mode = ProcessInfo.processInfo.environment["MARGINS_DELETE_FIXTURE"] {
@@ -233,6 +235,7 @@ struct LibraryScene: View {
                 ForEach(hits) { hit in
                     Button {
                         Task {
+                            guard await app.prepareForReading(bookId: hit.bookId) else { return }
                             await library.openPassage(
                                 bookId: hit.bookId,
                                 chapterKey: hit.chapterKey,
@@ -297,11 +300,6 @@ struct LibraryScene: View {
         await library.importEpubs(atPaths: [fixture])
     }
     #endif
-}
-
-/// Navigation item for pushing a book from the library grid.
-struct PushedBook: Identifiable, Hashable {
-    let id: String
 }
 
 /// Grid cell: cover (or placeholder), title, author, note count, and a
