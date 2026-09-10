@@ -276,17 +276,17 @@ final class ReaderBridge: NSObject {
 
     private func applyTypography() {
         let preferences = reader.preferences
+        // iOS text ladder: px on the rendition ('px' unit), fixed line
+        // height, full-width column (0 disables the measure entirely).
         evaluate(
-            "readerApplyTypography(\(preferences.fontSize),\(preferences.lineHeight),\(preferences.lineWidth))"
+            "readerApplyTypography(\(preferences.fontSizePx),\(ReaderPreferences.iosLineHeight),0,'px')"
         )
     }
 
     private func observeTypography() {
         let preferences = reader.preferences
         withObservationTracking {
-            _ = preferences.fontSize
-            _ = preferences.lineHeight
-            _ = preferences.lineWidth
+            _ = preferences.fontStep
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }

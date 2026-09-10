@@ -1,31 +1,81 @@
 import Foundation
 import Observation
 
-/// Reader typography preferences: text size, line width, and line height.
+/// Reader typography preferences.
 ///
 /// A chrome preference (window-level UI state), not library data, so it
 /// persists via `UserDefaults` and stays out of the synced library tree.
-/// Font size is a percentage applied on top of the book's base size
-/// (100 = publisher default); line width is the centered text column's max
-/// width in `ch` units; line height is a unitless multiplier.
+///
+/// Per platform:
+/// - macOS keeps the percentage API: font size is a percentage applied on
+///   top of the book's base size (100 = publisher default), line width is
+///   the centered text column's max width in `ch` units, line height is a
+///   unitless multiplier.
+/// - iOS drives the reader through `fontStep` (1…5) instead: a short
+///   internal ladder mapped to px at apply time. The UI exposes only
+///   smaller/larger "A" buttons; the numbers never reach the reader.
 @MainActor
 @Observable
 public final class ReaderPreferences {
+    #if os(iOS)
+    /// The text ladder behind the smaller/larger controls, in px applied
+    /// to the rendition. Deliberately short: five steps cover phone
+    /// reading without a slider.
+    public static let fontStepsPx: [Double] = [14.0, 16.0, 18.0, 21.0, 24.0]
+    /// The middle step — readable body text at a phone measure.
+    public static let defaultFontStep = 3
+    /// Fixed line height for the iOS reader (not configurable).
+    public static let iosLineHeight = 1.65
+
+    private static let fontStepKey = "reader.fontStep"
+
+    private let defaults: UserDefaults
+    private var _fontStep: Int
+
+    /// - Parameter defaults: injection point for tests; pass a
+    ///   `UserDefaults(suiteName:)` to keep suites isolated.
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let storedStep = defaults.integer(forKey: Self.fontStepKey)
+        _fontStep = (1...Self.fontStepsPx.count).contains(storedStep)
+            ? storedStep
+            : Self.defaultFontStep
+    }
+
+    /// Current rung of the text ladder (1-based). The numbers are internal;
+    /// the UI only steps up and down.
+    public var fontStep: Int {
+        get { _fontStep }
+        set {
+            _fontStep = min(max(newValue, 1), Self.fontStepsPx.count)
+            defaults.set(_fontStep, forKey: Self.fontStepKey)
+        }
+    }
+
+    /// The px size handed to the rendition for the current step.
+    public var fontSizePx: Double {
+        Self.fontStepsPx[_fontStep - 1]
+    }
+
+    /// Steps the text ladder up/down, clamped at the ends.
+    public func stepFont(_ delta: Int) {
+        fontStep = _fontStep + delta
+    }
+
+    /// At the bottom of the ladder: the smaller-A control disables.
+    public var canStepFontSmaller: Bool { _fontStep > 1 }
+
+    /// At the top of the ladder: the larger-A control disables.
+    public var canStepFontLarger: Bool { _fontStep < Self.fontStepsPx.count }
+    #else
     public static let minFontSize = 70.0
     public static let maxFontSize = 200.0
     public static let fontSizeStep = 10.0
-    #if os(iOS)
-    /// A step larger than the publisher default: phone columns are narrow,
-    /// and 110% still reads small against typical EPUB body sizes.
-    public static let defaultFontSize = 130.0
-    public static let defaultLineHeight = 1.7
-    #else
     /// One step above the publisher default: on common laptop aspect ratios
     /// the column scales with font size, so this also widens the measure
     /// enough to keep the side margins modest.
     public static let defaultFontSize = 110.0
     public static let defaultLineHeight = 1.6
-    #endif
     public static let defaultLineWidth = 72.0
 
     public static let lineWidthRange = 50.0...110.0
@@ -60,25 +110,6 @@ public final class ReaderPreferences {
             Self.lineWidthRange.lowerBound,
             Self.lineWidthRange.upperBound
         )
-        migrateIOSReadingDefaultsIfNeeded()
-    }
-
-    /// iOS 130%/1.7 replaced 110%/1.6. Users who never changed typography
-    /// should pick up the new defaults; anyone who already tuned stays put.
-    private func migrateIOSReadingDefaultsIfNeeded() {
-        #if os(iOS)
-        let schemaKey = "reader.typographySchema"
-        guard defaults.integer(forKey: schemaKey) < 2 else { return }
-        defaults.set(2, forKey: schemaKey)
-        if abs(_fontSize - 110) < 0.01 {
-            _fontSize = Self.defaultFontSize
-            defaults.set(_fontSize, forKey: Self.fontSizeKey)
-        }
-        if abs(_lineHeight - 1.6) < 0.01 {
-            _lineHeight = Self.defaultLineHeight
-            defaults.set(_lineHeight, forKey: Self.lineHeightKey)
-        }
-        #endif
     }
 
     public var fontSize: Double {
@@ -133,4 +164,5 @@ public final class ReaderPreferences {
     private static func clamp(_ value: Double, _ lower: Double, _ upper: Double) -> Double {
         min(max(value, lower), upper)
     }
+    #endif
 }

@@ -14,8 +14,11 @@ const readerStartCfi = readerParams.get("cfi");
 
 let readerBook = null;
 let readerRendition = null;
-// Latest typography spec from the shell: {fontSize, lineHeight, lineWidthCh}.
-// Applied as soon as the rendition exists and to every section as it loads.
+// Latest typography spec from the shell: {fontSize, unit, lineHeight,
+// lineWidthCh}. fontSize is a number in `unit` ("%" for macOS, "px" for
+// the iOS ladder) and lands on html with !important; body text is forced
+// to inherit it, because publisher sheets pin `p { font-size: ... }` and
+// would otherwise ignore the root size entirely.
 let readerTypography = null;
 // True once the first display finished; relayouts are only queued after that.
 let readerOpened = false;
@@ -137,12 +140,19 @@ function readerPreserveAspectRatio(contents) {
 }
 
 // Typography (called from Swift): constrain the text column in the outer
-// page, then style each section's content document. Font size goes on the
-// root (so `rem`-based publisher styles scale) with the body inheriting, so
-// publisher `body` font rules don't win; `!important` inline styles sit in
-// the same layer epub.js itself uses for layout, so nothing accumulates.
-function readerApplyTypography(fontSize, lineHeight, lineWidthCh) {
-  readerTypography = { fontSize: fontSize, lineHeight: lineHeight, lineWidthCh: lineWidthCh };
+// page, then style each section's content document. The size goes on html
+// (so `rem`-based publisher styles scale) and the flow containers are
+// forced to inherit it — epub.js's own theme overrides cannot do this job:
+// their Contents#css writes inline styles on body without !important,
+// which the inherit rule would cancel. The `!important` here sits in the
+// same layer epub.js itself uses for layout, so nothing accumulates.
+function readerApplyTypography(fontSize, lineHeight, lineWidthCh, unit) {
+  readerTypography = {
+    fontSize: fontSize,
+    unit: unit || "%",
+    lineHeight: lineHeight,
+    lineWidthCh: lineWidthCh,
+  };
   readerApplyViewerWidth();
   if (readerRendition) {
     readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
@@ -155,13 +165,12 @@ function readerApplyViewerWidth() {
   if (!viewer || !readerTypography) {
     return;
   }
+  // Measure is independent of font size: a ch is relative to the rendered
+  // glyphs already, so scaling the column by the size used to turn size
+  // steps into measure changes instead of bigger type.
   const width = readerTypography.lineWidthCh;
   if (width > 0) {
-    // Line width is the target measure in characters per line of reading
-    // text, so the column scales with font size: stepping the font size
-    // widens the column rather than shrinking the measure.
-    const scaled = width * (readerTypography.fontSize / 100);
-    viewer.style.maxWidth = `${scaled}ch`;
+    viewer.style.maxWidth = `${width}ch`;
     viewer.style.margin = "0 auto";
   } else {
     viewer.style.maxWidth = "none";
@@ -193,15 +202,20 @@ function readerStyleContents(contents) {
   if (!readerTypography || !contents || !contents.document) {
     return;
   }
-  const doc = contents.document;
-  if (doc.documentElement) {
-    doc.documentElement.style.setProperty("font-size", `${readerTypography.fontSize}%`, "important");
-  }
-  const body = contents.content || doc.body;
-  if (body) {
-    body.style.setProperty("font-size", "inherit", "important");
-    body.style.setProperty("line-height", String(readerTypography.lineHeight), "important");
-  }
+  // Root size on html; body and the common flow containers forced to
+  // inherit it, so publisher rules like `p { font-size: 14px }` cannot
+  // pin glyphs and ignore the preference.
+  contents.addStylesheetRules({
+    html: {
+      "font-size": `${readerTypography.fontSize}${readerTypography.unit} !important`,
+    },
+    "body, p, li, div": {
+      "font-size": "inherit !important",
+    },
+    body: {
+      "line-height": `${readerTypography.lineHeight} !important`,
+    },
+  });
 }
 
 // Forward relocation to the shell: page position within the chapter for the
