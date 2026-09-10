@@ -34,11 +34,6 @@ import Foundation
 /// place of `Z`, which chrono's `to_rfc3339()` produced across the bridge);
 /// writing always uses three digits.
 public enum RFC3339 {
-    private static let fractional = Date.ISO8601FormatStyle(
-        dateTimeSeparator: .standard,
-        timeZoneSeparator: .colon,
-        includingFractionalSeconds: true
-    )
     private static let whole = Date.ISO8601FormatStyle(
         dateTimeSeparator: .standard,
         timeZoneSeparator: .colon,
@@ -46,14 +41,15 @@ public enum RFC3339 {
     )
 
     /// Writes UTC with `Z`, dropping the fractional field when it is zero —
-    /// chrono's `SecondsFormat::AutoSi`, which is what produced the
-    /// timestamps in docs/storage.md. Sub-second time is written to
-    /// milliseconds; the Rust core wrote up to nanoseconds, so re-saving a
-    /// file it wrote can shorten a timestamp without changing its meaning.
+    /// chrono's `SecondsFormat::AutoSi`, which produced the timestamps in
+    /// docs/storage.md. Sub-second time is written to milliseconds; the Rust
+    /// core wrote up to nanoseconds, so re-saving a file it wrote can
+    /// shorten a timestamp without changing its meaning.
     public static func string(from date: Date) -> String {
-        let formatted = fractional.format(date)
-        guard let zeroFraction = formatted.range(of: ".000Z") else { return formatted }
-        return formatted.replacingCharacters(in: zeroFraction, with: "Z")
+        let (seconds, milliseconds) = split(date)
+        let base = whole.format(Date(timeIntervalSince1970: seconds))
+        guard milliseconds != 0, base.hasSuffix("Z") else { return base }
+        return String(base.dropLast()) + String(format: ".%03dZ", milliseconds)
     }
 
     /// Second precision, the form marks carry in their `at=` attribute
@@ -67,34 +63,55 @@ public enum RFC3339 {
     ///
     /// `Date` is finer-grained than the three fractional digits written to
     /// disk, so a raw `Date()` would not compare equal to itself after a
-    /// save and a re-read. Round-tripping it through the codec here means a
-    /// timestamp the core stamps is exactly the timestamp callers read back.
+    /// save and a re-read. Quantizing here means a timestamp the core stamps
+    /// is exactly the timestamp callers read back.
     public static func now() -> Date {
-        let now = Date()
-        return date(from: string(from: now)) ?? now
+        compose(split(Date()))
     }
 
+    /// Reads the widths chrono's `AutoSi` emits (0, 3, 6, or 9 fractional
+    /// digits) as well as the numeric offsets `to_rfc3339()` produced across
+    /// the UniFFI bridge. Precision below a millisecond is discarded.
     public static func date(from raw: String) -> Date? {
-        let normalized = normalizingFraction(raw)
-        if let date = try? Date(normalized, strategy: fractional) { return date }
-        return try? Date(normalized, strategy: whole)
+        var milliseconds = 0
+        var text = raw
+
+        if let dot = raw.firstIndex(of: ".") {
+            var end = raw.index(after: dot)
+            var digits = ""
+            while end < raw.endIndex, raw[end].isASCII, raw[end].isNumber {
+                digits.append(raw[end])
+                end = raw.index(after: end)
+            }
+            text = String(raw[..<dot] + raw[end...])
+            if !digits.isEmpty {
+                milliseconds = Int(digits.prefix(3)
+                    .padding(toLength: 3, withPad: "0", startingAt: 0)) ?? 0
+            }
+        }
+
+        guard let seconds = try? Date(text, strategy: whole) else { return nil }
+        return milliseconds == 0 ? seconds : compose((seconds.timeIntervalSince1970, milliseconds))
     }
 
-    /// Rewrites the fractional-seconds field to exactly three digits (or
-    /// drops it), because `ISO8601FormatStyle` parses one width only.
-    private static func normalizingFraction(_ raw: String) -> String {
-        guard let dot = raw.firstIndex(of: ".") else { return raw }
-        var end = raw.index(after: dot)
-        while end < raw.endIndex, raw[end].isASCII, raw[end].isNumber {
-            end = raw.index(after: end)
+    /// Whole seconds and whole milliseconds. Splitting the two keeps the
+    /// codec a fixed point: `Date`'s binary fraction is not exactly the
+    /// decimal one, so formatting a parsed value through a single
+    /// `ISO8601FormatStyle` drifts by a millisecond about half the time.
+    private static func split(_ date: Date) -> (seconds: TimeInterval, milliseconds: Int) {
+        let interval = date.timeIntervalSince1970
+        var seconds = interval.rounded(.down)
+        var milliseconds = Int(((interval - seconds) * 1000).rounded())
+        if milliseconds >= 1000 {
+            seconds += 1
+            milliseconds = 0
         }
-        let digits = raw[raw.index(after: dot)..<end]
-        let head = raw[..<dot]
-        let tail = raw[end...]
-        if digits.isEmpty { return String(head + tail) }
-        let millis = digits.prefix(3)
-        let padding = String(repeating: "0", count: 3 - millis.count)
-        return String(head) + "." + millis + padding + tail
+        return (seconds, milliseconds)
+    }
+
+    private static func compose(_ parts: (seconds: TimeInterval, milliseconds: Int)) -> Date {
+        Date(timeIntervalSince1970: parts.seconds)
+            .addingTimeInterval(Double(parts.milliseconds) / 1000)
     }
 }
 

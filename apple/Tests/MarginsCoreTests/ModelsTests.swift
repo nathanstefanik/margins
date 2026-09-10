@@ -45,6 +45,26 @@ struct ModelsTests {
         #expect(RFC3339.date(from: "2026-09-05") == nil)
     }
 
+    @Test("the codec is a fixed point across the millisecond range")
+    func codecIsAFixedPoint() throws {
+        // `Date`'s binary fraction is not the decimal one, so a naive
+        // format/parse pair drifts by a millisecond for roughly half of all
+        // instants — which showed up as a note's stamped `created_at` not
+        // comparing equal to the same value read back. Sweep a full second
+        // at millisecond resolution, plus the stamping helper.
+        for millisecond in 0..<1000 {
+            let encoded = millisecond == 0
+                ? "2026-09-05T14:02:11Z"
+                : String(format: "2026-09-05T14:02:11.%03dZ", millisecond)
+            let decoded = try #require(RFC3339.date(from: encoded))
+            #expect(RFC3339.string(from: decoded) == encoded)
+            #expect(RFC3339.date(from: RFC3339.string(from: decoded)) == decoded)
+        }
+        // And the value the core stamps onto a save survives its own trip.
+        let stamped = RFC3339.now()
+        #expect(RFC3339.date(from: RFC3339.string(from: stamped)) == stamped)
+    }
+
     @Test("a timestamp that survives the trip encodes back to itself")
     func timestampsRoundTrip() throws {
         let raw = "2026-08-29T12:30:00.250Z"
