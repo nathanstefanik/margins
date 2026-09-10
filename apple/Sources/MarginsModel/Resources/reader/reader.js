@@ -20,6 +20,15 @@ let readerRendition = null;
 // to inherit it, because publisher sheets pin `p { font-size: ... }` and
 // would otherwise ignore the root size entirely.
 let readerTypography = null;
+// Chosen typeface key ("serif" | "sans" on iOS), resolved in the webview
+// to the system's New York / SF Pro — nothing is bundled. null (macOS)
+// leaves publisher fonts alone.
+let readerFontFace = null;
+
+const READER_FONT_FACES = {
+  serif: "ui-serif, Georgia, serif",
+  sans: "-apple-system, 'Helvetica Neue', sans-serif",
+};
 // True once the first display finished; relayouts are only queued after that.
 let readerOpened = false;
 let readerRelayoutTimer = null;
@@ -205,7 +214,7 @@ function readerStyleContents(contents) {
   // Root size on html; body and the common flow containers forced to
   // inherit it, so publisher rules like `p { font-size: 14px }` cannot
   // pin glyphs and ignore the preference.
-  contents.addStylesheetRules({
+  const rules = {
     html: {
       "font-size": `${readerTypography.fontSize}${readerTypography.unit} !important`,
     },
@@ -215,7 +224,33 @@ function readerStyleContents(contents) {
     body: {
       "line-height": `${readerTypography.lineHeight} !important`,
     },
-  });
+  };
+  // With a face chosen, html carries the family and everything that
+  // usually pins one inherits it; code/pre keep their monospace.
+  if (readerFontFace) {
+    rules.html["font-family"] = `${READER_FONT_FACES[readerFontFace]} !important`;
+    rules[
+      "body, p, li, div, h1, h2, h3, h4, h5, h6, blockquote, figcaption, td, th, dd, dt"
+    ] = {
+      "font-family": "inherit !important",
+    };
+  }
+  contents.addStylesheetRules(rules);
+  console.log(
+    `readerStyleContents: ${readerTypography.fontSize}${readerTypography.unit}` +
+      ` face=${readerFontFace || "publisher"} rules=${Object.keys(rules).length}`,
+  );
+}
+
+// Typeface (called from Swift): a key into READER_FONT_FACES, or anything
+// unknown to leave publisher fonts standing.
+function readerSetFontFace(face) {
+  readerFontFace = Object.prototype.hasOwnProperty.call(READER_FONT_FACES, face) ? face : null;
+  if (readerRendition) {
+    readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
+    // Different glyphs re-break lines; the column count can change.
+    readerQueueRelayout();
+  }
 }
 
 // Forward relocation to the shell: page position within the chapter for the
@@ -482,6 +517,7 @@ window.readerScrollBy = readerScrollBy;
 window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
 window.readerApplyTypography = readerApplyTypography;
+window.readerSetFontFace = readerSetFontFace;
 window.readerRelayout = readerQueueRelayout;
 // Capture support (see readerResolveSpineTarget note): highlight a mark's
 // CFI range (epub.js dedupes by range), collapse the active selection, and

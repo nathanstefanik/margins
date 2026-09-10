@@ -1,6 +1,6 @@
 # iOS reader chrome & typography
 
-Status: Phase 1 in progress · iOS only · Last updated: 2026-09-09
+Status: Phases 1–2 landed · iOS only · Last updated: 2026-09-09
 
 macOS keeps its typography popover and keyboard chrome. This document is
 the iOS reader only.
@@ -102,11 +102,11 @@ VoiceOver: `.accessibilityAction` on the reader for "Show controls" and
 - `apple/ios/Margins/Reader/ReaderScene.swift` — rest/revealed chrome;
   overlay header/footer; hamburger + note
 - `apple/ios/Margins/Reader/ReaderSettingsSheet.swift` — font A pair,
-  Contents, Marks, chapter note
-- `apple/ios/Margins/Reader/ReaderBridge.swift` — pass step/px; drop
-  lineWidth on iOS
+  Serif/Sans switch, Contents, Marks, chapter note
+- `apple/ios/Margins/Reader/ReaderBridge.swift` — pass step/px/face;
+  drop lineWidth on iOS
 - `apple/Sources/MarginsModel/ReaderPreferences.swift` — iOS `fontStep`
-  1…5
+  1…5 and `ReaderTypeface`
 - `apple/Sources/MarginsModel/Resources/reader/reader.js` — real
   font-size apply; no measure scaling
 - `apple/Sources/MarginsModel/Resources/reader/reader.html` — fixed page
@@ -119,20 +119,21 @@ VoiceOver: `.accessibilityAction` on the reader for "Show controls" and
 Everything above: resting page, tap thirds, overlay chrome, hamburger
 sheet with the A pair, `reader.js` apply fix, fixed `#viewer` padding.
 
-### Phase 2 — typeface: two system faces (planned)
+### Phase 2 — typeface: two system faces (landed)
 
-Sans = SF Pro, serif = New York — both pulled from the system at
-runtime (`-apple-system` / `ui-serif` in the webview), nothing bundled,
-zero MB, no licensing question: this is the sanctioned on-device path
-(the bundled-font path from Apple's developer page is the restricted
-one). A segmented Serif/Sans choice in the settings sheet, persisted as
+Sans = SF Pro, serif = New York — both pulled from the system at runtime
+(`-apple-system` / `ui-serif` in the webview), nothing bundled, zero MB,
+no licensing question: this is the sanctioned on-device path (the
+bundled-font path from Apple's developer page is the restricted one). A
+segmented Serif/Sans choice in the settings sheet, persisted as
 `reader.typeface`, default **serif** — the printed-spread default.
 
 When a face is chosen, reader.js sets
 `html { font-family: <stack> !important }` and forces
-`body, p, li, div, h1–h6, blockquote, figcaption, td, th { font-family:
-inherit !important }` (code/pre keep their monospace); with no choice,
-publisher fonts stand. macOS never sets a face and is unchanged.
+`body, p, li, div, h1–h6, blockquote, figcaption, td, th, dd, dt
+{ font-family: inherit !important }` (code/pre keep their monospace);
+with no choice, publisher fonts stand. Switching re-styles live sections
+and re-paginates. macOS never sets a face and is unchanged.
 
 ### Next — device pass
 

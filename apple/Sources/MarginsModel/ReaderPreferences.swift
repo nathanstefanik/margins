@@ -1,6 +1,17 @@
 import Foundation
 import Observation
 
+#if os(iOS)
+/// The reader's two faces: system serif (New York) and system sans
+/// (SF Pro). Both resolve on-device in the webview via generic families
+/// (`ui-serif` / `-apple-system`) — no files bundled, zero MB, and the
+/// sanctioned production path to New York.
+public enum ReaderTypeface: String, CaseIterable, Sendable {
+    case serif
+    case sans
+}
+#endif
+
 /// Reader typography preferences.
 ///
 /// A chrome preference (window-level UI state), not library data, so it
@@ -26,11 +37,15 @@ public final class ReaderPreferences {
     public static let defaultFontStep = 3
     /// Fixed line height for the iOS reader (not configurable).
     public static let iosLineHeight = 1.65
+    /// Serif by default: the printed-spread reading face.
+    public static let defaultTypeface = ReaderTypeface.serif
 
     private static let fontStepKey = "reader.fontStep"
+    private static let typefaceKey = "reader.typeface"
 
     private let defaults: UserDefaults
     private var _fontStep: Int
+    private var _typeface: ReaderTypeface
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
@@ -40,6 +55,7 @@ public final class ReaderPreferences {
         _fontStep = (1...Self.fontStepsPx.count).contains(storedStep)
             ? storedStep
             : Self.defaultFontStep
+        _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
     }
 
     /// Current rung of the text ladder (1-based). The numbers are internal;
@@ -67,6 +83,20 @@ public final class ReaderPreferences {
 
     /// At the top of the ladder: the larger-A control disables.
     public var canStepFontLarger: Bool { _fontStep < Self.fontStepsPx.count }
+
+    /// The chosen face. The whole book follows it (publisher families are
+    /// forced to inherit; code/pre keep their monospace).
+    public var typeface: ReaderTypeface {
+        get { _typeface }
+        set {
+            _typeface = newValue
+            defaults.set(newValue.rawValue, forKey: Self.typefaceKey)
+        }
+    }
+
+    private static func typeface(from raw: String?) -> ReaderTypeface {
+        raw.flatMap(ReaderTypeface.init(rawValue:)) ?? Self.defaultTypeface
+    }
     #else
     public static let minFontSize = 70.0
     public static let maxFontSize = 200.0

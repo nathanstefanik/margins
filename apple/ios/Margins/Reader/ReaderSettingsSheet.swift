@@ -10,9 +10,10 @@ enum ReaderDestination {
 }
 
 /// The hamburger menu: text size as a small-A / large-A pair — the ladder
-/// behind it is internal, no numbers — plus Contents, Marks, and the
-/// chapter note, which lost their bars when the chrome went quiet. No
-/// line height, no measure.
+/// behind it is internal, no numbers — a Serif/Sans typeface switch (the
+/// system's New York / SF Pro, nothing bundled), plus Contents, Marks,
+/// and the chapter note, which lost their bars when the chrome went
+/// quiet. No line height, no measure.
 struct ReaderSettingsSheet: View {
     @Bindable var preferences: ReaderPreferences
     let onSelect: (ReaderDestination) -> Void
@@ -44,6 +45,13 @@ struct ReaderSettingsSheet: View {
                         .accessibilityLabel("Larger text")
                     }
                     .buttonStyle(.borderless)
+                }
+                Section("Typeface") {
+                    Picker("Typeface", selection: $preferences.typeface) {
+                        Text("Serif").tag(ReaderTypeface.serif)
+                        Text("Sans").tag(ReaderTypeface.sans)
+                    }
+                    .pickerStyle(.segmented)
                 }
                 Section {
                     Button { onSelect(.contents) } label: {

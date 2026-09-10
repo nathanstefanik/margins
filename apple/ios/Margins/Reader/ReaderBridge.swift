@@ -277,16 +277,19 @@ final class ReaderBridge: NSObject {
     private func applyTypography() {
         let preferences = reader.preferences
         // iOS text ladder: px on the rendition ('px' unit), fixed line
-        // height, full-width column (0 disables the measure entirely).
+        // height, full-width column (0 disables the measure entirely) —
+        // plus the chosen system face (New York / SF Pro).
         evaluate(
             "readerApplyTypography(\(preferences.fontSizePx),\(ReaderPreferences.iosLineHeight),0,'px')"
         )
+        evaluate("readerSetFontFace(\(Self.javaScriptLiteral(preferences.typeface.rawValue)))")
     }
 
     private func observeTypography() {
         let preferences = reader.preferences
         withObservationTracking {
             _ = preferences.fontStep
+            _ = preferences.typeface
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
