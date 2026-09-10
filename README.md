@@ -13,40 +13,31 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Compiled per-book **notes page** (`N`) with one-click markdown export,
   copy-all, and clear-all (with a confirmation prompt)
 - Full-text search across notes (`/` or `:search`)
-- Export/import entire library trees (external drives, cloud sync folders)
 - Choose the library directory with the in-app folder picker or **root** command
 
 ## Quick start
 
 ```bash
-make core        # build the Rust core + Swift bindings
-make mac-run     # assemble and open build/Margins.app
+make run         # assemble and open build/Margins.app (needs full Xcode)
 ```
 
 ## Apple apps (macOS + iOS)
 
-Native SwiftUI frontends sharing the same Rust core through one SwiftPM
-package (`apple/`) and a per-platform static-library XCFramework (see
-[docs/architecture.md](docs/architecture.md) and
+Native SwiftUI frontends sharing the same Swift core through one SwiftPM
+package (`apple/`; see [docs/architecture.md](docs/architecture.md) and
 [docs/ios-plan.md](docs/ios-plan.md)).
 
 Requirements:
 
-- macOS app: Rust (stable) and Apple Command Line Tools (`xcode-select
-  --install`). Full Xcode is not required.
-- iOS app: **full Xcode** (the iOS SDK, `xcodebuild`, simulators — the zip
-  stack's C dependencies compile against the iOS SDK, so Command Line Tools
-  are not enough even for `make ios-core`) plus the Rust iOS targets
-  (`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`).
+- **full Xcode** (26.x): the iOS SDK for the iOS app, and `swift test`
+  silently runs nothing under a CLT-only toolchain.
 
 ```bash
-make core        # build margins-ffi, generate Swift bindings, refresh the
-                 # macOS slice of build/MarginsFFI.xcframework
-make ios-core    # additionally build the iOS device/simulator xcframework slices
-make mac-build   # build the Swift package (macOS)
-make mac-test    # run the Swift Testing suite
-make mac-app     # assemble build/Margins.app (ad-hoc signed)
-make mac-run     # mac-app + open it
+make test        # run the Swift Testing suite (core + model)
+make build       # build the Swift package (macOS)
+make app         # assemble build/Margins.app (ad-hoc signed)
+make run         # app + open it
+make ios-build   # build the iOS app for the simulator (no signing)
 ```
 
 The iOS app itself builds from `apple/ios/Margins.xcodeproj` (open in Xcode,
@@ -118,14 +109,12 @@ Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architectur
 
 **Done**
 
-- Rust core: library, EPUB parsing, notes, search, markdown export,
-  library sync
+- Swift core: library, EPUB parsing, notes, marks, search, markdown export
 - macOS SwiftUI app: library, paginated reader, notes pane, compiled notes
   page, search overlay, keyboard-first control
 - Anchored **marks** in chapter notes (parse/serialize/CRUD in the core,
   rendered in both desktop frontends, lossless round-trip)
-- Shared Apple SwiftPM package over a per-platform `MarginsFFI.xcframework`
-  (macOS + iOS slices, `make core` / `make ios-core`)
+- Shared Apple SwiftPM package over one Swift core (macOS + iOS)
 - iOS app skeleton + **Library scene**: cover grid, document-picker import,
   delete with confirmation, notes search; iCloud Documents library root with
   runtime local fallback; simulator-verified (light/dark, iPhone/iPad)

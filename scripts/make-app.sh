@@ -44,9 +44,9 @@ for bundle in "$build_dir/Margins_Margins.bundle" "$build_dir/Margins_MarginsMod
   fi
 done
 
-version=$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/Cargo.toml" | head -n 1)
+version=$(tr -d '[:space:]' < "$root/apple/VERSION")
 if [ -z "$version" ]; then
-  echo "could not read version from Cargo.toml" >&2
+  echo "could not read version from apple/VERSION" >&2
   exit 1
 fi
 

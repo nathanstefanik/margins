@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 /// Quick capture: from reading to typing in one deliberate gesture, and

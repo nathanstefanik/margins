@@ -1,5 +1,5 @@
 import Foundation
-@testable import MarginsKernel
+@testable import MarginsCore
 import Testing
 
 /// Translated from `crates/margins-core/src/marks.rs`'s test module. The

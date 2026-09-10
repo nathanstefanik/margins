@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		A000000000000000000000A1 /* MarginsCore in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000B1 /* MarginsCore */; };
 		A000000000000000000000A2 /* MarginsModel in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000B2 /* MarginsModel */; };
-		A000000000000000000000A3 /* MarginsKernel in Frameworks */ = {isa = PBXBuildFile; productRef = A000000000000000000000B3 /* MarginsKernel */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,7 +33,6 @@
 			files = (
 				A000000000000000000000A1 /* MarginsCore in Frameworks */,
 				A000000000000000000000A2 /* MarginsModel in Frameworks */,
-				A000000000000000000000A3 /* MarginsKernel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,7 +79,6 @@
 			packageProductDependencies = (
 				A000000000000000000000B1 /* MarginsCore */,
 				A000000000000000000000B2 /* MarginsModel */,
-				A000000000000000000000B3 /* MarginsKernel */,
 			);
 			productName = Margins;
 			productReference = 6E7ADEDC3050E49A0059A10A /* Margins.app */;
@@ -294,10 +291,6 @@
 		A000000000000000000000B2 /* MarginsModel */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MarginsModel;
-		};
-		A000000000000000000000B3 /* MarginsKernel */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = MarginsKernel;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

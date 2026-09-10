@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import MarginsKernel
+import MarginsCore
 
 /// Model layer for the library browser. Owns the core store, the book
 /// list, selection, and the import/remove flows.

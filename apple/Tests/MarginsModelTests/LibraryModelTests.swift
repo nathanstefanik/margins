@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 @Suite("Library model")

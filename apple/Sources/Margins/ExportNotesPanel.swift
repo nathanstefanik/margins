@@ -1,5 +1,5 @@
 import AppKit
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 import UniformTypeIdentifiers
 

@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 struct SidebarView: View {

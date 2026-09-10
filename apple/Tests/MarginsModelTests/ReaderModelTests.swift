@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 @Suite("ReaderModel")

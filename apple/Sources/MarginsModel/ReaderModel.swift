@@ -1,5 +1,5 @@
 import Foundation
-import MarginsKernel
+import MarginsCore
 
 /// Position within the current chapter, as reported by the renderer's
 /// `relocated` events. Page counts are the paginated section's own, so they

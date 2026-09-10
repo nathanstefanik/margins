@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 /// A book's cover at a fixed ~2:3 size. Books with a cover show the image;

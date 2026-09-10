@@ -1,5 +1,4 @@
 # Build output
-target/
 /build/
 apple/.build/
 
@@ -11,10 +10,6 @@ xcuserdata/
 *.xcuserstate
 apple/.swiftpm/
 apple/ios/Margins.xcodeproj/project.xcworkspace/
-
-# Generated UniFFI bindings (regenerate with make core)
-apple/Sources/margins_ffiFFI/include/
-apple/Sources/MarginsCore/Generated/
 
 # Release artifacts (build/Margins.app, DMGs from the release flow)
 *.dmg

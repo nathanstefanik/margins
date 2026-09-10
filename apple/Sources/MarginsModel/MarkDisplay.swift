@@ -1,5 +1,5 @@
 import Foundation
-import MarginsKernel
+import MarginsCore
 
 /// Presentation formatting for quick marks, shared by the notes pane strip
 /// and the compiled notes page. Pure so MarginsTests can cover it without

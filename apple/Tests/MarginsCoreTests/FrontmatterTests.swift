@@ -1,5 +1,5 @@
 import Foundation
-@testable import MarginsKernel
+@testable import MarginsCore
 import Testing
 
 /// The YAML frontmatter codec (docs/apple-only-plan.md Phase 2 step 3).

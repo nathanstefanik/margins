@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import WebKit
 import OSLog
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 /// Hardware-key page turns: the WKWebView is first responder when

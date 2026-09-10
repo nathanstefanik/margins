@@ -1,5 +1,5 @@
 import Foundation
-import MarginsKernel
+import MarginsCore
 import Testing
 
 /// The model layer's on-disk contract (docs/apple-only-plan.md Phase 2

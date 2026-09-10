@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 /// The book detail: cover, metadata, progress, and **Continue reading**;

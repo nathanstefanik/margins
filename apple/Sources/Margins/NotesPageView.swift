@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 /// The compiled notes page: every chapter note in spine order, with a

@@ -1,5 +1,5 @@
 import Foundation
-@testable import MarginsKernel
+@testable import MarginsCore
 import Testing
 
 /// The coordination layer for the core's documents. `NSFileCoordinator`

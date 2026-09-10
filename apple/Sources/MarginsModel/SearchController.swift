@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import MarginsKernel
+import MarginsCore
 
 /// Seam for the search backend so tests can spy on executions.
 public protocol SearchStore: Sendable {

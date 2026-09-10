@@ -1,6 +1,6 @@
 # Margins — agent guide
 
-EPUB reader with two frontends over one Rust core: a native SwiftUI macOS app and an iOS app — all Apple targets share one SwiftPM package in `apple/`. Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`.
+EPUB reader with two frontends over one Swift core: a native SwiftUI macOS app and an iOS app — all Apple targets share one SwiftPM package in `apple/`. Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`.
 
 ## Commit messages
 
@@ -19,33 +19,31 @@ Examples:
 ```
 FEAT Add chapter note autosave on :w
 BUG Fix OPF spine parsing for nested paths
-CHORE Reformatted Rust with rustfmt
+CHORE Reformatted Swift with swift-format
 DOCS Document library sync workflow
 ```
 
 ## Project map
 
 ```
-crates/margins-core/   # the domain core (no UI)
-  config.rs            # data dir / library root from env
-  library.rs           # import EPUB, book catalog
-  notes.rs             # markdown + YAML frontmatter CRUD
-  sync.rs              # export/import library trees
-  epub_meta.rs         # EPUB spine/metadata parsing
-crates/margins-ffi/    # UniFFI bridge for Swift (thin)
 apple/                 # shared Apple SwiftPM package (macOS + iOS)
-  Package.swift        # targets: MarginsFFI (xcframework), margins_ffiFFI,
-                       # MarginsCore, MarginsModel, Margins (macOS app);
-                       # products MarginsCore/MarginsModel
-                       # are consumed by the iOS app's Xcode project
-  Sources/MarginsCore/ # generated bindings + CoreStore actor
+  Package.swift        # targets: MarginsCore, MarginsModel, Margins (macOS
+                       # app); products MarginsCore/MarginsModel are
+                       # consumed by the iOS app's Xcode project
+  VERSION              # the single version source (bump-version.sh writes
+                       # it; make-app.sh and release.yml read it)
+  Sources/MarginsCore/ # the core, no UI: Models, EpubParser, Library, Notes,
+                       # Marks, Frontmatter, Compile, Search, FileStore,
+                       # Files, AppConfig, Text, CoreStore (actor facade)
   Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap,
                        # LibraryLocation (iCloud root, materialization, conflicts)
   Sources/Margins/     # macOS SwiftUI views, reader webview glue, key routing
-  Tests/               # MarginsModelTests + MarginsCoreTests (Swift Testing)
-  ios/                 # iOS app: Margins.xcodeproj + Sources (SwiftUI scenes)
-build/MarginsFFI.xcframework/  # generated (make core / make ios-core)
-scripts/               # build-core.sh, build-xcframework.sh, make-app.sh
+  Tests/               # MarginsModelTests + MarginsCoreTests (Swift Testing);
+                       # MarginsCoreTests/Fixtures/legacy-library/ is a library
+                       # written by the pre-Swift Rust core — keep it reading
+  ios/                 # iOS app: Margins.xcodeproj + SwiftUI scenes
+scripts/               # make-app.sh, bump-version.sh, bump-build.sh,
+                       # vendor-reader.sh
 ```
 
 ## Conventions
@@ -58,39 +56,33 @@ scripts/               # build-core.sh, build-xcframework.sh, make-app.sh
 ## Useful commands
 
 ```bash
-cargo test --workspace        # from the repo root (core + ffi)
+swift test --package-path apple   # the Swift Testing suite (core + model)
 
-make core        # rebuild margins-ffi, regenerate Swift bindings, refresh
-                 # the macOS slice of build/MarginsFFI.xcframework
-make ios-core    # also build the iOS device/simulator xcframework slices
+make test        # the same suite via make
+make build       # build the Swift package
+make ios-build   # build the iOS app for the simulator (no signing)
 make ios-archive # Release iOS archive at build/Margins.xcarchive (needs ASC app record + Signing.local.xcconfig)
 make ios-bump    # bump CURRENT_PROJECT_VERSION (run before every TestFlight upload)
-                 # (needs full Xcode: the zip stack's C deps require the
-                 # iOS SDK, which Command Line Tools do not ship)
-make mac-build   # build the macOS Swift package
-make mac-test    # run the macOS Swift Testing suite
-make mac-run     # assemble + open build/Margins.app
-make mac-app-universal  # universal (arm64 + x86_64) build/Margins.app; needs full Xcode
+make app         # assemble build/Margins.app (ad-hoc signed)
+make run         # app + open it
+make app-universal  # universal (arm64 + x86_64) build/Margins.app; needs full Xcode
 make bump VERSION=x.y.z  # bump version everywhere, commit, tag vx.y.z
 ```
 
-The macOS app builds with Command Line Tools alone. The **iOS app needs
-full Xcode**: `make ios-core` for the xcframework slices, then open
-`apple/ios/Margins.xcodeproj` (or `make ios-build`-style `xcodebuild`) —
-see `docs/ios-plan.md`. The iOS library
-root lives in the iCloud Documents container when available, falling
-back to local `Documents/Library` at runtime (`LibraryLocation`);
-DEBUG launch env vars
-(`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`)
-drive simulator verification flows. Device signing uses the team ID in
+Everything needs **full Xcode** (26.x): the iOS SDK for `ios-build`/iOS
+targets, and `swift test` silently runs nothing under a CLT-only
+toolchain. The iOS library root lives in the iCloud Documents container
+when available, falling back to local `Documents/Library` at runtime
+(`LibraryLocation`); DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`,
+`MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`) drive simulator
+verification flows. Device signing uses the team ID in
 `apple/ios/Signing.local.xcconfig` (gitignored — created from
 `Signing.local.xcconfig.example`; never commit it).
 
-macOS tests use Swift Testing (`import Testing`) via the
+Tests use Swift Testing (`import Testing`) via the
 `MarginsModelTests`/`MarginsCoreTests` test targets — always verify with
-`make mac-test` (`swift test --package-path apple`; full Xcode required,
-a CLT-only toolchain silently runs nothing).
+`swift test --package-path apple`.
 
 ## Agent tasks
 
-When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding keybindings, update the README (both frontends). When changing the FFI surface, run `make core` so the Swift bindings regenerate.
+When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding keybindings, update the README (both frontends). When changing the `CoreStore` surface, keep the method list and labels the apps call — check `MarginsModel`, both frontends, and the tests.

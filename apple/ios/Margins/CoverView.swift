@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 /// A book's cover, materialized on demand: iCloud placeholders download

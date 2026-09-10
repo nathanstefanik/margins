@@ -1,7 +1,7 @@
 import AppKit
 import Observation
 import WebKit
-import MarginsKernel
+import MarginsCore
 import MarginsModel
 
 /// Owns the reader's WKWebView: builds it, loads the reader page, and
