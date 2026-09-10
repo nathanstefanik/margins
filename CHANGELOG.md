@@ -7,9 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Core rewritten in Swift; storage format unchanged. The macOS app, iOS
+  app, and core now share one Swift package and one toolchain — no Rust
+  cross-compilation or UniFFI bridge. Files written by the Rust core
+  (0.1.0) open as-is; a Rust-written sample library is kept as a test
+  fixture.
+- The version source is now `apple/VERSION` (read by `make-app.sh` and
+  the release workflow's tag check).
+
 ### Removed
 
 - Tauri/Linux frontend. Margins is macOS and iOS only.
+- Rust core, UniFFI bridge, and the xcframework build plumbing
+  (`make core`, `make ios-core`); the library sync export/import feature
+  was not carried over.
 
 ## [0.1.0] - 2026-09-03
 

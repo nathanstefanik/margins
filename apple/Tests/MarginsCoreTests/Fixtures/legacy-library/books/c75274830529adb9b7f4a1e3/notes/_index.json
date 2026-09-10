@@ -1,0 +1,22 @@
+{
+  "chapters": [
+    {
+      "chapter_key": "001",
+      "file": "chapters/001-cover.md",
+      "chapter_index": 0,
+      "chapter_title": "\"Cover\"",
+      "word_count": 16,
+      "mark_count": 1,
+      "updated_at": "2026-09-10T20:47:05.136174Z"
+    },
+    {
+      "chapter_key": "003",
+      "file": "chapters/003-part-i.md",
+      "chapter_index": 2,
+      "chapter_title": "PART I",
+      "word_count": 9,
+      "mark_count": 1,
+      "updated_at": "2026-09-10T20:47:05.138110Z"
+    }
+  ]
+}

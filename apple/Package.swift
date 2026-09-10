@@ -3,16 +3,8 @@ import PackageDescription
 
 // Shared Apple package: one core, two frontends. MarginsCore/MarginsModel
 // are platform-agnostic (macOS + iOS); the Margins executable is the macOS
-// app, MarginsIOS the iOS app (Phase 4 wires the real scenes; see
-// docs/ios-plan.md).
-
-// This machine has Command Line Tools only (no full Xcode). The Swift
-// Testing framework ships with the CLT but SwiftPM only adds it via -I,
-// which does not resolve framework modules; pass -F explicitly.
-// https://github.com/swiftlang/swift-package-manager/issues/8285
-let cltDeveloperFrameworks = "/Library/Developer/CommandLineTools/Library/Developer/Frameworks"
-// Home of lib_TestingInterop.dylib, which Testing.framework loads via @rpath.
-let cltDeveloperLib = "/Library/Developer/CommandLineTools/Library/Developer/usr/lib"
+// app, the iOS app is built from apple/ios/Margins.xcodeproj against the
+// MarginsCore/MarginsModel products.
 
 let package = Package(
     name: "Margins",
@@ -27,46 +19,24 @@ let package = Package(
         .library(name: "MarginsCore", targets: ["MarginsCore"]),
         .library(name: "MarginsModel", targets: ["MarginsModel"]),
     ],
+    dependencies: [
+        // EPUB archive reading/writing for the core.
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20"),
+    ],
     targets: [
-        // UniFFI static archive, assembled per platform by
-        // scripts/build-core.sh (macOS slice) and
-        // scripts/build-xcframework.sh (iOS slices). Consumed as a
-        // binaryTarget with per-platform slices, replacing the old
-        // .unsafeFlags link of target/release/libmargins_ffi.a — an
-        // absolute macOS-only path could never carry iOS architectures.
-        // SwiftPM links the archive into dependents but does not expose
-        // headers from binary targets, so the `margins_ffiFFI` module the
-        // generated bindings import still comes from the C target below.
-        .binaryTarget(name: "MarginsFFI", path: "../build/MarginsFFI.xcframework"),
-        // Header-only C target carrying the UniFFI-generated FFI header and
-        // module map. The target name must stay `margins_ffiFFI`: the
-        // generated Swift bindings do `#if canImport(margins_ffiFFI)`.
-        .target(name: "margins_ffiFFI"),
-        // Generated bindings (Sources/MarginsCore/Generated/) plus hand
-        // written ergonomic wrappers, statically linked against the Rust
-        // staticlib inside the xcframework. liblzma / libbz2 satisfy the
-        // zip -> xz2 / bzip2 C dependencies (both in the SDK).
+        // The core: models, EPUB parsing, library, notes, marks, compile,
+        // search, and the `CoreStore` actor facade the apps drive.
         .target(
             name: "MarginsCore",
-            dependencies: ["margins_ffiFFI", "MarginsFFI"],
-            swiftSettings: [
-                // UniFFI 0.29 generated code is not strict-concurrency clean.
-                .swiftLanguageMode(.v5)
-            ],
-            linkerSettings: [
-                .linkedLibrary("lzma"),
-                .linkedLibrary("bz2")
+            dependencies: [
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             ]
         ),
-        .executableTarget(
-            name: "Margins",
-            dependencies: ["MarginsCore", "MarginsModel"]
-        ),
         // UI-agnostic model layer for the library browser (import, remove,
-        // selection, errors). Separate target so MarginsTests can unit-test
-        // it without touching SwiftUI. Carries the vendored epub.js reader
-        // bundle + scheme handler so both Apple apps serve identical
-        // reader assets.
+        // selection, errors). Separate target so the test targets can
+        // unit-test it without touching SwiftUI. Carries the vendored
+        // epub.js reader bundle + scheme handler so both Apple apps serve
+        // identical reader assets.
         .target(
             name: "MarginsModel",
             dependencies: ["MarginsCore"],
@@ -75,26 +45,25 @@ let package = Package(
                 .copy("Resources/reader")
             ]
         ),
-        // Swift Testing tests. This is an executable rather than a
-        // .testTarget because SwiftPM 6.3.2 on this CLT-only machine links
-        // test bundles but never invokes the runner ("swift test" silently
-        // exits 0 without running anything). The executable calls
-        // Testing.__swiftPMEntryPoint() itself; revisit once full Xcode
-        // (xcodebuild test) is available — do not break `make mac-test`.
         .executableTarget(
-            name: "MarginsTests",
-            dependencies: ["MarginsCore", "MarginsModel"],
-            swiftSettings: [
-                .unsafeFlags(["-F\(cltDeveloperFrameworks)"])
-            ],
-            linkerSettings: [
-                .unsafeFlags([
-                    "-F", cltDeveloperFrameworks,
-                    "-Xlinker", "-rpath", "-Xlinker", cltDeveloperFrameworks,
-                    "-Xlinker", "-rpath", "-Xlinker", cltDeveloperLib,
-                    "-Xlinker", "-framework", "-Xlinker", "Testing"
-                ])
-            ]
-        )
+            name: "Margins",
+            dependencies: ["MarginsCore", "MarginsModel"]
+        ),
+        // Swift Testing tests for the model layer and the apps' shared
+        // logic. Converted from a runner executable to a real test target
+        // now that full Xcode runs `swift test` (docs/apple-only-plan.md
+        // Phase 2 step 1).
+        .testTarget(
+            name: "MarginsModelTests",
+            dependencies: ["MarginsCore", "MarginsModel"]
+        ),
+        // Tests for the core, including the read-compatibility fixture the
+        // Rust core wrote before it was deleted
+        // (Fixtures/legacy-library/).
+        .testTarget(
+            name: "MarginsCoreTests",
+            dependencies: ["MarginsCore"],
+            resources: [.copy("Fixtures")]
+        ),
     ]
 )

@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   macos:
-    name: Build and test the macOS app
+    name: Build and test
     runs-on: macos-26
 
     steps:
@@ -25,30 +25,13 @@ jobs:
         with:
           xcode-version: "26.6"
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios, aarch64-apple-ios-sim
-
-      - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build core and run the Swift Testing suite
-        run: make mac-test
-
-      - name: Build the FFI xcframework (macOS + iOS slices)
-        run: make ios-core
+      - name: Run the Swift Testing suite
+        run: swift test --package-path apple
 
       - name: Build the iOS app for the simulator
         # Compiles the app scenes (apple/ios/Margins), which the SwiftPM
-        # package build above never touches. Needs the xcframework's
-        # simulator slice from `make ios-core`; no signing on runners.
-        # ARCHS=arm64: the simulator slice is arm64-only (Rust does not
-        # ship x86_64-apple-ios-sim — docs/ios-plan.md Phase 1 note 3),
-        # and the generic destination would otherwise build x86_64 too
-        # and fail to link the FFI symbols.
-        run: |
-          xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins \
-            -destination 'generic/platform=iOS Simulator' \
-            ARCHS=arm64 \
-            CODE_SIGNING_ALLOWED=NO build
+        # package build above never touches. No signing on runners. The
+        # generic destination builds both simulator slices (arm64 + x86_64;
+        # ZIPFoundation is pure Swift, so there is no per-arch FFI library
+        # to miss).
+        run: make ios-build

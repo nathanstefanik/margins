@@ -2,11 +2,11 @@ import Foundation
 import Observation
 import MarginsCore
 
-/// Model layer for the library browser. Owns the bridge store, the book
+/// Model layer for the library browser. Owns the core store, the book
 /// list, selection, and the import/remove flows.
 ///
 /// UI-agnostic by design (no SwiftUI/AppKit) so it is unit-testable; views
-/// own presentation state such as dialogs and alerts. All bridge traffic is
+/// own presentation state such as dialogs and alerts. All core traffic is
 /// funneled through the `CoreStore` actor, keeping calls off the main actor.
 @MainActor
 @Observable
@@ -16,7 +16,7 @@ public final class LibraryModel {
     public private(set) var selectedBook: BookMeta?
     /// The selected book's notes index (`notes/_index.json`), loaded with
     /// the book so the detail view can flag chapters that have notes.
-    public private(set) var selectedBookNotesIndex: [NoteIndexEntry] = []
+    public private(set) var selectedBookNotesIndex: [NotesIndexEntry] = []
     /// The last non-fatal failure, surfaced as a transient banner.
     /// Model methods set it; AppKit-level flows (save panel, clipboard)
     /// set it from the view layer so the banner stays the single sink.
@@ -30,8 +30,8 @@ public final class LibraryModel {
     private let dataDir: String?
     private var store: CoreStore?
 
-    /// - Parameter dataDir: explicit data directory for the Rust core, or
-    ///   `nil` to let it resolve `MARGINS_DATA_DIR` / the platform default.
+    /// - Parameter dataDir: explicit data directory for the core, or `nil`
+    ///   to let it resolve `MARGINS_DATA_DIR` / the platform default.
     public init(dataDir: String? = nil) {
         self.dataDir = dataDir
     }
@@ -121,9 +121,9 @@ public final class LibraryModel {
     /// the notes index. Chapters without notes are absent from the result.
     public static func noteWordCounts(
         chapters: [ChapterMeta],
-        index: [NoteIndexEntry]
-    ) -> [String: UInt32] {
-        var counts: [String: UInt32] = [:]
+        index: [NotesIndexEntry]
+    ) -> [String: Int] {
+        var counts: [String: Int] = [:]
         for entry in index {
             counts[entry.chapterKey] = entry.wordCount
         }
@@ -138,10 +138,10 @@ public final class LibraryModel {
     /// note, joined with the note's stats from `_index.json`.
     public struct ChapterNoteRow: Equatable, Sendable {
         public var chapter: ChapterMeta
-        public var wordCount: UInt32
-        public var updatedAt: String?
+        public var wordCount: Int
+        public var updatedAt: Date?
 
-        public init(chapter: ChapterMeta, wordCount: UInt32, updatedAt: String?) {
+        public init(chapter: ChapterMeta, wordCount: Int, updatedAt: Date?) {
             self.chapter = chapter
             self.wordCount = wordCount
             self.updatedAt = updatedAt
@@ -153,7 +153,7 @@ public final class LibraryModel {
     /// date. Pure so the views and tests share one definition.
     public nonisolated static func annotatedChapterRows(
         chapters: [ChapterMeta],
-        index: [NoteIndexEntry]
+        index: [NotesIndexEntry]
     ) -> [ChapterNoteRow] {
         let byKey = Dictionary(index.map { ($0.chapterKey, $0) }, uniquingKeysWith: { first, _ in first })
         return chapters.compactMap { chapter in
@@ -225,7 +225,7 @@ public final class LibraryModel {
     /// number of note files removed, or `nil` on failure (surfaced in
     /// `errorMessage`).
     @discardableResult
-    public func clearNotes(bookId: String) async -> UInt32? {
+    public func clearNotes(bookId: String) async -> Int? {
         guard let store else { return nil }
         do {
             let cleared = try await store.clearNotes(bookId: bookId)
@@ -338,7 +338,7 @@ public final class LibraryModel {
     /// handler. Call once on the main actor when creating the reader.
     public func makeReaderBytesProvider() throws -> @Sendable (String) throws -> Data {
         guard let store else {
-            throw CoreError.Message(message: "library is not open yet")
+            throw CoreError.library("library is not open yet")
         }
         return { bookID in
             try store.readEpubBytesSync(id: bookID)
@@ -406,7 +406,7 @@ public final class LibraryModel {
     /// the `CoreStore` actor, so the compile happens off the main actor.
     public func renderNotesMarkdown(bookId: String) async throws -> String {
         guard let store else {
-            throw CoreError.Message(message: "library is not open yet")
+            throw CoreError.library("library is not open yet")
         }
         return try await store.renderNotesMarkdown(bookId: bookId, options: nil)
     }
@@ -421,7 +421,7 @@ public final class LibraryModel {
             "\(notes.chaptersWithNotes)/\(notes.chapterCount) chapters annotated",
             "\(groupedCount(notes.totalWords)) words",
         ]
-        if let updated = notes.lastUpdatedAt.flatMap(parseRFC3339) {
+        if let updated = notes.lastUpdatedAt {
             parts.append("last updated \(dateText(updated))")
         }
         return parts.joined(separator: " · ")
@@ -429,7 +429,7 @@ public final class LibraryModel {
 
     /// Thousands-grouped count with a fixed separator so the line does not
     /// depend on the user's locale.
-    public nonisolated static func groupedCount(_ value: UInt32) -> String {
+    public nonisolated static func groupedCount(_ value: Int) -> String {
         let digits = String(value)
         var grouped = ""
         for (offset, char) in digits.reversed().enumerated() {
@@ -439,22 +439,6 @@ public final class LibraryModel {
             grouped.insert(char, at: grouped.startIndex)
         }
         return grouped
-    }
-
-    /// Parses an RFC3339 bridge timestamp (with or without fractional
-    /// seconds), or `nil` when it is missing/unparsable.
-    public nonisolated static func parseRFC3339(_ value: String) -> Date? {
-        for includingFractionalSeconds in [true, false] {
-            let style = Date.ISO8601FormatStyle(
-                dateTimeSeparator: .standard,
-                timeZoneSeparator: .colon,
-                includingFractionalSeconds: includingFractionalSeconds
-            )
-            if let date = try? Date(value, strategy: style) {
-                return date
-            }
-        }
-        return nil
     }
 
     /// Fixed-locale "Sep 1, 2026" date text for the stats line.

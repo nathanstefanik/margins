@@ -198,7 +198,7 @@ struct BookDetailView: View {
 
     private func noteRowMeta(_ row: LibraryModel.ChapterNoteRow) -> String {
         var parts = ["\(LibraryModel.groupedCount(row.wordCount)) words"]
-        if let updated = row.updatedAt.flatMap(LibraryModel.parseRFC3339) {
+        if let updated = row.updatedAt {
             parts.append("updated \(LibraryModel.dateText(updated))")
         }
         return parts.joined(separator: " · ")
@@ -209,24 +209,6 @@ struct BookDetailView: View {
     }
 
     private var addedText: String {
-        if let date = Self.parseRFC3339(book.addedAt) {
-            date.formatted(date: .abbreviated, time: .shortened)
-        } else {
-            book.addedAt
-        }
-    }
-
-    private static func parseRFC3339(_ value: String) -> Date? {
-        for includingFractionalSeconds in [true, false] {
-            let style = Date.ISO8601FormatStyle(
-                dateTimeSeparator: .standard,
-                timeZoneSeparator: .colon,
-                includingFractionalSeconds: includingFractionalSeconds
-            )
-            if let date = try? Date(value, strategy: style) {
-                return date
-            }
-        }
-        return nil
+        book.addedAt.formatted(date: .abbreviated, time: .shortened)
     }
 }

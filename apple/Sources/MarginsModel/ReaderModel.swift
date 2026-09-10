@@ -242,8 +242,8 @@ public final class ReaderModel {
     public var noteBody = ""
     public private(set) var noteBaseline: String?
     public private(set) var notePath: String?
-    public private(set) var noteWordCount: UInt32?
-    public private(set) var noteUpdatedAt: String?
+    public private(set) var noteWordCount: Int?
+    public private(set) var noteUpdatedAt: Date?
     /// The chapter note's quick marks (file order); shown by the notes
     /// pane strip. Mutated by mark edit/delete, never by note reloads of
     /// prose.
@@ -331,8 +331,8 @@ public final class ReaderModel {
         body: String,
         marks: [Mark] = [],
         path: String?,
-        wordCount: UInt32?,
-        updatedAt: String?
+        wordCount: Int?,
+        updatedAt: Date?
     ) {
         noteSaveTask?.cancel()
         noteSaveTask = nil
@@ -357,8 +357,8 @@ public final class ReaderModel {
     /// baseline must not swallow the newer edits.
     public func noteSaved(
         path: String,
-        wordCount: UInt32,
-        updatedAt: String?,
+        wordCount: Int,
+        updatedAt: Date?,
         savedBody: String
     ) {
         notePath = path

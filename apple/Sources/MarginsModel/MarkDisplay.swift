@@ -8,13 +8,13 @@ import MarginsCore
 public enum MarkDisplay {
     /// Quiet attribution line: "38.2% · Sep 5, 2026" (date only when the
     /// mark carries no percent).
-    public static func attribution(percent: Double?, at: String?) -> String {
+    public static func attribution(percent: Double?, at: Date?) -> String {
         var parts: [String] = []
         if let percent {
             parts.append(String(format: "%.1f%%", percent))
         }
-        if let date = at.flatMap(LibraryModel.parseRFC3339) {
-            parts.append(LibraryModel.dateText(date))
+        if let at {
+            parts.append(LibraryModel.dateText(at))
         }
         return parts.joined(separator: " · ")
     }

@@ -24,7 +24,7 @@ final class ReaderController: NSObject {
 
     func makeWebView() -> WKWebView {
         let fallbackProvider: @Sendable (String) throws -> Data = { _ in
-            throw CoreError.Message(message: "library is not open yet")
+            throw CoreError.library("library is not open yet")
         }
         let bytesProvider = (try? model.makeReaderBytesProvider()) ?? fallbackProvider
 

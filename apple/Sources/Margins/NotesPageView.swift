@@ -271,7 +271,7 @@ struct NotesPageView: View {
         if !chapter.marks.isEmpty {
             parts.append(MarkDisplay.countText(chapter.marks.count))
         }
-        if let updated = chapter.updatedAt.flatMap(LibraryModel.parseRFC3339) {
+        if let updated = chapter.updatedAt {
             parts.append("updated \(LibraryModel.dateText(updated))")
         }
         return parts.joined(separator: " · ")

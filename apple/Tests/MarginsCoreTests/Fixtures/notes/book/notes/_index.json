@@ -1,0 +1,31 @@
+{
+  "chapters": [
+    {
+      "chapter_key": "001",
+      "file": "chapters/001-introduction.md",
+      "chapter_index": 0,
+      "chapter_title": "Introduction",
+      "word_count": 11,
+      "mark_count": 0,
+      "updated_at": "2026-09-10T19:13:36.748887Z"
+    },
+    {
+      "chapter_key": "002",
+      "file": "chapters/002-the-market.md",
+      "chapter_index": 1,
+      "chapter_title": "The Market",
+      "word_count": 5,
+      "mark_count": 2,
+      "updated_at": "2026-09-10T19:13:36.752924Z"
+    },
+    {
+      "chapter_key": "003",
+      "file": "chapters/003-a-title-with-punctuation.md",
+      "chapter_index": 2,
+      "chapter_title": "A Title: With / Punctuation!",
+      "word_count": 3,
+      "mark_count": 0,
+      "updated_at": "2026-09-10T19:13:36.753957Z"
+    }
+  ]
+}

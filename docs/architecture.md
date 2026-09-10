@@ -1,95 +1,78 @@
 # Margins architecture
 
-Margins is one Rust core with two thin frontends: a native macOS SwiftUI
+Margins is one Swift core with two thin frontends: a native macOS SwiftUI
 app and a native iOS SwiftUI app (see `docs/ios-plan.md`). Both share one
 SwiftPM package. Both render EPUBs with epub.js and write annotations
 as plain files — no database anywhere.
 
 ```
-macOS SwiftUI app ── crates/margins-ffi (UniFFI, thin)
-   apple/ (Margins)       │
-iOS SwiftUI app ── MarginsFFI.xcframework
-   apple/ (MarginsIOS)    │
-                    crates/margins-core
-         EPUB parsing · library · notes · search · sync
-              (plain-text storage, no UI)
+macOS SwiftUI app ──┐
+   apple/ (Margins) ├─ MarginsCore (Swift, no UI)
+iOS SwiftUI app ────┘
+   apple/ (MarginsIOS)
+        EPUB parsing · library · notes · marks · compile · search
+                     (plain-text storage)
 ```
 
-## The core (`crates/margins-core`)
+## The core (`apple/Sources/MarginsCore`)
 
-All domain logic lives here and has **no UI dependency**:
+All domain logic lives here and has **no UI dependency** (Swift 6 language
+mode throughout):
 
-- `config.rs` — data dir / library root, from `MARGINS_DATA_DIR` /
-  `MARGINS_LIBRARY_ROOT` or platform defaults.
-- `library.rs` — importing EPUBs into the library tree, the book catalog
-  (`_index.json`), reading book bytes, removing books.
-- `epub_meta.rs` — OPF/spine/metadata parsing.
-- `notes.rs` — per-chapter markdown notes with YAML frontmatter and a
-  `_index.json` per book.
-- `compile.rs` — compiles a book's notes into one spine-ordered document
+- `AppConfig.swift` — data dir / library root, from `MARGINS_DATA_DIR` /
+  `MARGINS_LIBRARY_ROOT` or platform defaults, remembered in `config.json`.
+- `Library.swift` — importing EPUBs into the library tree (content-hash ids,
+  staging dir + commit-by-rename), the book catalog (`index.json`), reading
+  positions, cover backfills, removing books.
+- `EpubParser.swift` — OPF/spine/metadata parsing (`XMLParser` for OPF, NCX,
+  and EPUB3 nav; tolerant scanners for everything chapter documents do to
+  markup).
+- `Notes.swift` + `Frontmatter.swift` — per-chapter markdown notes with YAML
+  frontmatter and a `_index.json` per book.
+- `Marks.swift` — quick marks inside the notes' sentinel region; untouched
+  blocks re-emit byte-identically.
+- `Compile.swift` — compiles a book's notes into one spine-ordered document
   (the per-book notes page) and renders it as markdown for the `.md`
   export / copy-all; exports are derived artifacts (see `docs/storage.md`).
-- `sync.rs` — export/import of whole library trees.
-- `models.rs` — shared record types.
+- `Search.swift` — lazily built, mtime-revalidated in-memory index over the
+  notes.
+- `FileStore.swift` — coordinated document I/O: every read/write of
+  `meta.json`, `position.json`, `notes/**`, and `_index.json` goes through
+  it; inside the ubiquity container the operations are wrapped in
+  `NSFileCoordinator`, elsewhere it is a plain passthrough.
+- `Models.swift` — shared record types (`Codable`, snake_case coding keys
+  matching `docs/storage.md`; RFC3339 dates with fractional-second
+  tolerance).
+- `CoreStore.swift` — the `actor` facade the apps drive (import, list,
+  notes, marks, positions, search); keeps the core's synchronous file I/O
+  off the main actor. `readEpubBytesSync` stays `nonisolated` for the
+  reader's WebKit threads.
 
 Storage stays human-readable on disk; see `docs/storage.md` for the layout.
-Both frontends write notes through the same `notes.rs` code path, so the
+Both frontends write notes through the same `Notes` code path, so the
 files are byte-identical regardless of which app wrote them.
-
-## The bridge (`crates/margins-ffi`)
-
-A thin UniFFI 0.29 (proc-macro mode) wrapper over the core. One exported
-object, `MarginsCore`, with `list_books`, `import_epub`, `get_book`,
-`remove_book`, `read_epub_bytes`, `get_chapter_note`, `save_chapter_note`,
-`append_mark`, `update_mark`, `delete_mark`, `get_compiled_notes`,
-`render_notes_markdown`, `search_notes` — records
-mirror `models.rs` with RFC3339 date strings and `u32` counts (UniFFI has
-no `chrono`/`usize`); errors are a flat `CoreError`. Sync export/import is
-not exposed (no UI for it yet on either platform).
-
-`scripts/build-core.sh` release-builds the staticlib and generates the Swift
-bindings into the SwiftPM layout (`apple/Sources/margins_ffiFFI/include/`
-for the C header + module map, `apple/Sources/MarginsCore/Generated/` for
-the Swift). Those paths are gitignored; run the script after changing the
-FFI surface.
-
-The same script assembles `build/MarginsFFI.xcframework`: one static-library
-slice per platform (macOS host arch, or arm64 + x86_64 lipo'd with
-`UNIVERSAL=1`; iOS device `aarch64-apple-ios`; iOS simulator
-`aarch64-apple-ios-sim`, lipo'd with `x86_64-apple-ios-sim` when the
-toolchain ships that target), each carrying the UniFFI header and module
-map. `make ios-core` (`scripts/build-xcframework.sh`) builds all slices;
-the framework works on Command Line Tools alone — no Xcode needed to
-assemble it. Package.swift consumes it as a `binaryTarget`; SwiftPM links
-the slice archive into dependents but does not expose headers from binary
-targets, so the `margins_ffiFFI` header-only C target remains the module
-the generated bindings import. The old `.unsafeFlags` link of
-`target/release/libmargins_ffi.a` (an absolute macOS-only path) is gone.
 
 ## The Apple package (`apple/`)
 
 A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
-`.iOS(.v17)` — iOS 17 because the model layer uses `@Observable`). No
-`.xcodeproj` for the macOS side; builds with Command Line Tools alone —
-note that `swift test` never invokes test bundles on a CLT-only toolchain,
-so tests run through the `MarginsTests` runner executable. Targets:
+`.iOS(.v26)`). No `.xcodeproj` for the macOS side. Targets:
 
-- `margins_ffiFFI` — C target carrying the generated FFI header/module map
-  (module source for the generated bindings; the archive itself comes from
-  the xcframework binaryTarget).
-- `MarginsCore` — generated bindings plus `CoreStore`, an actor wrapper that
-  keeps synchronous Rust calls off the main actor.
+- `MarginsCore` — the core (above) and everything it needs; the only
+  non-test dependency is ZIPFoundation.
 - `MarginsModel` — UI-agnostic model layer: `LibraryModel` (catalog,
   selection, import/remove), `ReaderModel` (open book/chapter, notes pane
   state), `ReaderResource` (scheme-handler routing), `ReaderKeymap`
   (vim-style key state machine), `LibraryLocation` (iOS library root:
   iCloud container resolution with runtime fallback, placeholder
-  materialization, coordinated staging of picked files, conflict
-  detection). Unit-tested via `MarginsTests`.
+  materialization for reader assets and covers, coordinated staging of
+  picked files, conflict detection). Unit-tested via `MarginsModelTests`.
 - `Margins` — macOS SwiftUI app: library browser, reader (WKWebView +
   epub.js), notes pane, search overlay, keyboard/trackpad routing.
-- `MarginsTests` — a Swift Testing **runner executable** (SwiftPM's test
-  runner never invokes test bundles on the CLT toolchain; see the plan doc).
+- `MarginsModelTests` / `MarginsCoreTests` — Swift Testing test targets,
+  run by `swift test` (full Xcode required; a CLT-only toolchain never
+  invokes test bundles). `MarginsCoreTests` carries `Fixtures/legacy-library/`,
+  a library written by the pre-Swift Rust core; the Swift core must open it
+  as-is and produce the same notes, marks, positions, and search results.
 
 ## The iOS app (`apple/ios/`)
 
@@ -148,10 +131,10 @@ ignores selection messages.
 The reader webview loads `margins-reader://app/reader.html?book=<id>`; a
 `WKURLSchemeHandler` serves **exactly five** resources: `reader.html`,
 `reader.js`, `epub.min.js`, `jszip.min.js`, and `book.epub` (bytes from
-`read_epub_bytes`). Anything else — traversal, nested paths, unknown names —
-is rejected by the pure `ReaderResource` resolution before any I/O, so there
-is no arbitrary-path or filesystem exposure. EPUB content itself is unzipped
-in JS from the whole-book bytes, never from disk paths.
+`CoreStore.readEpubBytesSync`). Anything else — traversal, nested paths,
+unknown names — is rejected by the pure `ReaderResource` resolution before
+any I/O, so there is no arbitrary-path or filesystem exposure. EPUB content
+itself is unzipped in JS from the whole-book bytes, never from disk paths.
 
 Two response-type rules are load-bearing (both bit us once): `fetch()` needs
 HTTP semantics, so `book.epub` is served as an `HTTPURLResponse` — a plain
@@ -180,35 +163,32 @@ reading. ⌘-combos and text-field typing pass through to menus and inputs.
 
 ### Notes and search
 
-The notes pane edits the chapter note from `get_chapter_note`; ⌘S / `i`-pane
-Save go through `save_chapter_note`, writing the same markdown+frontmatter
+The notes pane edits the chapter note from `getChapterNote`; ⌘S / `i`-pane
+Save go through `saveChapterNote`, writing the same markdown+frontmatter
 files as the iOS app. `/` (or ⌘F) opens the search overlay over
-`search_notes`; opening a hit jumps straight to that book/chapter. The
+`searchNotes`; opening a hit jumps straight to that book/chapter. The
 overlay is non-modal (no sheet window) and `LibraryModel.searchOpen` is the
 single source of truth: the shell key monitor closes it on Esc and clicks
 outside the panel dismiss it.
 
 The **compiled notes page** (`NotesPageView`, reached via the book detail's
 "All Notes" button, `N`, or ⇧⌘N / View → Book Notes) shows every chapter
-note in spine order through `get_compiled_notes`; `LibraryModel.detailMode`
+note in spine order through `compiledNotes`; `LibraryModel.detailMode`
 switches the detail area between the book card and the page. "Export
-Notes…" (button or File menu) renders with `render_notes_markdown` and
+Notes…" (button or File menu) renders with `renderNotesMarkdown` and
 writes the file after an `NSSavePanel`; note bodies render as plain `Text`
 (never as markdown/HTML).
 
 ## Building and running (macOS)
 
 ```bash
-make core        # build margins-ffi, generate Swift bindings, refresh the
-                 # macOS xcframework slice
-make mac-build   # build the Swift package
-make mac-test    # run the Swift Testing suite
-make mac-app     # assemble build/Margins.app (ad-hoc signed)
-make mac-run     # mac-app + open it
+make build       # build the Swift package
+make test        # run the Swift Testing suite
+make app         # assemble build/Margins.app (ad-hoc signed)
+make run         # app + open it
+make ios-build   # build the iOS app for the simulator (no signing)
 ```
 
-Requirements: Rust (stable) and Xcode 26 (full Xcode is now required for
-iOS anyway; CI runs the macOS job on `macos-26` pinned to Xcode 26.6).
-`cargo test --workspace` must keep passing at all times so the Apple apps
-are never broken by core changes. The iOS build path (`make ios-core`,
-Xcode, simulator) is described in `docs/ios-plan.md`.
+Requirements: Xcode 26 (full Xcode — the iOS SDK is needed for the iOS
+build path, and `swift test` silently runs nothing under a CLT-only
+toolchain). CI runs one job on `macos-26` pinned to Xcode 26.6.
