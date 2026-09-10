@@ -97,10 +97,18 @@ thirds instead of dead-ending on the footer.
 VoiceOver: `.accessibilityAction` on the reader for "Show controls" and
 "New note", so those are not gesture-only.
 
-Tap zones ride a UIKit `UITapGestureRecognizer` on the WKWebView
-(`cancelsTouchesInView = false`): SwiftUI's `.onTapGesture` on the
-representable loses the race to WKWebView's own recognizers on device —
-it worked in the simulator and died on the phone.
+Tap zones are detected **in the page**: a capture-phase `click`
+listener in each section iframe (and the top document) posts the tap's
+parent-viewport x and width through `window.webkit.messageHandlers` —
+Apple's documented web→native channel, already used for `relocated` and
+`selected`. Do not try gesture recognizers here: WKWebView's private tap
+recognizers starve any `UITapGestureRecognizer` attached to the
+container on device (they work in the simulator — three builds were
+burned proving it), the pan survives because it moves, and the view's
+own `touchesEnded` never fires because WKContentView consumes content
+touches. `touch-action: manipulation` in the reading CSS kills tap
+delay and double-tap zoom. Swipes are a native
+`UIPanGestureRecognizer` (`cancelsTouchesInView = false`).
 
 ## Files
 

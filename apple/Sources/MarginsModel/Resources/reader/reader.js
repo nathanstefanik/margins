@@ -84,9 +84,11 @@ async function readerOpen() {
 
   readerRendition.hooks.content.register(readerPreserveAspectRatio);
   readerRendition.hooks.content.register(readerStyleContents);
-  readerRendition.on("relocated", readerReportRelocated);
   readerRendition.on("rendered", (section, view) => {
     if (view && view.contents && view.contents.document && section && section.href) {
+      // Tap zones before the link handler: both are capture-phase, and the
+      // zone logic must see every click (link taps page AND navigate).
+      readerAttachTapZone(view.contents.document);
       readerAttachLinks(view.contents.document, section.href);
     }
   });
@@ -218,6 +220,10 @@ function readerStyleContents(contents) {
     html: {
       "font-size": `${readerTypography.fontSize}${readerTypography.unit} !important`,
     },
+    // Kills tap delay / double-tap zoom inside the reading surface.
+    "html, body": {
+      "touch-action": "manipulation",
+    },
     "body, p, li, div": {
       "font-size": "inherit !important",
     },
@@ -271,6 +277,33 @@ function readerReportRelocated(location) {
     page: displayed.page || 1,
     totalPages: displayed.total || 0,
   });
+}
+
+// Tap zones: DOM clicks bridge to the shell through the script message
+// handler (the Apple-documented web→native channel). WKWebView's private
+// tap recognizers starve any UITapGestureRecognizer attached to the
+// container on device, but clicks always fire — links and selection
+// prove the event pipeline. Capture phase, registered before the link
+// handler, so the zone logic sees every click. The click lands in the
+// section iframe, so the x is mapped into the parent viewport (the frame
+// is one wide translated column) against the parent's inner width.
+function readerAttachTapZone(doc) {
+  if (!doc || !doc.defaultView) {
+    return;
+  }
+  doc.addEventListener(
+    "click",
+    (event) => {
+      try {
+        const frame = doc.defaultView.frameElement;
+        const frameLeft = frame ? frame.getBoundingClientRect().left : 0;
+        const parent = doc.defaultView.parent;
+        const width = parent ? parent.innerWidth : 0;
+        readerPost({ type: "tap", x: Math.round(frameLeft + event.clientX), width: Math.round(width) });
+      } catch (error) {}
+    },
+    true,
+  );
 }
 
 // Internal links (TOC pages, cross-references): the shell passes
@@ -555,6 +588,16 @@ window.readerCurrentCfi = function () {
   const location = readerRendition ? readerRendition.currentLocation() : null;
   return location && location.start ? location.start.cfi : null;
 };
+
+// Clicks on the top document itself (viewer padding, error page): the
+// section listeners cannot see them across the frame boundary.
+document.addEventListener(
+  "click",
+  (event) => {
+    readerPost({ type: "tap", x: Math.round(event.clientX), width: Math.round(window.innerWidth) });
+  },
+  true,
+);
 
 readerOpen().catch((error) => {
   var detail;

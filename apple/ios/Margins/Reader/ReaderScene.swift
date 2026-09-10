@@ -54,7 +54,6 @@ struct ReaderScene: View {
             Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
                 .ignoresSafeArea()
             IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
-                .gesture(pageSwipe)
                 .overlay(alignment: .top) { headerOverlay }
                 .overlay(alignment: .bottom) { footerOverlay }
                 .accessibilityAction(named: Text("Show controls")) {
@@ -154,6 +153,13 @@ struct ReaderScene: View {
             userPageTurn: { chromeVisible = false },
             userTap: { location, width in
                 handleTap(at: location, width: width)
+            },
+            userSwipe: { isForward in
+                if isForward {
+                    pageForward()
+                } else {
+                    pageBack()
+                }
             },
             captureRequest: { selection in
                 captureSelection = selection
@@ -375,6 +381,7 @@ struct ReaderScene: View {
     private func handleTap(at location: CGPoint, width: CGFloat) {
         // Thirds of the webview itself (the recognizer hands us its
         // bounds): left/right page, center toggles the chrome.
+        print("[reader] tap \(location) / \(width) chromeVisible=\(chromeVisible)")
         if location.x < width / 3 {
             pageBack()
         } else if location.x > width * 2 / 3 {
@@ -382,20 +389,6 @@ struct ReaderScene: View {
         } else {
             chromeVisible.toggle()
         }
-    }
-
-    private var pageSwipe: some Gesture {
-        DragGesture(minimumDistance: 40)
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-                guard abs(horizontal) > abs(vertical) * 1.5 else { return }
-                if horizontal < 0 {
-                    pageForward()
-                } else {
-                    pageBack()
-                }
-            }
     }
 
     /// Page-surface input (taps, swipes, hardware keys) always hides the

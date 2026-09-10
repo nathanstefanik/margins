@@ -5,9 +5,10 @@ import OSLog
 import MarginsCore
 import MarginsModel
 
-/// Hardware-key page turns: the WKWebView is first responder when reading,
-/// so arrow/space presses are intercepted here before the web view can
-/// swallow them — the iOS analogue of the macOS shell key monitor.
+/// Hardware-key page turns: the WKWebView is first responder when
+/// reading, so arrow/space presses are intercepted here before the web
+/// view can swallow them — the iOS analogue of the macOS shell key
+/// monitor.
 final class KeyHandlingWebView: WKWebView {
     enum PageDirection {
         case forward
@@ -15,6 +16,7 @@ final class KeyHandlingWebView: WKWebView {
     }
 
     var onKey: ((PageDirection) -> Void)?
+
     override var canBecomeFirstResponder: Bool { true }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
@@ -96,6 +98,8 @@ struct ReaderCallbacks {
     /// Single-tap location in webview coordinates plus the webview's
     /// width — the scene's page-thirds/chrome zones.
     var userTap: (CGPoint, CGFloat) -> Void = { _, _ in }
+    /// Horizontal swipe: true = forward, false = back.
+    var userSwipe: (Bool) -> Void = { _ in }
     var captureRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
     var highlightRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
 }
@@ -117,11 +121,13 @@ final class ReaderBridge: NSObject {
         super.init()
     }
 
-    /// Forwards single taps (webview-local point, webview width) to the
-    /// scene's zone logic.
-    @objc private func webViewTapped(_ gesture: UITapGestureRecognizer) {
-        guard let view = gesture.view else { return }
-        callbacks.userTap(gesture.location(in: view), view.bounds.width)
+    /// Horizontal swipes page; the 1.5:1 horizontal bias rejects
+    /// diagonal/vertical drags (the old SwiftUI drag's rule).
+    @objc private func webViewSwiped(_ gesture: UIPanGestureRecognizer) {
+        guard gesture.state == .ended, let view = gesture.view else { return }
+        let translation = gesture.translation(in: view)
+        guard abs(translation.x) > abs(translation.y) * 1.5 else { return }
+        callbacks.userSwipe(translation.x < 0)
     }
 
     func makeWebView() -> WKWebView {
@@ -193,17 +199,19 @@ final class ReaderBridge: NSObject {
         webView.scrollView.bounces = false
         webView.scrollView.delaysContentTouches = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        // Tap zones ride a UIKit recognizer: SwiftUI's .onTapGesture on
-        // the representable loses the race to WKWebView's own recognizers
-        // on device (fine in the simulator, dead on the phone).
+        // Reader input: taps arrive as DOM clicks through the script
+        // message handler (the Apple-documented web→native channel —
+        // WKWebView's private tap recognizers starve UITapGestureRecognizer
+        // attached to the container on device); swipes ride a native pan.
         // cancelsTouchesInView stays false so links and selection still
         // receive the touch.
-        let tap = UITapGestureRecognizer(
+        let pan = UIPanGestureRecognizer(
             target: self,
-            action: #selector(webViewTapped(_:))
+            action: #selector(webViewSwiped(_:))
         )
-        tap.cancelsTouchesInView = false
-        webView.addGestureRecognizer(tap)
+        pan.cancelsTouchesInView = false
+        pan.delegate = self
+        webView.addGestureRecognizer(pan)
         self.webView = webView
 
         observeTypography()
@@ -394,9 +402,26 @@ extension ReaderBridge: WKScriptMessageHandler {
                 href: body["href"] as? String,
                 cfi: body["cfi"] as? String
             )
+        case "tap":
+            if let x = (body["x"] as? NSNumber)?.doubleValue,
+               let width = (body["width"] as? NSNumber)?.doubleValue {
+                print("[reader] page tap at \(x)/\(width)")
+                callbacks.userTap(CGPoint(x: x, y: 0), width)
+            }
         default:
             break
         }
+    }
+}
+
+extension ReaderBridge: UIGestureRecognizerDelegate {
+    /// The pan runs alongside the webview's own recognizers (selection,
+    /// scroll arbitration) instead of requiring them to fail.
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+    ) -> Bool {
+        true
     }
 }
 
