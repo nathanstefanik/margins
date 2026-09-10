@@ -97,6 +97,11 @@ thirds instead of dead-ending on the footer.
 VoiceOver: `.accessibilityAction` on the reader for "Show controls" and
 "New note", so those are not gesture-only.
 
+Tap zones ride a UIKit `UITapGestureRecognizer` on the WKWebView
+(`cancelsTouchesInView = false`): SwiftUI's `.onTapGesture` on the
+representable loses the race to WKWebView's own recognizers on device —
+it worked in the simulator and died on the phone.
+
 ## Files
 
 - `apple/ios/Margins/Reader/ReaderScene.swift` — rest/revealed chrome;

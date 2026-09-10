@@ -93,6 +93,9 @@ struct IOSReaderWebView: UIViewRepresentable {
 /// one struct so the representable takes a single parameter.
 struct ReaderCallbacks {
     var userPageTurn: () -> Void = {}
+    /// Single-tap location in webview coordinates plus the webview's
+    /// width — the scene's page-thirds/chrome zones.
+    var userTap: (CGPoint, CGFloat) -> Void = { _, _ in }
     var captureRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
     var highlightRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
 }
@@ -112,6 +115,13 @@ final class ReaderBridge: NSObject {
         self.model = model
         self.reader = reader
         super.init()
+    }
+
+    /// Forwards single taps (webview-local point, webview width) to the
+    /// scene's zone logic.
+    @objc private func webViewTapped(_ gesture: UITapGestureRecognizer) {
+        guard let view = gesture.view else { return }
+        callbacks.userTap(gesture.location(in: view), view.bounds.width)
     }
 
     func makeWebView() -> WKWebView {
@@ -183,6 +193,17 @@ final class ReaderBridge: NSObject {
         webView.scrollView.bounces = false
         webView.scrollView.delaysContentTouches = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
+        // Tap zones ride a UIKit recognizer: SwiftUI's .onTapGesture on
+        // the representable loses the race to WKWebView's own recognizers
+        // on device (fine in the simulator, dead on the phone).
+        // cancelsTouchesInView stays false so links and selection still
+        // receive the touch.
+        let tap = UITapGestureRecognizer(
+            target: self,
+            action: #selector(webViewTapped(_:))
+        )
+        tap.cancelsTouchesInView = false
+        webView.addGestureRecognizer(tap)
         self.webView = webView
 
         observeTypography()

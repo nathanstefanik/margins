@@ -53,21 +53,16 @@ struct ReaderScene: View {
         ZStack {
             Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
                 .ignoresSafeArea()
-            GeometryReader { proxy in
-                IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
-                    .onTapGesture(coordinateSpace: .local) { location in
-                        handleTap(at: location, width: proxy.size.width)
-                    }
-                    .gesture(pageSwipe)
-                    .overlay(alignment: .top) { headerOverlay }
-                    .overlay(alignment: .bottom) { footerOverlay }
-                    .accessibilityAction(named: Text("Show controls")) {
-                        chromeVisible = true
-                    }
-                    .accessibilityAction(named: Text("New note")) {
-                        newNote()
-                    }
-            }
+            IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
+                .gesture(pageSwipe)
+                .overlay(alignment: .top) { headerOverlay }
+                .overlay(alignment: .bottom) { footerOverlay }
+                .accessibilityAction(named: Text("Show controls")) {
+                    chromeVisible = true
+                }
+                .accessibilityAction(named: Text("New note")) {
+                    newNote()
+                }
             if let finished = finishedChapter {
                 notePrompt(for: finished)
                     .transition(.opacity)
@@ -157,6 +152,9 @@ struct ReaderScene: View {
     private var callbacks: ReaderCallbacks {
         ReaderCallbacks(
             userPageTurn: { chromeVisible = false },
+            userTap: { location, width in
+                handleTap(at: location, width: width)
+            },
             captureRequest: { selection in
                 captureSelection = selection
                 capturePresented = true
@@ -375,9 +373,8 @@ struct ReaderScene: View {
     // MARK: Input
 
     private func handleTap(at location: CGPoint, width: CGFloat) {
-        // Thirds of the reader view itself — the window's width is wrong
-        // the moment the reader is narrower (Split View, Slide Over,
-        // Stage Manager).
+        // Thirds of the webview itself (the recognizer hands us its
+        // bounds): left/right page, center toggles the chrome.
         if location.x < width / 3 {
             pageBack()
         } else if location.x > width * 2 / 3 {
