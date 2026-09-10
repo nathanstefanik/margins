@@ -43,8 +43,8 @@ final class ReaderController: NSObject {
 
         observeTypography()
 
-        if let book = reader.book, let chapter = reader.chapter,
-           let url = readerURL(bookID: book.id, chapterHref: chapter.jumpTarget) {
+        if let book = reader.book, reader.chapter != nil,
+           let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget) {
             webView.load(URLRequest(url: url))
         }
         return webView

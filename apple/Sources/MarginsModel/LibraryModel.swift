@@ -277,8 +277,14 @@ public final class LibraryModel {
     /// Opens a book at a specific chapter (and CFI, when one is known).
     /// Search hits and compiled-note marks share this so a thought lands
     /// on the sentence rather than the book card. `chapterKey` empty means
-    /// a book-level target: first chapter, no CFI.
-    public func openPassage(bookId: String, chapterKey: String, cfi: String?) async {
+    /// a book-level target: first chapter, no CFI. `fragment` targets a
+    /// section inside the chapter's file (an outline row).
+    public func openPassage(
+        bookId: String,
+        chapterKey: String,
+        cfi: String?,
+        fragment: String? = nil
+    ) async {
         await selectBook(id: bookId)
         guard let book = selectedBook, let reader else { return }
         let chapter: ChapterMeta?
@@ -288,7 +294,7 @@ public final class LibraryModel {
             chapter = book.chapters.first(where: { $0.key == chapterKey })
         }
         guard let chapter else { return }
-        reader.open(book: book, chapter: chapter)
+        reader.open(book: book, chapter: chapter, fragment: fragment)
         reader.resume(at: (cfi?.isEmpty ?? true) ? nil : cfi)
         pendingReaderPresent = true
         passageJumpGeneration += 1

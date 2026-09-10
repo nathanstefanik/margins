@@ -216,8 +216,8 @@ final class ReaderBridge: NSObject {
 
         observeTypography()
 
-        if let book = reader.book, let chapter = reader.chapter,
-           let url = readerURL(bookID: book.id, chapterHref: chapter.jumpTarget) {
+        if let book = reader.book, reader.chapter != nil,
+           let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget) {
             webView.load(URLRequest(url: url))
         }
         return webView
@@ -261,8 +261,8 @@ final class ReaderBridge: NSObject {
     /// Reloads the reader page for the current book/chapter/CFI. Used when
     /// a passage jump switches books while the webview is already showing.
     func loadCurrentBook() {
-        guard let book = reader.book, let chapter = reader.chapter,
-              let url = readerURL(bookID: book.id, chapterHref: chapter.jumpTarget)
+        guard let book = reader.book, reader.chapter != nil,
+              let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget)
         else { return }
         webView?.load(URLRequest(url: url))
     }
