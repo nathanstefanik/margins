@@ -10,10 +10,12 @@ import Foundation
 public final class Library {
     /// Schema version of `BookMeta.chapters`. Bumped whenever chapter
     /// metadata gains information the parser can now recover from the source
-    /// EPUB (v1: TOC-derived titles and start fragments); the library scan
-    /// re-parses any book below it. Chapter keys are spine-derived and stay
-    /// stable across re-parses, so notes keep resolving.
-    public static let chaptersVersion = 1
+    /// EPUB (v1: TOC-derived titles and start fragments; v2: matter
+    /// classification, outline levels, and every TOC entry per file); the
+    /// library scan re-parses any book below it. Chapter keys are
+    /// spine-derived and stay stable across re-parses, so notes keep
+    /// resolving.
+    public static let chaptersVersion = 2
 
     public private(set) var root: String
     private let search = SearchEngine()

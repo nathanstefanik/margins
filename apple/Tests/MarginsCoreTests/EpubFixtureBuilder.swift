@@ -155,6 +155,209 @@ enum EpubFixtureBuilder {
         return try write(files, to: directory.appendingPathComponent(filename))
     }
 
+    // MARK: Structured builder
+
+    /// One spine item for `epub(in:named:chapters:toc:guide:landmarks:)`.
+    struct ChapterSpec {
+        var filename: String
+        /// `<title>` text; empty omits the tag.
+        var documentTitle: String = ""
+        /// `<h1>` text; empty omits the heading.
+        var heading: String = ""
+        var body: String = "Body text."
+        /// `epub:type` on the document's `<body>`.
+        var epubType: String? = nil
+        var linear: Bool = true
+        /// Raw markup instead of the heading/body pair (an `<img>` wrapper,
+        /// say).
+        var markedUpBody: String? = nil
+        /// `nil` omits `media-type`, exercising the extension fallback.
+        var mediaType: String? = "application/xhtml+xml"
+        var properties: String? = nil
+    }
+
+    /// A nested table-of-contents entry: `href` may carry `#fragment`.
+    struct TOCOutline {
+        var label: String
+        var href: String
+        var children: [TOCOutline] = []
+
+        init(_ label: String, _ href: String, children: [TOCOutline] = []) {
+            self.label = label
+            self.href = href
+            self.children = children
+        }
+    }
+
+    enum TOCStyle {
+        case none
+        case ncx([TOCOutline])
+        case nav([TOCOutline])
+    }
+
+    /// Builds a book whose spine items and TOC the caller describes exactly:
+    /// per-file `<title>`, heading, body, `epub:type`, and `linear`; a
+    /// nested NCX or nav TOC; an optional guide; optional landmarks.
+    static func epub(
+        in directory: URL,
+        named filename: String,
+        bookTitle: String = "Sample Book",
+        author: String = "Test Author",
+        chapters: [ChapterSpec],
+        toc: TOCStyle = .none,
+        guide: [(type: String, href: String)] = [],
+        landmarks: [(type: String, href: String)] = []
+    ) throws -> String {
+        var manifest: [String] = []
+        for (index, chapter) in chapters.enumerated() {
+            var item = #"    <item href="\#(escape(chapter.filename))" id="c\#(index)""#
+            if let mediaType = chapter.mediaType {
+                item += #" media-type="\#(escape(mediaType))""#
+            }
+            if let properties = chapter.properties {
+                item += #" properties="\#(escape(properties))""#
+            }
+            item += "/>"
+            manifest.append(item)
+        }
+        let spineAttr: String
+        switch toc {
+        case .none: spineAttr = ""
+        case .ncx:
+            manifest.append(#"    <item href="toc.ncx" id="ncx" media-type="application/x-dtbncx+xml"/>"#)
+            spineAttr = #" toc="ncx""#
+        case .nav:
+            manifest.append(
+                #"    <item href="nav.xhtml" id="nav" media-type="application/xhtml+xml" properties="nav"/>"#
+            )
+            spineAttr = ""
+        }
+        let spine = chapters.enumerated().map { index, chapter in
+            #"    <itemref idref="c\#(index)"\#(chapter.linear ? "" : #" linear="no""#)/>"#
+        }.joined(separator: "\n")
+        let guideXML = guide.isEmpty ? "" : """
+          <guide>
+        \(guide.map { #"    <reference type="\#(escape($0.type))" href="\#(escape($0.href))"/>"# }.joined(separator: "\n"))
+          </guide>
+
+        """
+
+        var files: [(String, Data)] = [
+            ("mimetype", Data("application/epub+zip".utf8)),
+            ("META-INF/container.xml", Data(Self.container.utf8)),
+            ("OEBPS/content.opf", Data("""
+            <?xml version="1.0"?>
+            <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+              <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                <dc:title>\(escape(bookTitle))</dc:title>
+                <dc:creator>\(escape(author))</dc:creator>
+                <dc:language>en</dc:language>
+                <dc:identifier id="uid">urn:margins:test</dc:identifier>
+              </metadata>
+              <manifest>
+            \(manifest.joined(separator: "\n"))
+              </manifest>
+            \(guideXML)  <spine\(spineAttr)>
+            \(spine)
+              </spine>
+            </package>
+            """.utf8)),
+        ]
+
+        for chapter in chapters {
+            let titleTag = chapter.documentTitle.isEmpty
+                ? "" : "<title>\(escape(chapter.documentTitle))</title>"
+            let headingTag = chapter.heading.isEmpty ? "" : "<h1>\(escape(chapter.heading))</h1>"
+            let body = chapter.markedUpBody
+                ?? "\(headingTag)<p>\(escape(chapter.body))</p>"
+            let type = chapter.epubType.map { #" epub:type="\#(escape($0))""# } ?? ""
+            files.append(("OEBPS/\(chapter.filename)", Data("""
+            <?xml version="1.0"?>
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+            <head>\(titleTag)</head>
+            <body\(type)>\(body)</body>
+            </html>
+            """.utf8)))
+        }
+
+        switch toc {
+        case .none:
+            break
+        case .ncx(let outlines):
+            files.append(("OEBPS/toc.ncx", Data(Self.ncxXML(outlines).utf8)))
+        case .nav(let outlines):
+            files.append(("OEBPS/nav.xhtml", Data(Self.navXML(toc: outlines, landmarks: landmarks).utf8)))
+        }
+
+        return try write(files, to: directory.appendingPathComponent(filename))
+    }
+
+    private static func ncxXML(_ outlines: [TOCOutline]) -> String {
+        var order = 0
+        func points(_ nodes: [TOCOutline], indent: String) -> String {
+            nodes.map { node in
+                order += 1
+                let id = order
+                let children = points(node.children, indent: indent + "  ")
+                var xml = "\(indent)<navPoint id=\"np-\(id)\" playOrder=\"\(id)\">\n"
+                xml += "\(indent)  <navLabel><text>\(escape(node.label))</text></navLabel>\n"
+                xml += "\(indent)  <content src=\"\(escape(node.href))\"/>\n"
+                if !children.isEmpty { xml += children + "\n" }
+                xml += "\(indent)</navPoint>"
+                return xml
+            }.joined(separator: "\n")
+        }
+        return """
+        <?xml version="1.0"?>
+        <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+          <navMap>
+        \(points(outlines, indent: "    "))
+          </navMap>
+        </ncx>
+        """
+    }
+
+    private static func navXML(
+        toc: [TOCOutline], landmarks: [(type: String, href: String)]
+    ) -> String {
+        var body = ""
+        if !landmarks.isEmpty {
+            let items = landmarks.map {
+                #"      <li><a epub:type="\#(escape($0.type))" href="\#(escape($0.href))">\#(escape($0.type.capitalized))</a></li>"#
+            }.joined(separator: "\n")
+            body += "  <nav epub:type=\"landmarks\">\n    <ol>\n\(items)\n    </ol>\n  </nav>\n"
+        }
+        if !toc.isEmpty {
+            body += "  <nav epub:type=\"toc\" role=\"doc-toc\">\n    <ol>\n\(navList(toc))\n    </ol>\n  </nav>\n"
+        }
+        return """
+        <?xml version="1.0"?>
+        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+        <head><title>Contents</title></head>
+        <body>
+        \(body)</body>
+        </html>
+        """
+    }
+
+    private static func navList(_ nodes: [TOCOutline]) -> String {
+        nodes.map { node in
+            var xml = #"<li><a href="\#(escape(node.href))">\#(escape(node.label))</a>"#
+            if !node.children.isEmpty {
+                xml += "\n<ol>\(navList(node.children))</ol>\n"
+            }
+            xml += "</li>"
+            return xml
+        }.joined(separator: "\n")
+    }
+
+    private static func escape(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+    }
+
     // MARK: Building
 
     private static func write(_ files: [(String, Data)], to url: URL) throws -> String {

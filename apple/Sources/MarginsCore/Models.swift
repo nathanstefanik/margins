@@ -261,6 +261,54 @@ public struct BookSummary: Codable, Sendable, Equatable, Hashable, Identifiable 
     }
 }
 
+/// Where a spine item sits in the book's structure (docs/apple-only-plan.md
+/// Phase 3). The outline UI groups `cover` with `front`; `body` is the
+/// reading run, and `back` is the trailing apparatus.
+public enum Matter: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
+    case cover
+    case front
+    case body
+    case back
+}
+
+/// One table-of-contents entry that starts inside a spine item. A file the
+/// TOC names more than once — "Book II" and its first chapter, say — carries
+/// one section per entry; the outline shows each as its own row and jumps to
+/// each anchor, but they share one note file because the key is the file's.
+public struct ChapterSection: Codable, Sendable, Equatable, Hashable {
+    public var title: String
+    /// Anchor id inside the chapter's `href`; `nil` means the top of the
+    /// file.
+    public var fragment: String?
+    /// Outline depth: 0 = part/volume, 1 = book (or chapter when the book
+    /// has no parts), … Leaves are the deepest level present.
+    public var level: Int
+
+    public init(title: String, fragment: String? = nil, level: Int) {
+        self.title = title
+        self.fragment = fragment
+        self.level = level
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case title, fragment, level
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decode(String.self, forKey: .title)
+        fragment = try container.decodeIfPresent(String.self, forKey: .fragment)
+        level = try container.decodeIfPresent(Int.self, forKey: .level) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(fragment, forKey: .fragment)
+        try container.encode(level, forKey: .level)
+    }
+}
+
 /// One spine item of a book, as stored in `meta.json`'s `chapters`.
 public struct ChapterMeta: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// Spine position, zero-padded. The anchor for note file names,
@@ -273,16 +321,39 @@ public struct ChapterMeta: Codable, Sendable, Equatable, Hashable, Identifiable 
     /// match relocated hrefs against this, so it must stay a pure path.
     public var href: String
     /// Anchor id where this chapter starts inside `href`, taken from the
-    /// book's TOC. `nil` when the TOC has no entry for the file (or there is
-    /// no TOC).
+    /// first TOC entry for the file. `nil` when the TOC has no entry for the
+    /// file (or there is no TOC).
     public var fragment: String?
+    /// Where the file sits in the book's structure, from landmarks, the
+    /// guide, the document's `epub:type`, its shape, or its title. Absent
+    /// (`.body`) in books imported before classification existed.
+    public var matter: Matter
+    /// Outline depth of `title` (`sections[0].level` when sections are
+    /// present, else 0).
+    public var level: Int
+    /// Every TOC entry that targets this file, in reading order. Empty when
+    /// the TOC has no entry for the file. When non-empty,
+    /// `sections[0].title == title` and `sections[0].fragment == fragment`.
+    public var sections: [ChapterSection]
 
-    public init(key: String, index: Int, title: String, href: String, fragment: String? = nil) {
+    public init(
+        key: String,
+        index: Int,
+        title: String,
+        href: String,
+        fragment: String? = nil,
+        matter: Matter = .body,
+        level: Int = 0,
+        sections: [ChapterSection] = []
+    ) {
         self.key = key
         self.index = index
         self.title = title
         self.href = href
         self.fragment = fragment
+        self.matter = matter
+        self.level = level
+        self.sections = sections
     }
 
     public var id: String { key }
@@ -297,7 +368,7 @@ public struct ChapterMeta: Codable, Sendable, Equatable, Hashable, Identifiable 
     }
 
     private enum CodingKeys: String, CodingKey {
-        case key, index, title, href, fragment
+        case key, index, title, href, fragment, matter, level, sections
     }
 
     public init(from decoder: any Decoder) throws {
@@ -307,6 +378,9 @@ public struct ChapterMeta: Codable, Sendable, Equatable, Hashable, Identifiable 
         title = try container.decode(String.self, forKey: .title)
         href = try container.decode(String.self, forKey: .href)
         fragment = try container.decodeIfPresent(String.self, forKey: .fragment)
+        matter = try container.decodeIfPresent(Matter.self, forKey: .matter) ?? .body
+        level = try container.decodeIfPresent(Int.self, forKey: .level) ?? 0
+        sections = try container.decodeIfPresent([ChapterSection].self, forKey: .sections) ?? []
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -316,6 +390,9 @@ public struct ChapterMeta: Codable, Sendable, Equatable, Hashable, Identifiable 
         try container.encode(title, forKey: .title)
         try container.encode(href, forKey: .href)
         try container.encodeIfPresent(fragment, forKey: .fragment)
+        try container.encode(matter, forKey: .matter)
+        try container.encode(level, forKey: .level)
+        try container.encode(sections, forKey: .sections)
     }
 }
 

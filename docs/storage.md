@@ -48,14 +48,28 @@ interrupted import cannot appear as a book; abandoned staging directories can be
 
 ```json
 {
-  "chapters_version": 1,
+  "chapters_version": 2,
   "chapters": [
     {
-      "key": "005",
-      "index": 4,
-      "title": "Chapter II. He Gets Rid Of His Eldest Son",
-      "href": "OEBPS/28054-h-3.htm.html",
-      "fragment": "pgepubid00008"
+      "key": "009",
+      "index": 8,
+      "title": "Book II. An Unfortunate Gathering",
+      "href": "OEBPS/28054-h-7.htm.html",
+      "fragment": "pgepubid00012",
+      "matter": "body",
+      "level": 1,
+      "sections": [
+        {
+          "title": "Book II. An Unfortunate Gathering",
+          "fragment": "pgepubid00012",
+          "level": 1
+        },
+        {
+          "title": "Chapter I. They Arrive At The Monastery",
+          "fragment": "pgepubid00013",
+          "level": 2
+        }
+      ]
     }
   ]
 }
@@ -66,26 +80,66 @@ interrupted import cannot appear as a book; abandoned staging directories can be
   `position.json`. It never changes for a given EPUB.
 - `href` is the in-zip path of the spine item, always **without** a
   fragment — both readers match the renderer's relocation events against it.
-- `fragment` (optional) is the anchor id where the chapter starts inside
-  that file, taken from the book's TOC. Jump targets are `href#fragment`
-  when it is present, which matters for books that pack several chapters
-  into one file. Absent when the book has no TOC entry for the file.
+- `fragment` (optional) is the first section's anchor: the anchor id where
+  the chapter starts inside that file, taken from the book's TOC. Jump
+  targets are `href#fragment` when it is present, which matters for books
+  that pack several chapters into one file. Absent when the book has no TOC
+  entry for the file.
+- `matter` is `cover`, `front`, `body`, or `back` — where the file sits in
+  the book's structure. Absent (`.body`) in files written before v2.
+- `level` is the outline depth of `title` (`sections[0].level` when present,
+  else 0): 0 for a part or volume, 1 for a book (or a chapter when the book
+  has no parts), and deeper for leaves.
+- `sections` lists **every** TOC entry that targets the file, in reading
+  order. A file holding "Book II" and its first chapter has two sections;
+  the UI shows both, both open the same chapter key at different anchors,
+  and the chapter note for the key is shared. Sub-file chapters do not get
+  their own note file because keys are file positions. Empty when the TOC
+  has no entry for the file; when non-empty,
+  `sections[0] == { title, fragment, level }` matches the top-level fields.
 
-Titles resolve from the first source that has one: the TOC label (EPUB3 nav
-document, else NCX), the file's first `<h1>`–`<h3>`, the file's `<title>`,
-then `"Chapter {n}"`. A `<title>` shared verbatim by three or more chapters,
-equal to the book's own title, or beginning "The Project Gutenberg eBook" is
-a template rather than a name and is skipped — Gutenberg's Ebookmaker stamps
-one `<title>` into every file.
+Titles resolve from the first source that has one: the file's first TOC label
+(EPUB3 nav document, else NCX), the file's first `<h1>`–`<h3>`, the file's
+`<title>`, then `"Chapter {n}"`. A `<title>` shared verbatim by three or more
+chapters, equal to the book's own title, or beginning "The Project Gutenberg
+eBook" is a template rather than a name and is skipped — Gutenberg's
+Ebookmaker stamps one `<title>` into every file. A whole title wrapped in one
+pair of straight or curly double quotes (`"Cover"`) has the pair stripped.
+
+### Classification
+
+`matter` is decided by the first signal that names the file:
+
+1. Book-level landmarks (`<nav epub:type="landmarks">` anchors) and, for
+   EPUB2, the OPF `<guide>`: `bodymatter`/`text` start Body, `backmatter`
+   starts Back, `cover` is Cover, and `frontmatter`/`titlepage`/`toc`/
+   `copyright-page` are Front. Landmarks win over the guide.
+2. The document's own `epub:type` (on `<body>` or the first `<section>`,
+   scanned in the file's first 8 KB).
+3. Cover shape: a file with an `<img>` or `<svg>` and under 40 characters of
+   visible text (Gutenberg's `wrap0000.html`).
+4. Title heuristics, applied only to the run of files before the first Body
+   file (front titles) and the trailing run after the last Body file (back
+   titles): "Introduction" after chapter 3 stays Body, and "Prologue" is
+   never Front by title.
+5. Position: Body begins at the first file not classified Cover/Front by
+   2–4; Back is the maximal trailing run classified Back by 2–4.
+
+A file whose section label starts with `part`, `book`, `volume`, or
+`chapter`, or with a number or Roman numeral ("1. Fyodor", "IV. The
+Fourth"), is Body regardless of the title heuristics. A book with no Body
+files at all becomes Body from its first non-Cover file.
 
 ### `chapters_version`
 
 `chapters_version` in `meta.json` records which parser produced `chapters`
-(absent means 0). When the library scan finds a book below the current
-version it re-parses the retained `source.epub`, rewrites `chapters`, and
-bumps the field. The spine is unchanged by a re-parse, so keys keep pointing
-at the same notes and reading position; only titles and fragments improve. A
-missing or corrupt `source.epub` leaves the book exactly as it was.
+(absent means 0; 1 added TOC-derived titles and fragments; 2 added `matter`,
+`level`, and `sections`). When the library scan finds a book below the
+current version it re-parses the retained `source.epub`, rewrites
+`chapters`, and bumps the field. The spine is unchanged by a re-parse, so
+keys keep pointing at the same notes and reading position; only the outline
+metadata improves. A missing or corrupt `source.epub` leaves the book
+exactly as it was.
 
 Notes keep the chapter title captured when they were saved, so the compiled
 notes page and export prefer the spine's title for a matching key and fall
