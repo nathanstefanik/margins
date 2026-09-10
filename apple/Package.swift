@@ -105,6 +105,13 @@ let package = Package(
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             ]
         ),
+        // Parity harness driver (step 6): runs the scripted sequence of the
+        // Rust example `crates/margins-core/examples/parity.rs` against the
+        // Swift core. Temporary — deleted with the Rust core in step 7.
+        .executableTarget(
+            name: "parity",
+            dependencies: ["MarginsKernel"]
+        ),
         // Tests for the hand-written Swift core (step 2+). Grows the
         // Fixtures resource bundle when the ported fixtures land in step 3.
         // Still depends on MarginsCore for the bridge smoke test, which

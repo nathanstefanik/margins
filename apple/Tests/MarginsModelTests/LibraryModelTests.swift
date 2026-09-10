@@ -23,10 +23,12 @@ struct LibraryModelTests {
         let fixtures = try fixtureEpubs()
         #expect(!fixtures.isEmpty, "expected at least one fixtures/*.epub")
 
-        let model = LibraryModel(dataDir: try makeTempDataDir())
-        await model.activate()
-
         for fixture in fixtures {
+            // A fresh library per fixture: each import is the first one it
+            // has ever seen.
+            let model = LibraryModel(dataDir: try makeTempDataDir())
+            await model.activate()
+
             let imported = await model.importEpub(atPath: fixture)
             #expect(imported, "import failed: \(model.errorMessage ?? "no error")")
             #expect(model.errorMessage == nil)

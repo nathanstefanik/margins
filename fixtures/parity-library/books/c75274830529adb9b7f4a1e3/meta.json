@@ -1,0 +1,711 @@
+{
+  "id": "c75274830529adb9b7f4a1e3",
+  "title": "The Brothers Karamazov",
+  "author": "Fyodor Dostoyevsky",
+  "language": "en",
+  "added_at": "2026-09-10T20:47:05.132304Z",
+  "source_filename": "dostoyevsky_the_karamazov_brothers.epub",
+  "chapters": [
+    {
+      "key": "001",
+      "index": 0,
+      "title": "\"Cover\"",
+      "href": "OEBPS/wrap0000.html"
+    },
+    {
+      "key": "002",
+      "index": 1,
+      "title": "The Brothers Karamazov",
+      "href": "OEBPS/6223507695723140907_28054-h-0.htm.html",
+      "fragment": "pgepubid00000"
+    },
+    {
+      "key": "003",
+      "index": 2,
+      "title": "PART I",
+      "href": "OEBPS/6223507695723140907_28054-h-1.htm.html",
+      "fragment": "pgepubid00005"
+    },
+    {
+      "key": "004",
+      "index": 3,
+      "title": "Chapter I. Fyodor Pavlovitch Karamazov",
+      "href": "OEBPS/6223507695723140907_28054-h-2.htm.html",
+      "fragment": "pgepubid00007"
+    },
+    {
+      "key": "005",
+      "index": 4,
+      "title": "Chapter II. He Gets Rid Of His Eldest Son",
+      "href": "OEBPS/6223507695723140907_28054-h-3.htm.html",
+      "fragment": "pgepubid00008"
+    },
+    {
+      "key": "006",
+      "index": 5,
+      "title": "Chapter III. The Second Marriage And The Second Family",
+      "href": "OEBPS/6223507695723140907_28054-h-4.htm.html",
+      "fragment": "pgepubid00009"
+    },
+    {
+      "key": "007",
+      "index": 6,
+      "title": "Chapter IV. The Third Son, Alyosha",
+      "href": "OEBPS/6223507695723140907_28054-h-5.htm.html",
+      "fragment": "pgepubid00010"
+    },
+    {
+      "key": "008",
+      "index": 7,
+      "title": "Chapter V. Elders",
+      "href": "OEBPS/6223507695723140907_28054-h-6.htm.html",
+      "fragment": "pgepubid00011"
+    },
+    {
+      "key": "009",
+      "index": 8,
+      "title": "Book II. An Unfortunate Gathering",
+      "href": "OEBPS/6223507695723140907_28054-h-7.htm.html",
+      "fragment": "pgepubid00012"
+    },
+    {
+      "key": "010",
+      "index": 9,
+      "title": "Chapter II. The Old Buffoon",
+      "href": "OEBPS/6223507695723140907_28054-h-8.htm.html",
+      "fragment": "pgepubid00014"
+    },
+    {
+      "key": "011",
+      "index": 10,
+      "title": "Chapter III. Peasant Women Who Have Faith",
+      "href": "OEBPS/6223507695723140907_28054-h-9.htm.html",
+      "fragment": "pgepubid00015"
+    },
+    {
+      "key": "012",
+      "index": 11,
+      "title": "Chapter IV. A Lady Of Little Faith",
+      "href": "OEBPS/6223507695723140907_28054-h-10.htm.html",
+      "fragment": "pgepubid00016"
+    },
+    {
+      "key": "013",
+      "index": 12,
+      "title": "Chapter V. So Be It! So Be It!",
+      "href": "OEBPS/6223507695723140907_28054-h-11.htm.html",
+      "fragment": "pgepubid00017"
+    },
+    {
+      "key": "014",
+      "index": 13,
+      "title": "Chapter VI. Why Is Such A Man Alive?",
+      "href": "OEBPS/6223507695723140907_28054-h-12.htm.html",
+      "fragment": "pgepubid00018"
+    },
+    {
+      "key": "015",
+      "index": 14,
+      "title": "Chapter VII. A Young Man Bent On A Career",
+      "href": "OEBPS/6223507695723140907_28054-h-13.htm.html",
+      "fragment": "pgepubid00019"
+    },
+    {
+      "key": "016",
+      "index": 15,
+      "title": "Chapter VIII. The Scandalous Scene",
+      "href": "OEBPS/6223507695723140907_28054-h-14.htm.html",
+      "fragment": "pgepubid00020"
+    },
+    {
+      "key": "017",
+      "index": 16,
+      "title": "Book III. The Sensualists",
+      "href": "OEBPS/6223507695723140907_28054-h-15.htm.html",
+      "fragment": "pgepubid00021"
+    },
+    {
+      "key": "018",
+      "index": 17,
+      "title": "Chapter II. Lizaveta",
+      "href": "OEBPS/6223507695723140907_28054-h-16.htm.html",
+      "fragment": "pgepubid00023"
+    },
+    {
+      "key": "019",
+      "index": 18,
+      "title": "Chapter III. The Confession Of A Passionate Heart—In Verse",
+      "href": "OEBPS/6223507695723140907_28054-h-17.htm.html",
+      "fragment": "pgepubid00024"
+    },
+    {
+      "key": "020",
+      "index": 19,
+      "title": "Chapter IV. The Confession Of A Passionate Heart—In Anecdote",
+      "href": "OEBPS/6223507695723140907_28054-h-18.htm.html",
+      "fragment": "pgepubid00025"
+    },
+    {
+      "key": "021",
+      "index": 20,
+      "title": "Chapter V. The Confession Of A Passionate Heart—“Heels Up”",
+      "href": "OEBPS/6223507695723140907_28054-h-19.htm.html",
+      "fragment": "pgepubid00026"
+    },
+    {
+      "key": "022",
+      "index": 21,
+      "title": "Chapter VI. Smerdyakov",
+      "href": "OEBPS/6223507695723140907_28054-h-20.htm.html",
+      "fragment": "pgepubid00027"
+    },
+    {
+      "key": "023",
+      "index": 22,
+      "title": "Chapter VII. The Controversy",
+      "href": "OEBPS/6223507695723140907_28054-h-21.htm.html",
+      "fragment": "pgepubid00028"
+    },
+    {
+      "key": "024",
+      "index": 23,
+      "title": "Chapter VIII. Over The Brandy",
+      "href": "OEBPS/6223507695723140907_28054-h-22.htm.html",
+      "fragment": "pgepubid00029"
+    },
+    {
+      "key": "025",
+      "index": 24,
+      "title": "Chapter IX. The Sensualists",
+      "href": "OEBPS/6223507695723140907_28054-h-23.htm.html",
+      "fragment": "pgepubid00030"
+    },
+    {
+      "key": "026",
+      "index": 25,
+      "title": "Chapter X. Both Together",
+      "href": "OEBPS/6223507695723140907_28054-h-24.htm.html",
+      "fragment": "pgepubid00031"
+    },
+    {
+      "key": "027",
+      "index": 26,
+      "title": "Chapter XI. Another Reputation Ruined",
+      "href": "OEBPS/6223507695723140907_28054-h-25.htm.html",
+      "fragment": "pgepubid00032"
+    },
+    {
+      "key": "028",
+      "index": 27,
+      "title": "PART II",
+      "href": "OEBPS/6223507695723140907_28054-h-26.htm.html",
+      "fragment": "pgepubid00033"
+    },
+    {
+      "key": "029",
+      "index": 28,
+      "title": "Chapter II. At His Father’s",
+      "href": "OEBPS/6223507695723140907_28054-h-27.htm.html",
+      "fragment": "pgepubid00036"
+    },
+    {
+      "key": "030",
+      "index": 29,
+      "title": "Chapter III. A Meeting With The Schoolboys",
+      "href": "OEBPS/6223507695723140907_28054-h-28.htm.html",
+      "fragment": "pgepubid00037"
+    },
+    {
+      "key": "031",
+      "index": 30,
+      "title": "Chapter IV. At The Hohlakovs’",
+      "href": "OEBPS/6223507695723140907_28054-h-29.htm.html",
+      "fragment": "pgepubid00038"
+    },
+    {
+      "key": "032",
+      "index": 31,
+      "title": "Chapter V. A Laceration In The Drawing-Room",
+      "href": "OEBPS/6223507695723140907_28054-h-30.htm.html",
+      "fragment": "pgepubid00039"
+    },
+    {
+      "key": "033",
+      "index": 32,
+      "title": "Chapter VI. A Laceration In The Cottage",
+      "href": "OEBPS/6223507695723140907_28054-h-31.htm.html",
+      "fragment": "pgepubid00040"
+    },
+    {
+      "key": "034",
+      "index": 33,
+      "title": "Chapter VII. And In The Open Air",
+      "href": "OEBPS/6223507695723140907_28054-h-32.htm.html",
+      "fragment": "pgepubid00041"
+    },
+    {
+      "key": "035",
+      "index": 34,
+      "title": "Book V. Pro And Contra",
+      "href": "OEBPS/6223507695723140907_28054-h-33.htm.html",
+      "fragment": "pgepubid00042"
+    },
+    {
+      "key": "036",
+      "index": 35,
+      "title": "Chapter II. Smerdyakov With A Guitar",
+      "href": "OEBPS/6223507695723140907_28054-h-34.htm.html",
+      "fragment": "pgepubid00044"
+    },
+    {
+      "key": "037",
+      "index": 36,
+      "title": "Chapter III. The Brothers Make Friends",
+      "href": "OEBPS/6223507695723140907_28054-h-35.htm.html",
+      "fragment": "pgepubid00045"
+    },
+    {
+      "key": "038",
+      "index": 37,
+      "title": "Chapter IV. Rebellion",
+      "href": "OEBPS/6223507695723140907_28054-h-36.htm.html",
+      "fragment": "pgepubid00046"
+    },
+    {
+      "key": "039",
+      "index": 38,
+      "title": "Chapter V. The Grand Inquisitor",
+      "href": "OEBPS/6223507695723140907_28054-h-37.htm.html",
+      "fragment": "pgepubid00047"
+    },
+    {
+      "key": "040",
+      "index": 39,
+      "title": "Chapter VI. For Awhile A Very Obscure One",
+      "href": "OEBPS/6223507695723140907_28054-h-38.htm.html",
+      "fragment": "pgepubid00048"
+    },
+    {
+      "key": "041",
+      "index": 40,
+      "title": "Chapter VII. “It’s Always Worth While Speaking To A Clever Man”",
+      "href": "OEBPS/6223507695723140907_28054-h-39.htm.html",
+      "fragment": "pgepubid00049"
+    },
+    {
+      "key": "042",
+      "index": 41,
+      "title": "Book VI. The Russian Monk",
+      "href": "OEBPS/6223507695723140907_28054-h-40.htm.html",
+      "fragment": "pgepubid00050"
+    },
+    {
+      "key": "043",
+      "index": 42,
+      "title": "Chapter II. The Duel",
+      "href": "OEBPS/6223507695723140907_28054-h-41.htm.html",
+      "fragment": "pgepubid00052"
+    },
+    {
+      "key": "044",
+      "index": 43,
+      "title": "Chapter III. Conversations And Exhortations Of Father Zossima",
+      "href": "OEBPS/6223507695723140907_28054-h-42.htm.html",
+      "fragment": "pgepubid00053"
+    },
+    {
+      "key": "045",
+      "index": 44,
+      "title": "PART III",
+      "href": "OEBPS/6223507695723140907_28054-h-43.htm.html",
+      "fragment": "pgepubid00054"
+    },
+    {
+      "key": "046",
+      "index": 45,
+      "title": "Chapter II. A Critical Moment",
+      "href": "OEBPS/6223507695723140907_28054-h-44.htm.html",
+      "fragment": "pgepubid00057"
+    },
+    {
+      "key": "047",
+      "index": 46,
+      "title": "Chapter III. An Onion",
+      "href": "OEBPS/6223507695723140907_28054-h-45.htm.html",
+      "fragment": "pgepubid00058"
+    },
+    {
+      "key": "048",
+      "index": 47,
+      "title": "Chapter IV. Cana Of Galilee",
+      "href": "OEBPS/6223507695723140907_28054-h-46.htm.html",
+      "fragment": "pgepubid00059"
+    },
+    {
+      "key": "049",
+      "index": 48,
+      "title": "Book VIII. Mitya",
+      "href": "OEBPS/6223507695723140907_28054-h-47.htm.html",
+      "fragment": "pgepubid00060"
+    },
+    {
+      "key": "050",
+      "index": 49,
+      "title": "Chapter II. Lyagavy",
+      "href": "OEBPS/6223507695723140907_28054-h-48.htm.html",
+      "fragment": "pgepubid00062"
+    },
+    {
+      "key": "051",
+      "index": 50,
+      "title": "Chapter III. Gold-Mines",
+      "href": "OEBPS/6223507695723140907_28054-h-49.htm.html",
+      "fragment": "pgepubid00063"
+    },
+    {
+      "key": "052",
+      "index": 51,
+      "title": "Chapter IV. In The Dark",
+      "href": "OEBPS/6223507695723140907_28054-h-50.htm.html",
+      "fragment": "pgepubid00064"
+    },
+    {
+      "key": "053",
+      "index": 52,
+      "title": "Chapter V. A Sudden Resolution",
+      "href": "OEBPS/6223507695723140907_28054-h-51.htm.html",
+      "fragment": "pgepubid00065"
+    },
+    {
+      "key": "054",
+      "index": 53,
+      "title": "Chapter VI. “I Am Coming, Too!”",
+      "href": "OEBPS/6223507695723140907_28054-h-52.htm.html",
+      "fragment": "pgepubid00066"
+    },
+    {
+      "key": "055",
+      "index": 54,
+      "title": "Chapter VII. The First And Rightful Lover",
+      "href": "OEBPS/6223507695723140907_28054-h-53.htm.html",
+      "fragment": "pgepubid00067"
+    },
+    {
+      "key": "056",
+      "index": 55,
+      "title": "Chapter VIII. Delirium",
+      "href": "OEBPS/6223507695723140907_28054-h-54.htm.html",
+      "fragment": "pgepubid00068"
+    },
+    {
+      "key": "057",
+      "index": 56,
+      "title": "Book IX. The Preliminary Investigation",
+      "href": "OEBPS/6223507695723140907_28054-h-55.htm.html",
+      "fragment": "pgepubid00069"
+    },
+    {
+      "key": "058",
+      "index": 57,
+      "title": "Chapter II. The Alarm",
+      "href": "OEBPS/6223507695723140907_28054-h-56.htm.html",
+      "fragment": "pgepubid00071"
+    },
+    {
+      "key": "059",
+      "index": 58,
+      "title": "Chapter III. The Sufferings Of A Soul, The First Ordeal",
+      "href": "OEBPS/6223507695723140907_28054-h-57.htm.html",
+      "fragment": "pgepubid00072"
+    },
+    {
+      "key": "060",
+      "index": 59,
+      "title": "Chapter IV. The Second Ordeal",
+      "href": "OEBPS/6223507695723140907_28054-h-58.htm.html",
+      "fragment": "pgepubid00073"
+    },
+    {
+      "key": "061",
+      "index": 60,
+      "title": "Chapter V. The Third Ordeal",
+      "href": "OEBPS/6223507695723140907_28054-h-59.htm.html",
+      "fragment": "pgepubid00074"
+    },
+    {
+      "key": "062",
+      "index": 61,
+      "title": "Chapter VI. The Prosecutor Catches Mitya",
+      "href": "OEBPS/6223507695723140907_28054-h-60.htm.html",
+      "fragment": "pgepubid00075"
+    },
+    {
+      "key": "063",
+      "index": 62,
+      "title": "Chapter VII. Mitya’s Great Secret. Received With Hisses",
+      "href": "OEBPS/6223507695723140907_28054-h-61.htm.html",
+      "fragment": "pgepubid00076"
+    },
+    {
+      "key": "064",
+      "index": 63,
+      "title": "Chapter VIII. The Evidence Of The Witnesses. The Babe",
+      "href": "OEBPS/6223507695723140907_28054-h-62.htm.html",
+      "fragment": "pgepubid00077"
+    },
+    {
+      "key": "065",
+      "index": 64,
+      "title": "Chapter IX. They Carry Mitya Away",
+      "href": "OEBPS/6223507695723140907_28054-h-63.htm.html",
+      "fragment": "pgepubid00078"
+    },
+    {
+      "key": "066",
+      "index": 65,
+      "title": "PART IV",
+      "href": "OEBPS/6223507695723140907_28054-h-64.htm.html",
+      "fragment": "pgepubid00079"
+    },
+    {
+      "key": "067",
+      "index": 66,
+      "title": "Chapter II. Children",
+      "href": "OEBPS/6223507695723140907_28054-h-65.htm.html",
+      "fragment": "pgepubid00082"
+    },
+    {
+      "key": "068",
+      "index": 67,
+      "title": "Chapter III. The Schoolboy",
+      "href": "OEBPS/6223507695723140907_28054-h-66.htm.html",
+      "fragment": "pgepubid00083"
+    },
+    {
+      "key": "069",
+      "index": 68,
+      "title": "Chapter IV. The Lost Dog",
+      "href": "OEBPS/6223507695723140907_28054-h-67.htm.html",
+      "fragment": "pgepubid00084"
+    },
+    {
+      "key": "070",
+      "index": 69,
+      "title": "Chapter V. By Ilusha’s Bedside",
+      "href": "OEBPS/6223507695723140907_28054-h-68.htm.html",
+      "fragment": "pgepubid00085"
+    },
+    {
+      "key": "071",
+      "index": 70,
+      "title": "Chapter VI. Precocity",
+      "href": "OEBPS/6223507695723140907_28054-h-69.htm.html",
+      "fragment": "pgepubid00086"
+    },
+    {
+      "key": "072",
+      "index": 71,
+      "title": "Chapter VII. Ilusha",
+      "href": "OEBPS/6223507695723140907_28054-h-70.htm.html",
+      "fragment": "pgepubid00087"
+    },
+    {
+      "key": "073",
+      "index": 72,
+      "title": "Book XI. Ivan",
+      "href": "OEBPS/6223507695723140907_28054-h-71.htm.html",
+      "fragment": "pgepubid00088"
+    },
+    {
+      "key": "074",
+      "index": 73,
+      "title": "Chapter II. The Injured Foot",
+      "href": "OEBPS/6223507695723140907_28054-h-72.htm.html",
+      "fragment": "pgepubid00090"
+    },
+    {
+      "key": "075",
+      "index": 74,
+      "title": "Chapter III. A Little Demon",
+      "href": "OEBPS/6223507695723140907_28054-h-73.htm.html",
+      "fragment": "pgepubid00091"
+    },
+    {
+      "key": "076",
+      "index": 75,
+      "title": "Chapter IV. A Hymn And A Secret",
+      "href": "OEBPS/6223507695723140907_28054-h-74.htm.html",
+      "fragment": "pgepubid00092"
+    },
+    {
+      "key": "077",
+      "index": 76,
+      "title": "Chapter V. Not You, Not You!",
+      "href": "OEBPS/6223507695723140907_28054-h-75.htm.html",
+      "fragment": "pgepubid00093"
+    },
+    {
+      "key": "078",
+      "index": 77,
+      "title": "Chapter VI. The First Interview With Smerdyakov",
+      "href": "OEBPS/6223507695723140907_28054-h-76.htm.html",
+      "fragment": "pgepubid00094"
+    },
+    {
+      "key": "079",
+      "index": 78,
+      "title": "Chapter VII. The Second Visit To Smerdyakov",
+      "href": "OEBPS/6223507695723140907_28054-h-77.htm.html",
+      "fragment": "pgepubid00095"
+    },
+    {
+      "key": "080",
+      "index": 79,
+      "title": "Chapter VIII. The Third And Last Interview With Smerdyakov",
+      "href": "OEBPS/6223507695723140907_28054-h-78.htm.html",
+      "fragment": "pgepubid00096"
+    },
+    {
+      "key": "081",
+      "index": 80,
+      "title": "Chapter IX. The Devil. Ivan’s Nightmare",
+      "href": "OEBPS/6223507695723140907_28054-h-79.htm.html",
+      "fragment": "pgepubid00097"
+    },
+    {
+      "key": "082",
+      "index": 81,
+      "title": "Chapter X. “It Was He Who Said That”",
+      "href": "OEBPS/6223507695723140907_28054-h-80.htm.html",
+      "fragment": "pgepubid00098"
+    },
+    {
+      "key": "083",
+      "index": 82,
+      "title": "Book XII. A Judicial Error",
+      "href": "OEBPS/6223507695723140907_28054-h-81.htm.html",
+      "fragment": "pgepubid00099"
+    },
+    {
+      "key": "084",
+      "index": 83,
+      "title": "Chapter II. Dangerous Witnesses",
+      "href": "OEBPS/6223507695723140907_28054-h-82.htm.html",
+      "fragment": "pgepubid00101"
+    },
+    {
+      "key": "085",
+      "index": 84,
+      "title": "Chapter III. The Medical Experts And A Pound Of Nuts",
+      "href": "OEBPS/6223507695723140907_28054-h-83.htm.html",
+      "fragment": "pgepubid00102"
+    },
+    {
+      "key": "086",
+      "index": 85,
+      "title": "Chapter IV. Fortune Smiles On Mitya",
+      "href": "OEBPS/6223507695723140907_28054-h-84.htm.html",
+      "fragment": "pgepubid00103"
+    },
+    {
+      "key": "087",
+      "index": 86,
+      "title": "Chapter V. A Sudden Catastrophe",
+      "href": "OEBPS/6223507695723140907_28054-h-85.htm.html",
+      "fragment": "pgepubid00104"
+    },
+    {
+      "key": "088",
+      "index": 87,
+      "title": "Chapter VI. The Prosecutor’s Speech. Sketches Of Character",
+      "href": "OEBPS/6223507695723140907_28054-h-86.htm.html",
+      "fragment": "pgepubid00105"
+    },
+    {
+      "key": "089",
+      "index": 88,
+      "title": "Chapter VII. An Historical Survey",
+      "href": "OEBPS/6223507695723140907_28054-h-87.htm.html",
+      "fragment": "pgepubid00106"
+    },
+    {
+      "key": "090",
+      "index": 89,
+      "title": "Chapter VIII. A Treatise On Smerdyakov",
+      "href": "OEBPS/6223507695723140907_28054-h-88.htm.html",
+      "fragment": "pgepubid00107"
+    },
+    {
+      "key": "091",
+      "index": 90,
+      "title": "Chapter IX. The Galloping Troika. The End Of The Prosecutor’s Speech.",
+      "href": "OEBPS/6223507695723140907_28054-h-89.htm.html",
+      "fragment": "pgepubid00108"
+    },
+    {
+      "key": "092",
+      "index": 91,
+      "title": "Chapter X. The Speech For The Defense. An Argument That Cuts Both Ways",
+      "href": "OEBPS/6223507695723140907_28054-h-90.htm.html",
+      "fragment": "pgepubid00109"
+    },
+    {
+      "key": "093",
+      "index": 92,
+      "title": "Chapter XI. There Was No Money. There Was No Robbery",
+      "href": "OEBPS/6223507695723140907_28054-h-91.htm.html",
+      "fragment": "pgepubid00110"
+    },
+    {
+      "key": "094",
+      "index": 93,
+      "title": "Chapter XII. And There Was No Murder Either",
+      "href": "OEBPS/6223507695723140907_28054-h-92.htm.html",
+      "fragment": "pgepubid00111"
+    },
+    {
+      "key": "095",
+      "index": 94,
+      "title": "Chapter XIII. A Corrupter Of Thought",
+      "href": "OEBPS/6223507695723140907_28054-h-93.htm.html",
+      "fragment": "pgepubid00112"
+    },
+    {
+      "key": "096",
+      "index": 95,
+      "title": "Chapter XIV. The Peasants Stand Firm",
+      "href": "OEBPS/6223507695723140907_28054-h-94.htm.html",
+      "fragment": "pgepubid00113"
+    },
+    {
+      "key": "097",
+      "index": 96,
+      "title": "EPILOGUE",
+      "href": "OEBPS/6223507695723140907_28054-h-95.htm.html",
+      "fragment": "pgepubid00114"
+    },
+    {
+      "key": "098",
+      "index": 97,
+      "title": "Chapter II. For A Moment The Lie Becomes Truth",
+      "href": "OEBPS/6223507695723140907_28054-h-96.htm.html",
+      "fragment": "pgepubid00116"
+    },
+    {
+      "key": "099",
+      "index": 98,
+      "title": "Chapter III. Ilusha’s Funeral. The Speech At The Stone",
+      "href": "OEBPS/6223507695723140907_28054-h-97.htm.html",
+      "fragment": "pgepubid00117"
+    },
+    {
+      "key": "100",
+      "index": 99,
+      "title": "FOOTNOTES",
+      "href": "OEBPS/6223507695723140907_28054-h-98.htm.html",
+      "fragment": "pgepubid00118"
+    }
+  ],
+  "cover": "cover.png",
+  "chapters_version": 1
+}
