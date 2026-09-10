@@ -24,8 +24,9 @@ make run         # assemble and open build/Margins.app (needs full Xcode)
 ## Apple apps (macOS + iOS)
 
 Native SwiftUI frontends sharing the same Swift core through one SwiftPM
-package (`apple/`; see [docs/architecture.md](docs/architecture.md) and
-[docs/ios-plan.md](docs/ios-plan.md)).
+package (`apple/`; see [docs/architecture.md](docs/architecture.md) for the
+module map and [docs/ios-plan.md](docs/ios-plan.md) for the historical iOS
+build-out).
 
 Requirements:
 
@@ -42,8 +43,8 @@ make ios-build   # build the iOS app for the simulator (no signing)
 
 The iOS app itself builds from `apple/ios/Margins.xcodeproj` (open in Xcode,
 or `xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins -destination
-'platform=iOS Simulator,name=iPhone 17 Pro'`). See
-[docs/ios-plan.md](docs/ios-plan.md) for the phased status.
+'platform=iOS Simulator,name=iPhone 17 Pro'`). [docs/ios-plan.md](docs/ios-plan.md)
+is the historical build-out, kept for reference.
 
 **iOS TestFlight/App Store release**: the app record must exist in App Store
 Connect first (bundle ID `io.github.nathanstefanik.margins`, registered with
@@ -105,15 +106,21 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 
 ## Status
 
-Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architecture.md](docs/architecture.md) (shape).
+Roadmap detail: [docs/architecture.md](docs/architecture.md) (shape);
+[docs/apple-only-plan.md](docs/apple-only-plan.md) records the migration
+that produced it.
 
 **Done**
 
-- Swift core: library, EPUB parsing, notes, marks, search, markdown export
+- Swift core: library, EPUB parsing, notes, marks, search, markdown export,
+  chapter classification (`matter`, outline `level`, per-file `sections`)
 - macOS SwiftUI app: library, paginated reader, notes pane, compiled notes
   page, search overlay, keyboard-first control
+- Structured **chapter outline** on macOS and iOS: front/back matter in
+  collapsed groups, Part/Book headings, body chapters numbered from one;
+  every TOC entry in a multi-chapter file is its own row
 - Anchored **marks** in chapter notes (parse/serialize/CRUD in the core,
-  rendered in both desktop frontends, lossless round-trip)
+  rendered in both apps, lossless round-trip)
 - Shared Apple SwiftPM package over one Swift core (macOS + iOS)
 - iOS app skeleton + **Library scene**: cover grid, document-picker import,
   delete with confirmation, notes search; iCloud Documents library root with

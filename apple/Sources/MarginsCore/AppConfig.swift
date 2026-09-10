@@ -104,7 +104,7 @@ public struct AppConfig: Sendable {
             ?? dataDir.appendingPathComponent("library")
     }
 
-    /// An environment path, treating empty as unset the way the Rust core did.
+    /// An environment path, treating empty as unset the way the legacy core did.
     private static func environmentPath(_ name: String) -> String? {
         guard let value = ProcessInfo.processInfo.environment[name], !value.isEmpty else {
             return nil

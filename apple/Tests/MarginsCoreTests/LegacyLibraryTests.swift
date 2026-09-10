@@ -2,12 +2,13 @@ import Foundation
 @testable import MarginsCore
 import Testing
 
-/// Read-compatibility with files the Rust core wrote before it was deleted
+/// Read-compatibility with files the legacy core wrote before the port
 /// (docs/apple-only-plan.md Phase 2 step 7 kept `Fixtures/legacy-library/`
-/// for exactly this): a library seeded by `margins-core` with the Karamazov
+/// for exactly this): a library seeded by the legacy core with the Karamazov
 /// fixture, two notes with marks, and a saved position. The Swift core must
 /// open it as-is — same ids, titles, notes, marks, positions, search
-/// results — because users' existing libraries were written by Rust.
+/// results — because users' existing libraries were written by the legacy
+/// core.
 @Suite("Legacy library")
 struct LegacyLibraryTests {
     private static func openLegacyLibrary() throws -> (Library, String) {
@@ -20,10 +21,10 @@ struct LegacyLibraryTests {
         return (library, summaries[0].id)
     }
 
-    @Test("the catalog lists the Rust-imported book with its id and metadata")
+    @Test("the catalog lists the legacy-imported book with its id and metadata")
     func catalog() throws {
         let (library, id) = try Self.openLegacyLibrary()
-        #expect(id == "c75274830529adb9b7f4a1e3", "the id is the content hash the Rust core computed")
+        #expect(id == "c75274830529adb9b7f4a1e3", "the id is the content hash the legacy core computed")
 
         let meta = try library.getBook(id: id)
         #expect(meta.title == "The Brothers Karamazov")
@@ -33,7 +34,7 @@ struct LegacyLibraryTests {
         #expect(meta.progressPercent == 25.0, "the seeded position feeds the catalog")
     }
 
-    @Test("notes written by the Rust core load with their marks")
+    @Test("notes written by the legacy core load with their marks")
     func notes() throws {
         let (library, id) = try Self.openLegacyLibrary()
         let index = try Notes.readIndex(bookDir: library.bookDir(id))
@@ -57,7 +58,7 @@ struct LegacyLibraryTests {
         #expect(position.percent == 25.0)
     }
 
-    @Test("compiling and rendering agree with what the Rust core stored")
+    @Test("compiling and rendering agree with what the legacy core stored")
     func compileAndRender() throws {
         let (library, id) = try Self.openLegacyLibrary()
         let compiled = try Compile.bookNotes(bookDir: library.bookDir(id))
@@ -78,7 +79,7 @@ struct LegacyLibraryTests {
         #expect(render.contains("*— Sep 10, 2026*"))
     }
 
-    @Test("search over the Rust-written notes")
+    @Test("search over the legacy-written notes")
     func search() throws {
         let (library, id) = try Self.openLegacyLibrary()
         let hits = library.searchNotes(query: "xylophone")

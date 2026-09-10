@@ -2,16 +2,16 @@ import Foundation
 @testable import MarginsCore
 import Testing
 
-/// Translated from `crates/margins-core/src/notes.rs`'s test module, plus
-/// golden files the Rust core wrote before it was deleted. The theme running
-/// through the marks tests is that a save must never rewrite a mark it was
-/// not asked to touch — including through a file rename.
+/// Translated from the legacy core's notes test module, plus golden files
+/// the legacy core wrote before the port. The theme running through the marks
+/// tests is that a save must never rewrite a mark it was not asked to touch —
+/// including through a file rename.
 @Suite("Notes")
 struct NotesTests {
     // MARK: Harness
 
     /// A book directory with `meta.json`, an empty notes index, and one
-    /// chapter — the Rust suite's `seed_book`.
+    /// chapter — the legacy suite's `seed_book`.
     private struct Book {
         let dir: String
         let chapter: ChapterMeta
@@ -449,7 +449,7 @@ struct NotesTests {
 
     // MARK: Golden files
 
-    @Test("note files the Rust core wrote parse to the right values")
+    @Test("note files the legacy core wrote parse to the right values")
     func goldenNoteFilesParse() throws {
         let book = try Fixtures.copiedDirectory("notes/book").path
 
@@ -483,7 +483,7 @@ struct NotesTests {
         #expect(anchored.frontmatter.chapterTitle == "A Title: With / Punctuation!")
     }
 
-    @Test("re-saving a Rust-written note reproduces the file")
+    @Test("re-saving a legacy-written note reproduces the file")
     func goldenNoteFilesReEmit() throws {
         let book = try Fixtures.copiedDirectory("notes/book").path
         let meta = try Notes.readMeta(bookDir: book)

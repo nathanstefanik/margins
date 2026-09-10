@@ -3,18 +3,18 @@ import MarginsCore
 import Testing
 
 /// The model layer's on-disk contract (docs/apple-only-plan.md Phase 2
-/// step 2). The Swift core has to read libraries the Rust core wrote and
-/// write files the Rust core would accept, so these tests pin coding keys,
-/// serde's defaults and omissions, and the timestamp format rather than
-/// merely round-tripping Swift values through Swift.
+/// step 2). The Swift core has to read libraries the legacy core wrote and
+/// write files it would accept, so these tests pin coding keys, the legacy
+/// defaults and omissions, and the timestamp format rather than merely
+/// round-tripping Swift values through Swift.
 @Suite("Models")
 struct ModelsTests {
     // MARK: Timestamps
 
-    @Test("RFC3339 parses every fractional width chrono emits, and drops a zero fraction")
+    @Test("RFC3339 parses every fractional width the legacy core emits, and drops a zero fraction")
     func parsesEveryFractionalWidth() throws {
-        // chrono serializes with SecondsFormat::AutoSi, which trims trailing
-        // zeros to 0, 3, 6, or 9 digits, so all four widths exist on disk.
+        // The legacy writer trims trailing zeros to 0, 3, 6, or 9 digits, so
+        // all four widths exist on disk.
         let widths = [
             "2026-09-05T14:02:11Z",
             "2026-09-05T14:02:11.000Z",
@@ -32,8 +32,7 @@ struct ModelsTests {
         let millis = try #require(RFC3339.date(from: "2026-09-05T14:02:11.123456789Z"))
         #expect(RFC3339.string(from: millis) == "2026-09-05T14:02:11.123Z")
 
-        // `to_rfc3339()` — what the UniFFI bridge handed the apps — wrote a
-        // numeric offset instead of `Z`.
+        // The legacy bridge wrote a numeric offset instead of `Z`.
         let offset = try #require(RFC3339.date(from: "2026-09-05T16:02:11+02:00"))
         #expect(RFC3339.string(from: offset) == "2026-09-05T14:02:11Z")
     }
@@ -74,8 +73,8 @@ struct ModelsTests {
 
     // MARK: meta.json
 
-    @Test("meta.json written by the Rust core decodes")
-    func decodesRustMetaJson() throws {
+    @Test("meta.json written by the legacy core decodes")
+    func decodesLegacyMetaJson() throws {
         let meta = try MarginsJSON.decode(BookMeta.self, from: Data(Self.metaJSON.utf8))
 
         #expect(meta.id == "a1b2c3d4e5f6a1b2c3d4e5f6")
@@ -194,7 +193,7 @@ struct ModelsTests {
         }
         """
         // Keys happen to be alphabetical already, so the encoder reproduces
-        // the file the Rust core wrote byte for byte.
+        // the file the legacy core wrote byte for byte.
         let position = try MarginsJSON.decode(ReadingPosition.self, from: Data(raw.utf8))
         #expect(position.chapterKey == "002")
         #expect(position.percent == 42.5)
@@ -369,7 +368,7 @@ struct ModelsTests {
         #expect(hit.titleRanges.isEmpty)
     }
 
-    @Test("export defaults match the Rust Default impl")
+    @Test("export defaults match the legacy defaults")
     func exportDefaults() {
         let options = ExportOptions.default
         #expect(options.includeToc)

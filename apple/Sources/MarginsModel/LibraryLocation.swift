@@ -6,7 +6,7 @@ import Foundation
 /// no paid team, not signed into iCloud — it falls back to local
 /// `Documents/Library` **at runtime**, never at build time.
 ///
-/// Everything the Rust core must not know about iCloud lives here:
+/// Everything the core must not know about iCloud lives here:
 /// materializing evicted placeholders before the core reads a path, and
 /// conflict detection for note files (last-writer-wins governs content;
 /// conflicts are surfaced, never silently discarded).

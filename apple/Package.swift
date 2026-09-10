@@ -58,8 +58,7 @@ let package = Package(
             dependencies: ["MarginsCore", "MarginsModel"]
         ),
         // Tests for the core, including the read-compatibility fixture the
-        // Rust core wrote before it was deleted
-        // (Fixtures/legacy-library/).
+        // pre-Swift core wrote before the port (Fixtures/legacy-library/).
         .testTarget(
             name: "MarginsCoreTests",
             dependencies: ["MarginsCore"],

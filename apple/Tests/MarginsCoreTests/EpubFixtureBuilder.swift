@@ -1,10 +1,9 @@
 import Foundation
 import ZIPFoundation
 
-/// Builds minimal EPUBs in memory, translated from
-/// `crates/margins-core/src/test_fixtures.rs`. The labels in each TOC
-/// deliberately differ from the chapters' `<title>` tags so a test can tell
-/// which source a title came from.
+/// Builds minimal EPUBs in memory, translated from the legacy core's test
+/// fixtures. The labels in each TOC deliberately differ from the chapters'
+/// `<title>` tags so a test can tell which source a title came from.
 enum EpubFixtureBuilder {
     /// Which cover declaration the sample EPUB should carry.
     enum SampleCover {

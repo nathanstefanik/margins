@@ -1,9 +1,10 @@
 import Foundation
 
-// Rust `str` semantics the port leans on. Swift has near equivalents, but
-// the gaps are exactly where a faithful port goes wrong: `split(separator:)`
-// yields a trailing empty slice where `str::lines()` yields none, and
-// Foundation trims whole `CharacterSet`s with no one-sided variant.
+// The legacy core's `str` semantics the port leans on. Swift has near
+// equivalents, but the gaps are exactly where a faithful port goes wrong:
+// `split(separator:)` yields a trailing empty slice where `str::lines()`
+// yields none, and Foundation trims whole `CharacterSet`s with no one-sided
+// variant.
 
 extension StringProtocol where SubSequence == Substring {
     /// `str::lines()`: splits on `\n`, drops a trailing `\r` from each line,

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 /// Files under `Tests/MarginsCoreTests/Fixtures/`, copied into the test
-/// bundle. Most of them were written by the Rust core before it was deleted
+/// bundle. Most of them were written by the legacy core before the port
 /// (docs/apple-only-plan.md Phase 2 step 3) and act as golden files: the
 /// Swift core must read them and re-emit them unchanged.
 enum Fixtures {

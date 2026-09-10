@@ -312,7 +312,7 @@ public enum Notes {
         }
         let afterOpen = raw.index(raw.startIndex, offsetBy: 4)
         // The first `\n---` after the opening fence closes it, matching the
-        // non-greedy Rust regex; the newline after it, if any, is the fence's.
+        // non-greedy legacy regex; the newline after it, if any, is the fence's.
         guard let close = raw.range(of: "\n---", range: afterOpen..<raw.endIndex) else {
             throw CoreError.notes("note file missing YAML frontmatter")
         }

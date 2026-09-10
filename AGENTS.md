@@ -40,7 +40,7 @@ apple/                 # shared Apple SwiftPM package (macOS + iOS)
   Sources/Margins/     # macOS SwiftUI views, reader webview glue, key routing
   Tests/               # MarginsModelTests + MarginsCoreTests (Swift Testing);
                        # MarginsCoreTests/Fixtures/legacy-library/ is a library
-                       # written by the pre-Swift Rust core — keep it reading
+                       # written by the pre-Swift core — keep it reading
   ios/                 # iOS app: Margins.xcodeproj + SwiftUI scenes
 scripts/               # make-app.sh, bump-version.sh, bump-build.sh,
                        # vendor-reader.sh
@@ -69,9 +69,8 @@ make app-universal  # universal (arm64 + x86_64) build/Margins.app; needs full X
 make bump VERSION=x.y.z  # bump version everywhere, commit, tag vx.y.z
 ```
 
-Everything needs **full Xcode** (26.x): the iOS SDK for `ios-build`/iOS
-targets, and `swift test` silently runs nothing under a CLT-only
-toolchain. The iOS library root lives in the iCloud Documents container
+Everything needs **full Xcode** (26.x): the iOS SDK for `ios-build` and the
+iOS targets. The iOS library root lives in the iCloud Documents container
 when available, falling back to local `Documents/Library` at runtime
 (`LibraryLocation`); DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`,
 `MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`) drive simulator
@@ -85,4 +84,4 @@ Tests use Swift Testing (`import Testing`) via the
 
 ## Agent tasks
 
-When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding keybindings, update the README (both frontends). When changing the `CoreStore` surface, keep the method list and labels the apps call — check `MarginsModel`, both frontends, and the tests.
+When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding macOS keybindings, update the README table and `KeyHelp.swift` (the iOS app has no vim keymap). When changing the `CoreStore` surface, keep the method list and labels the apps call — check `MarginsModel`, both apps (macOS + iOS), and the tests.

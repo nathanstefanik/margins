@@ -1,38 +1,37 @@
 import Foundation
 
 // The hand-written Swift core's data model (docs/apple-only-plan.md Phase 2
-// step 2), replacing the UniFFI-generated records in MarginsCore. Type and
-// property names match what the apps already call, so the swap in step 7 is
-// a module rename rather than a rewrite of every call site.
+// step 2), replacing the generated records in MarginsCore. Type and property
+// names match what the apps already call.
 //
 // Two shapes meet here. On disk these types are the JSON/YAML records
 // described in docs/storage.md, so the coding keys are snake_case and the
-// encoders reproduce serde's field order, defaults, and omissions exactly —
-// the Swift core has to read libraries the Rust core wrote. Facing the apps
-// they are the bridge records, which is why `BookSummary`/`BookMeta` also
-// carry the non-persisted `coverPath` the UI binds to.
+// encoders reproduce the legacy core's field order, defaults, and omissions
+// exactly — the Swift core has to read libraries the legacy core wrote.
+// Facing the apps they are the bridge records, which is why
+// `BookSummary`/`BookMeta` also carry the non-persisted `coverPath` the UI
+// binds to.
 //
-// Differences from the Rust models, all deliberate:
+// Deliberate differences from the legacy records:
 //
-// - Counts and indexes are `Int`, not `usize`/`u32`. The FFI widened them to
-//   `UInt32`; Swift call sites are simpler with `Int`.
-// - Timestamps are `Date`, not RFC3339 strings. UniFFI has no chrono type,
-//   so the bridge stringified them and every consumer re-parsed; the core
-//   now hands over real dates.
-// - Every record is `Codable, Sendable, Equatable, Hashable`. Rust derived a
-//   narrower set, but UniFFI synthesized all four on the generated records
-//   and the apps rely on them.
+// - Counts and indexes are `Int`, not the old `usize`/`u32` (the bridge widened
+//   them to `UInt32`); Swift call sites are simpler with `Int`.
+// - Timestamps are `Date`, not RFC3339 strings. The old bridge had no date
+//   type, so it stringified them and every consumer re-parsed; the core now
+//   hands over real dates.
+// - Every record is `Codable, Sendable, Equatable, Hashable`. The legacy
+//   records derived a narrower set, but the generated bridge records exposed
+//   all four and the apps rely on them.
 
 // MARK: - Timestamps
 
 /// RFC3339 codec for the timestamps in `meta.json`, `position.json`,
 /// `_index.json`, and note frontmatter.
 ///
-/// chrono's serde impl writes UTC with a `Z` suffix and `SecondsFormat::
-/// AutoSi` precision, so files written by the Rust core carry 0, 3, 6, or 9
-/// fractional digits. Parsing accepts all of them (and a numeric offset in
-/// place of `Z`, which chrono's `to_rfc3339()` produced across the bridge);
-/// writing always uses three digits.
+/// The legacy core wrote UTC with a `Z` suffix at automatic precision, so
+/// files it wrote carry 0, 3, 6, or 9 fractional digits. Parsing accepts all
+/// of them (and a numeric offset in place of `Z`); writing always uses three
+/// digits.
 public enum RFC3339 {
     private static let whole = Date.ISO8601FormatStyle(
         dateTimeSeparator: .standard,
@@ -41,9 +40,9 @@ public enum RFC3339 {
     )
 
     /// Writes UTC with `Z`, dropping the fractional field when it is zero —
-    /// chrono's `SecondsFormat::AutoSi`, which produced the timestamps in
-    /// docs/storage.md. Sub-second time is written to milliseconds; the Rust
-    /// core wrote up to nanoseconds, so re-saving a file it wrote can
+    /// matching the legacy core and producing the timestamps in
+    /// docs/storage.md. Sub-second time is written to milliseconds; the
+    /// legacy core wrote up to nanoseconds, so re-saving a file it wrote can
     /// shorten a timestamp without changing its meaning.
     public static func string(from date: Date) -> String {
         let (seconds, milliseconds) = split(date)
@@ -54,7 +53,7 @@ public enum RFC3339 {
 
     /// Second precision, the form marks carry in their `at=` attribute
     /// (docs/storage.md). Sub-second time is truncated, not rounded, so the
-    /// result matches chrono's `SecondsFormat::Secs`.
+    /// result matches the legacy core's second precision.
     public static func secondsString(from date: Date) -> String {
         whole.format(Date(timeIntervalSince1970: date.timeIntervalSince1970.rounded(.down)))
     }
@@ -69,9 +68,9 @@ public enum RFC3339 {
         compose(split(Date()))
     }
 
-    /// Reads the widths chrono's `AutoSi` emits (0, 3, 6, or 9 fractional
-    /// digits) as well as the numeric offsets `to_rfc3339()` produced across
-    /// the UniFFI bridge. Precision below a millisecond is discarded.
+    /// Reads the widths the legacy core emitted (0, 3, 6, or 9 fractional
+    /// digits) as well as numeric offsets. Precision below a millisecond is
+    /// discarded.
     public static func date(from raw: String) -> Date? {
         var milliseconds = 0
         var text = raw
@@ -1125,9 +1124,9 @@ public struct CompiledNotes: Codable, Sendable, Equatable, Hashable {
 
 // MARK: - Errors
 
-/// Everything the core can fail with. The Rust build flattened its several
-/// error enums into one UniFFI error carrying a message string; the cases
-/// here restore the origin without changing what callers read, because
+/// Everything the core can fail with. The legacy bridge flattened several
+/// error enums into one error carrying a message string; the cases here
+/// restore the origin without changing what callers read, because
 /// `errorDescription` is still the bare message.
 public enum CoreError: Error, LocalizedError, Sendable, Equatable, Hashable {
     case config(String)

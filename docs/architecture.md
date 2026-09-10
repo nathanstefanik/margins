@@ -1,17 +1,16 @@
 # Margins architecture
 
 Margins is one Swift core with two thin frontends: a native macOS SwiftUI
-app and a native iOS SwiftUI app (see `docs/ios-plan.md`). Both share one
-SwiftPM package. Both render EPUBs with epub.js and write annotations
-as plain files — no database anywhere.
+app and a native iOS SwiftUI app. Both share one SwiftPM package. Both
+render EPUBs with epub.js and write annotations as plain files — no
+database anywhere.
 
 ```
-macOS SwiftUI app ──┐
-   apple/ (Margins) ├─ MarginsCore (Swift, no UI)
-iOS SwiftUI app ────┘
-   apple/ (MarginsIOS)
-        EPUB parsing · library · notes · marks · compile · search
-                     (plain-text storage)
+macOS app (apple/Sources/Margins) ──┐
+                                    ├─ MarginsModel ── MarginsCore (no UI)
+iOS app (apple/ios/Margins) ────────┘   EPUB parsing · library · notes
+                                        marks · compile · search · outline
+                                              (plain-text storage)
 ```
 
 ## The core (`apple/Sources/MarginsCore`)
@@ -52,6 +51,28 @@ Storage stays human-readable on disk; see `docs/storage.md` for the layout.
 Both frontends write notes through the same `Notes` code path, so the
 files are byte-identical regardless of which app wrote them.
 
+## Chapter outline
+
+The core classifies every spine item so a UI can present a book's real
+structure instead of a flat list of files. `Models.swift` carries `Matter`
+(`cover` / `front` / `body` / `back`), a `level`, and a
+`sections: [ChapterSection]` array on `ChapterMeta` — every TOC entry that
+starts inside the file, in reading order. A file holding "Book II" and its
+first chapter therefore has two sections and one shared note key;
+`EpubParser.swift` decides matter from landmarks, per-document
+`epub:type`, cover shape, title heuristics, and finally position, in that
+order. The classification rules and the `chapters_version` upgrade are the
+contract in `docs/storage.md`.
+
+`MarginsModel/ContentsOutline.swift` turns the classified chapters into the
+rows the UIs draw: collapsed front/back matter, body headings, and body
+chapters numbered from one across the whole book. macOS (`BookDetailView`),
+the iOS book detail (`ContentsList`), and the reader's `TOCSheet` all render
+that one outline, so both frontends agree on structure. `ReaderModel.
+bookPercent` tracks the chapter's position in the filtered spine rather than
+its raw index, so filtered/`linear="no"` items cannot push progress past
+100%.
+
 ## The Apple package (`apple/`)
 
 A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
@@ -61,18 +82,20 @@ A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
   non-test dependency is ZIPFoundation.
 - `MarginsModel` — UI-agnostic model layer: `LibraryModel` (catalog,
   selection, import/remove), `ReaderModel` (open book/chapter, notes pane
-  state), `ReaderResource` (scheme-handler routing), `ReaderKeymap`
-  (vim-style key state machine), `LibraryLocation` (iOS library root:
-  iCloud container resolution with runtime fallback, placeholder
-  materialization for reader assets and covers, coordinated staging of
-  picked files, conflict detection). Unit-tested via `MarginsModelTests`.
+  state), `ContentsOutline` (classified chapters → front/body/back rows
+  shared by both apps), `ReaderResource` (scheme-handler routing),
+  `ReaderKeymap` (vim-style key state machine), `LibraryLocation` (iOS
+  library root: iCloud container resolution with runtime fallback,
+  placeholder materialization for reader assets and covers, coordinated
+  staging of picked files, conflict detection). Unit-tested via
+  `MarginsModelTests`.
 - `Margins` — macOS SwiftUI app: library browser, reader (WKWebView +
   epub.js), notes pane, search overlay, keyboard/trackpad routing.
 - `MarginsModelTests` / `MarginsCoreTests` — Swift Testing test targets,
-  run by `swift test` (full Xcode required; a CLT-only toolchain never
-  invokes test bundles). `MarginsCoreTests` carries `Fixtures/legacy-library/`,
-  a library written by the pre-Swift Rust core; the Swift core must open it
-  as-is and produce the same notes, marks, positions, and search results.
+  run by `swift test` (full Xcode required). `MarginsCoreTests` carries
+  `Fixtures/legacy-library/`, a library written by the pre-Swift core; the
+  Swift core must open it as-is and produce the same notes, marks,
+  positions, and search results.
 
 ## The iOS app (`apple/ios/`)
 
@@ -189,6 +212,5 @@ make run         # app + open it
 make ios-build   # build the iOS app for the simulator (no signing)
 ```
 
-Requirements: Xcode 26 (full Xcode — the iOS SDK is needed for the iOS
-build path, and `swift test` silently runs nothing under a CLT-only
-toolchain). CI runs one job on `macos-26` pinned to Xcode 26.6.
+Requirements: full Xcode 26 (the iOS SDK is needed for the iOS build path).
+CI runs one job on `macos-26` pinned to Xcode 26.6.

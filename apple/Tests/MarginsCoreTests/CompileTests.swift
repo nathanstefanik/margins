@@ -2,9 +2,9 @@ import Foundation
 @testable import MarginsCore
 import Testing
 
-/// Translated from `crates/margins-core/src/compile.rs`'s test module. The
-/// snapshot test is the load-bearing one: markdown output must stay
-/// byte-identical to what the Rust core rendered.
+/// Translated from the legacy core's compile test module. The snapshot test
+/// is the load-bearing one: markdown output must stay byte-identical to what
+/// the legacy core rendered.
 @Suite("Compile")
 struct CompileTests {
     // MARK: Harness
@@ -14,7 +14,7 @@ struct CompileTests {
     }
 
     /// A book directory with `meta.json`, an empty notes index, and the
-    /// given spine — the Rust suite's `TestBook`.
+    /// given spine — the legacy suite's `TestBook`.
     private struct TestBook {
         let dir: String
 

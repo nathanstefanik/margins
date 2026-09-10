@@ -2,7 +2,7 @@ import Foundation
 @testable import MarginsCore
 import Testing
 
-/// Translated from `crates/margins-core/src/search.rs`'s test module. Two
+/// Translated from the legacy core's search test module. Two
 /// things are under test throughout: the ranking is deterministic and
 /// explainable, and the warm index never disagrees with a cold scan — notes
 /// edited by an agent or an external editor have to surface on the next

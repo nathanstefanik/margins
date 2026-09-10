@@ -10,11 +10,11 @@ Margins stores everything as plain files under a single library root. The layout
 
 | OS | Default data dir |
 |----|------------------|
-| Linux | `~/.local/share/margins` |
 | macOS | `~/Library/Application Support/margins` |
+| iOS | the app's iCloud Documents container when an iCloud account is available, else local `Documents/Library` (resolved per launch; see `docs/architecture.md`) |
 
 Override the app data directory with `MARGINS_DATA_DIR`, or point `MARGINS_LIBRARY_ROOT` at a
-synced folder. The in-app directory picker (`R` or `:root`) saves the selected path in
+synced folder. The macOS directory picker (`R` or `:root`) saves the selected path in
 `{data_dir}/config.json`; the library files themselves stay under the selected directory. When
 both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
 
@@ -267,12 +267,12 @@ Rules:
   marks only — a typed-in-prose `<!-- margins:marks -->` line starts a
   marks section, so what follows it lives on disk as raw blocks rather
   than in the long-form body.
-- **Blob frontends cannot destroy marks.** `save_chapter_note` treats the
+- **Blob frontends cannot destroy marks.** `saveChapterNote` treats the
   incoming body as authoritative for any marks section it contains (so a
   stale frontend saving back what it loaded — possibly with hand edits —
   still lands those marks); a body without a sentinel leaves the marks on
-  disk untouched. Marks-aware frontends go through `append_mark`,
-  `update_mark`, and `delete_mark` instead of rewriting prose.
+  disk untouched. Marks-aware frontends go through `appendMark`,
+  `updateMark`, and `deleteMark` instead of rewriting prose.
 
 `_index.json` entries carry `mark_count` alongside `word_count` (absent
 field reads as 0 in indexes written before marks existed). `word_count`
@@ -289,7 +289,7 @@ on its next refresh.
 ## Compiled notes page & markdown export
 
 Both frontends can show a per-book **notes page** that compiles every
-chapter note in spine order (`margins-core`'s `compile.rs`, reading
+chapter note in spine order (`MarginsCore/Compile.swift`, reading
 `meta.json` + `notes/_index.json` + the note files). Exports are **derived
 artifacts**: the rendered markdown (`{author} — {title} — notes.md`) is
 written wherever the user chooses and nothing new is stored in the library
@@ -298,9 +298,13 @@ export never loses data.
 
 ## Sync workflow
 
-1. Set the library directory to your sync folder (`R` or `MARGINS_LIBRARY_ROOT`)
-2. Read on machine A; notes write as plain files
-3. Sync folder replicates to machine B or external drive
-4. Use **export** / **import** for one-shot copies without changing root
+1. Point the library root at a synced folder (`MARGINS_LIBRARY_ROOT`, or
+   the macOS directory picker), or let iOS use its iCloud Documents
+   container.
+2. Read on machine A; notes write as plain files.
+3. The sync folder (iCloud, Dropbox, rsync, an external drive) replicates
+   to machine B.
 
-Merge import keeps newer files when timestamps differ.
+On iOS, writes inside the ubiquity container are wrapped in
+`NSFileCoordinator` (`FileStore`) and version conflicts surface as
+`NSFileVersion` conflicts rather than silently overwriting a file.
