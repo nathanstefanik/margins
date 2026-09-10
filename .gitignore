@@ -1,20 +1,45 @@
-# Build output
-/build/
-apple/.build/
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+.TemporaryItems
+*.icloud
 
-# iOS signing (local team ID — never committed)
-apple/ios/Signing.local.xcconfig
-
-# Xcode user state (regenerated on open; never commit)
+# Xcode user state and build byproducts
 xcuserdata/
 *.xcuserstate
-apple/.swiftpm/
-apple/ios/Margins.xcodeproj/project.xcworkspace/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcresult
 
-# Release artifacts (build/Margins.app, DMGs from the release flow)
+# SwiftPM build/cache state. Shared package resolution is tracked
+# (apple/Package.resolved and the iOS project's xcshareddata copy) so
+# builds are reproducible for everyone.
+.build/
+.swiftpm/
+
+# Local build output
+/build/
 *.dmg
 
-# Icon build intermediates (regenerate with scripts/make-icon.swift)
+# Rust build directory. The core left Rust behind, but stale working
+# trees and old checkouts may still hold one — never let it come back.
+target/
+
+# Local signing (team ID — never commit)
+apple/ios/Signing.local.xcconfig
+
+# Regeneration intermediates (scripts/make-icon.swift)
 scripts/assets/Margins.iconset/
 
 # Environment and secrets
@@ -29,18 +54,6 @@ scripts/assets/Margins.iconset/
 .idea/
 *.swp
 *.swo
-*~
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-Icon
-._*
-.Spotlight-V100
-.Trashes
-.TemporaryItems
-*.icloud
 
 # Operator-local agent tooling (do not vendor)
 .agents/
