@@ -107,7 +107,7 @@ struct BookDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        Text("\(meta.chapters.count) chapters · \(summary?.notesCount ?? 0) annotated")
+                        Text("\(ContentsOutline.build(from: meta.chapters).numberedChapterCount) chapters · \(summary?.notesCount ?? 0) annotated")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -135,7 +135,7 @@ struct BookDetailView: View {
                     ContentsList(
                         meta: meta,
                         position: position,
-                        onJump: { jump(to: $0, cfi: $1) }
+                        onJump: { jump(to: $0) }
                     )
                 case .notes:
                     NotesTab(bookID: meta.id, showEmptyChapters: $showEmptyChapters, onJump: { jump(to: $0, cfi: $1) })
@@ -157,6 +157,20 @@ struct BookDetailView: View {
         readerActive = true
     }
 
+    private func jump(to row: OutlineRow) {
+        guard let book = selectedMeta else { return }
+        Task {
+            guard await app.prepareForReading(bookId: book.id) else { return }
+            await library.openPassage(
+                bookId: book.id,
+                chapterKey: row.chapter.key,
+                cfi: nil,
+                fragment: row.jumpFragment
+            )
+            presentReaderIfPending()
+        }
+    }
+
     private func jump(to chapter: ChapterMeta, cfi: String? = nil) {
         guard let book = selectedMeta else { return }
         Task {
@@ -169,76 +183,135 @@ struct BookDetailView: View {
 
 // MARK: Contents
 
-/// The spine: every chapter, with a notes marker (from the notes index)
-/// and a bookmark on the current reading position. Tapping opens the
-/// reader at that chapter. Empty-chapter filtering belongs on Notes.
+/// The shared outline: front matter and back matter in collapsed groups,
+/// body headings and numbered chapters in reading order. Rows carry a notes
+/// marker (from the notes index) and a bookmark on the current reading
+/// position. Tapping opens the reader at the row's chapter and section.
 private struct ContentsList: View {
     let meta: BookMeta
     let position: ReadingPosition?
-    let onJump: (ChapterMeta, String?) -> Void
-
-    private var notedKeys: Set<String> {
-        Set(libraryNotesIndex.map(\.chapterKey))
-    }
+    let onJump: (OutlineRow) -> Void
 
     @Environment(LibraryModel.self) private var library
+    @State private var frontExpanded = false
+    @State private var backExpanded = false
 
-    private var libraryNotesIndex: [NotesIndexEntry] {
-        library.selectedBookNotesIndex
+    private var outline: ContentsOutline {
+        ContentsOutline.build(from: meta.chapters)
+    }
+
+    private var notedKeys: Set<String> {
+        Set(library.selectedBookNotesIndex.map(\.chapterKey))
     }
 
     var body: some View {
-        let chapters = meta.chapters
-        if chapters.isEmpty {
+        if meta.chapters.isEmpty {
             Text("This book has no chapters.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 8)
         } else {
+            let outline = outline
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(chapters, id: \.key) { chapter in
-                    row(chapter)
-                    if chapter.key != chapters.last?.key {
+                if !outline.front.isEmpty {
+                    DisclosureGroup(isExpanded: $frontExpanded) {
+                        ForEach(outline.front) { row in
+                            self.row(row)
+                        }
+                    } label: {
+                        groupLabel("Front matter (\(outline.front.count))")
+                    }
+                    .padding(.vertical, 4)
+                }
+                ForEach(outline.body) { row in
+                    self.row(row)
+                    if row.id != outline.body.last?.id {
                         Divider()
                     }
+                }
+                if !outline.back.isEmpty {
+                    DisclosureGroup(isExpanded: $backExpanded) {
+                        ForEach(outline.back) { row in
+                            self.row(row)
+                        }
+                    } label: {
+                        groupLabel("Back matter (\(outline.back.count))")
+                    }
+                    .padding(.vertical, 4)
                 }
             }
         }
     }
 
-    private func row(_ chapter: ChapterMeta) -> some View {
+    private func groupLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private func row(_ row: OutlineRow) -> some View {
         Button {
-            onJump(chapter, nil)
+            onJump(row)
         } label: {
             HStack(spacing: 12) {
-                Text("\(chapter.index + 1)")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 30, alignment: .trailing)
-                Text(chapter.title)
+                marker(row)
+                title(row)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if notedKeys.contains(chapter.key) {
+                if notedKeys.contains(row.chapter.key) {
                     Image(systemName: "pencil.line")
                         .font(.caption)
                         .foregroundStyle(.tint)
                         .accessibilityLabel("Has notes")
                 }
-                if position?.chapterKey == chapter.key {
+                if position?.chapterKey == row.chapter.key {
                     Image(systemName: "bookmark.fill")
                         .font(.caption)
                         .foregroundStyle(.tint)
                         .accessibilityLabel("Current reading position")
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, row.kind == .matter ? 6 : 8)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(
-            "Chapter \(chapter.index + 1), \(chapter.title)"
-                + (notedKeys.contains(chapter.key) ? ", has notes" : "")
-        )
+        .accessibilityLabel(accessibilityLabel(row))
+    }
+
+    @ViewBuilder
+    private func marker(_ row: OutlineRow) -> some View {
+        switch row.kind {
+        case let .chapter(number):
+            Text("\(number)")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 30, alignment: .trailing)
+        case let .heading(level):
+            Color.clear.frame(width: CGFloat(level) * 12, height: 1)
+        case .matter:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func title(_ row: OutlineRow) -> some View {
+        switch row.kind {
+        case .heading:
+            Text(row.title)
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+        case .chapter:
+            Text(row.title)
+        case .matter:
+            Text(row.title)
+                .font(.callout)
+        }
+    }
+
+    private func accessibilityLabel(_ row: OutlineRow) -> String {
+        let notes = notedKeys.contains(row.chapter.key) ? ", has notes" : ""
+        return row.accessibilityLabel + notes
     }
 }
 

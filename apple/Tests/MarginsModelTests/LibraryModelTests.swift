@@ -48,6 +48,38 @@ struct LibraryModelTests {
         }
     }
 
+    @Test("openPassage carries an outline section fragment through to the reader")
+    @MainActor
+    func openPassageCarriesSectionFragment() async throws {
+        let fixture = repoRoot
+            .appendingPathComponent("fixtures", isDirectory: true)
+            .appendingPathComponent("dostoyevsky_the_karamazov_brothers.epub")
+            .path
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+
+        let book = try #require(model.selectedBook)
+        // A file the TOC names twice, with a real anchor on its later entry.
+        let chapter = try #require(
+            book.chapters.first { $0.sections.count > 1 && $0.sections[1].fragment != nil }
+        )
+        let fragment = try #require(chapter.sections[1].fragment)
+
+        let reader = ReaderModel()
+        model.reader = reader
+        await model.openPassage(
+            bookId: book.id,
+            chapterKey: chapter.key,
+            cfi: nil,
+            fragment: fragment
+        )
+
+        #expect(reader.chapter?.key == chapter.key)
+        #expect(reader.displayTarget == "\(chapter.href)#\(fragment)")
+        #expect(model.pendingReaderPresent)
+    }
+
     @Test("remove clears selection and empties the library")
     @MainActor
     func removeBookClearsSelection() async throws {

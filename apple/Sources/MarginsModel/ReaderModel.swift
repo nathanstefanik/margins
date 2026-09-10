@@ -33,6 +33,11 @@ public final class ReaderModel {
     /// explicit `open(book:chapter:)` jump and on close.
     public private(set) var resumeCfi: String?
 
+    /// Fragment for the current chapter when an outline row targets a
+    /// section other than the chapter's first TOC entry. Cleared whenever
+    /// the chapter changes and by `open(book:chapter:)` without a fragment.
+    public private(set) var jumpFragmentOverride: String?
+
     /// Called (off the main actor) with the book id once the reading
     /// position has settled. Wired at app startup to the library's store.
     public var positionSaver: (@Sendable (String, ReadingPosition) async -> Void)?
@@ -53,13 +58,26 @@ public final class ReaderModel {
     public var isOpen: Bool { book != nil }
 
     /// Opens (or retargets) the reader at a chapter of `book`. An explicit
-    /// jump: any pending resume CFI is discarded.
-    public func open(book: BookMeta, chapter: ChapterMeta) {
+    /// jump: any pending resume CFI is discarded. `fragment` names a section
+    /// inside the chapter's file (an outline row); nil anchors at the
+    /// chapter's own first TOC entry.
+    public func open(book: BookMeta, chapter: ChapterMeta, fragment: String? = nil) {
         flushPositionSave()
         self.book = book
         self.chapter = chapter
+        jumpFragmentOverride = fragment
         resumeCfi = nil
         progress = nil
+    }
+
+    /// Where the renderer should display the current chapter: the overridden
+    /// section anchor when the reader was opened from an outline row, else
+    /// the chapter's own `jumpTarget`.
+    public var displayTarget: String {
+        guard let chapter else { return "" }
+        let fragment = jumpFragmentOverride ?? chapter.fragment
+        guard let fragment, !fragment.isEmpty else { return chapter.href }
+        return "\(chapter.href)#\(fragment)"
     }
 
     /// Arms a CFI resume: the next webview load for this book opens at the
@@ -74,6 +92,7 @@ public final class ReaderModel {
         book = nil
         chapter = nil
         resumeCfi = nil
+        jumpFragmentOverride = nil
         progress = nil
         notesVisible = false
         noteBody = ""
@@ -104,6 +123,7 @@ public final class ReaderModel {
         let target = index + delta
         guard book.chapters.indices.contains(target) else { return nil }
         flushNoteSave()
+        jumpFragmentOverride = nil
         self.chapter = book.chapters[target]
         return self.chapter
     }
@@ -121,6 +141,7 @@ public final class ReaderModel {
         if let href, let book, let match = Self.chapter(forHref: href, in: book) {
             if match.key != chapter?.key {
                 flushNoteSave()
+                jumpFragmentOverride = nil
                 chapter = match
             }
         }

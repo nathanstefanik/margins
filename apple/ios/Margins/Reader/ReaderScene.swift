@@ -91,8 +91,8 @@ struct ReaderScene: View {
             .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $tocPresented) {
-            TOCSheet { chapter in
-                jump(to: chapter)
+            TOCSheet { row in
+                jump(to: row)
             }
             .presentationDetents([.medium, .large])
         }
@@ -403,12 +403,12 @@ struct ReaderScene: View {
         bridge?.pageBack()
     }
 
-    private func jump(to chapter: ChapterMeta) {
+    private func jump(to row: OutlineRow) {
         guard let book = reader.book else { return }
         tocPresented = false
         chromeVisible = false
-        reader.open(book: book, chapter: chapter)
-        bridge?.jumpToChapter(chapter.jumpTarget)
+        reader.open(book: book, chapter: row.chapter, fragment: row.jumpFragment)
+        bridge?.jumpToChapter(reader.displayTarget)
     }
 
     /// Lands on a mark's CFI (or stays put for a page-anchored mark with
@@ -438,8 +438,8 @@ struct ReaderScene: View {
         }
         if let cfi = reader.resumeCfi, !cfi.isEmpty {
             bridge?.jumpToChapter(cfi)
-        } else if let chapter = reader.chapter {
-            bridge?.jumpToChapter(chapter.jumpTarget)
+        } else if reader.chapter != nil {
+            bridge?.jumpToChapter(reader.displayTarget)
         }
         chromeVisible = false
     }
@@ -487,37 +487,88 @@ struct ReaderScene: View {
     #endif
 }
 
-/// Sheet listing the book's spine; tapping jumps the reader there.
+/// Sheet listing the book's outline; tapping a row jumps the reader there,
+/// anchored at the row's own section when its file holds several.
 private struct TOCSheet: View {
     @Environment(ReaderModel.self) private var reader
-    let onPick: (ChapterMeta) -> Void
+    let onPick: (OutlineRow) -> Void
 
     var body: some View {
         NavigationStack {
-            List(reader.book?.chapters ?? []) { chapter in
-                Button {
-                    onPick(chapter)
-                } label: {
-                    HStack {
-                        Text("\(chapter.index + 1)")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .frame(minWidth: 32, alignment: .trailing)
-                        Text(chapter.title)
-                            .lineLimit(2)
-                        Spacer(minLength: 8)
-                        if chapter.key == reader.chapter?.key {
-                            Image(systemName: "bookmark.fill")
-                                .font(.caption)
-                                .foregroundStyle(.tint)
-                                .accessibilityLabel("Current position")
+            List {
+                if let book = reader.book {
+                    let outline = ContentsOutline.build(from: book.chapters)
+                    if !outline.front.isEmpty {
+                        Section("Front matter") {
+                            ForEach(outline.front) { row in
+                                tocRow(row)
+                            }
+                        }
+                    }
+                    ForEach(outline.body) { row in
+                        tocRow(row)
+                    }
+                    if !outline.back.isEmpty {
+                        Section("Back matter") {
+                            ForEach(outline.back) { row in
+                                tocRow(row)
+                            }
                         }
                     }
                 }
-                .foregroundStyle(.primary)
             }
             .navigationTitle("Contents")
             .navigationBarTitleDisplayMode(.inline)
         }
     }
+
+    private func tocRow(_ row: OutlineRow) -> some View {
+        Button {
+            onPick(row)
+        } label: {
+            HStack(spacing: 10) {
+                rowMarker(row)
+                rowTitle(row)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                if row.chapter.key == reader.chapter?.key {
+                    Image(systemName: "bookmark.fill")
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("Current position")
+                }
+            }
+        }
+        .foregroundStyle(.primary)
+        .accessibilityLabel(row.accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private func rowMarker(_ row: OutlineRow) -> some View {
+        switch row.kind {
+        case let .chapter(number):
+            Text("\(number)")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 32, alignment: .trailing)
+        case let .heading(level):
+            Color.clear.frame(width: CGFloat(level) * 10, height: 1)
+        case .matter:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private func rowTitle(_ row: OutlineRow) -> some View {
+        switch row.kind {
+        case .heading:
+            Text(row.title)
+                .font(.caption.weight(.semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
+        case .chapter, .matter:
+            Text(row.title)
+        }
+    }
+
 }

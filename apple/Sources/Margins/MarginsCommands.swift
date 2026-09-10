@@ -34,13 +34,13 @@ struct MarginsCommands: Commands {
             Button("Next Chapter") {
                 guard reader.isOpen, reader.nextChapter() != nil else { return }
                 ReaderController.evaluateInReader(
-                    "readerDisplay(\(ReaderController.javaScriptLiteral(reader.chapter?.jumpTarget ?? "")))"
+                    "readerDisplay(\(ReaderController.javaScriptLiteral(reader.displayTarget)))"
                 )
             }
             Button("Previous Chapter") {
                 guard reader.isOpen, reader.previousChapter() != nil else { return }
                 ReaderController.evaluateInReader(
-                    "readerDisplay(\(ReaderController.javaScriptLiteral(reader.chapter?.jumpTarget ?? "")))"
+                    "readerDisplay(\(ReaderController.javaScriptLiteral(reader.displayTarget)))"
                 )
             }
             Divider()

@@ -11,6 +11,8 @@ struct BookDetailView: View {
     /// for navigating to any chapter) and a "Show Notes" view listing only
     /// the annotated chapters with their stats. Persisted across launches.
     @AppStorage("bookDetailShowsNotes") private var showsNotes = false
+    @State private var frontExpanded = false
+    @State private var backExpanded = false
 
     var body: some View {
         ScrollView {
@@ -80,7 +82,7 @@ struct BookDetailView: View {
             parts.append(language)
         }
         parts.append("Added \(addedText)")
-        parts.append("\(book.chapters.count) chapters")
+        parts.append("\(ContentsOutline.build(from: book.chapters).numberedChapterCount) chapters")
         if let percent = book.progressPercent {
             parts.append("\(Int(percent.rounded()))% read")
         }
@@ -120,16 +122,78 @@ struct BookDetailView: View {
         }
     }
 
-    /// The full spine, plain rows: number and title only.
+    /// The book's outline: parts and books as headings, leaf chapters
+    /// numbered from one, front and back matter in collapsed groups.
     private var chaptersList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(book.chapters) { chapter in
-                chapterRow(chapter)
-                if chapter.key != book.chapters.last?.key {
+        let outline = ContentsOutline.build(from: book.chapters)
+        return VStack(alignment: .leading, spacing: 0) {
+            if !outline.front.isEmpty {
+                DisclosureGroup(isExpanded: $frontExpanded) {
+                    ForEach(outline.front) { row in
+                        outlineRow(row)
+                    }
+                } label: {
+                    matterGroupLabel("Front matter (\(outline.front.count))")
+                }
+                .padding(.vertical, 4)
+            }
+            ForEach(outline.body) { row in
+                outlineRow(row)
+                if row.id != outline.body.last?.id {
                     Divider()
                 }
             }
+            if !outline.back.isEmpty {
+                DisclosureGroup(isExpanded: $backExpanded) {
+                    ForEach(outline.back) { row in
+                        outlineRow(row)
+                    }
+                } label: {
+                    matterGroupLabel("Back matter (\(outline.back.count))")
+                }
+                .padding(.vertical, 4)
+            }
         }
+    }
+
+    private func matterGroupLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private func outlineRow(_ row: OutlineRow) -> some View {
+        Button {
+            openReader(row)
+        } label: {
+            HStack(spacing: 12) {
+                switch row.kind {
+                case let .chapter(number):
+                    Text("\(number)")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 26, alignment: .trailing)
+                    Text(row.title)
+                        .lineLimit(2)
+                        .padding(.vertical, 8)
+                case let .heading(level):
+                    Text(row.title)
+                        .font(.caption.weight(.semibold))
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, CGFloat(level) * 14)
+                        .padding(.vertical, 6)
+                case .matter:
+                    Text(row.title)
+                        .lineLimit(2)
+                        .padding(.vertical, 6)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(row.accessibilityLabel)
     }
 
     /// Only the annotated chapters, in spine order, with their note stats.
@@ -153,24 +217,6 @@ struct BookDetailView: View {
                 }
             }
         }
-    }
-
-    private func chapterRow(_ chapter: ChapterMeta) -> some View {
-        Button {
-            openReader(chapter)
-        } label: {
-            HStack(spacing: 12) {
-                Text("\(chapter.index + 1)")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 26, alignment: .trailing)
-                Text(chapter.title)
-                    .lineLimit(2)
-                    .padding(.vertical, 8)
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
     }
 
     private func noteRow(_ row: LibraryModel.ChapterNoteRow) -> some View {
@@ -202,6 +248,10 @@ struct BookDetailView: View {
             parts.append("updated \(LibraryModel.dateText(updated))")
         }
         return parts.joined(separator: " · ")
+    }
+
+    private func openReader(_ row: OutlineRow) {
+        reader.open(book: book, chapter: row.chapter, fragment: row.jumpFragment)
     }
 
     private func openReader(_ chapter: ChapterMeta) {

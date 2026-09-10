@@ -38,6 +38,26 @@ struct ReaderModelTests {
         #expect(chapter.jumpTarget == "three.xhtml")
     }
 
+    @Test("displayTarget honors an outline section fragment and resets across chapters")
+    func displayTargetUsesSectionFragment() {
+        let reader = ReaderModel()
+        let book = makeBook()
+
+        // An outline row inside a multi-section file opens at its own anchor.
+        reader.open(book: book, chapter: book.chapters[1], fragment: "section-2")
+        #expect(reader.displayTarget == "two.xhtml#section-2")
+
+        // Following the renderer into another chapter clears the override and
+        // falls back to that chapter's own anchor.
+        reader.relocated(page: 1, totalPages: 2, href: "one.xhtml", cfi: nil)
+        #expect(reader.chapter?.key == "ch1")
+        #expect(reader.displayTarget == "one.xhtml")
+
+        // An explicit open without a fragment uses the chapter's own anchor.
+        reader.open(book: book, chapter: book.chapters[1])
+        #expect(reader.displayTarget == "two.xhtml#part-two")
+    }
+
     @Test("relocated still matches chapters by bare href")
     func relocatedMatchesBareHref() {
         // Relocation events carry the section href without a fragment, so a
