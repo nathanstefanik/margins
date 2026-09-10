@@ -51,7 +51,7 @@ public final class Library {
             let name = (path as NSString).lastPathComponent
             guard !name.hasPrefix("."), Files.isDirectory(path) else { continue }
             let metaPath = path.appendingPathComponent("meta.json")
-            guard Files.exists(metaPath) else { continue }
+            guard FileStore.exists(metaPath) else { continue }
 
             var meta = try readMeta(at: metaPath)
             backfillChapters(bookDir: path, meta: &meta)
@@ -76,7 +76,7 @@ public final class Library {
 
     public func getBook(id: String) throws -> BookMeta {
         let metaPath = bookDir(id).appendingPathComponent("meta.json")
-        guard Files.exists(metaPath) else {
+        guard FileStore.exists(metaPath) else {
             throw CoreError.library("book not found: \(id)")
         }
         var meta = try readMeta(at: metaPath)
@@ -96,7 +96,7 @@ public final class Library {
     /// break the library — the reader falls back to chapter 1).
     public func readPosition(bookID: String) -> ReadingPosition? {
         let path = bookDir(bookID).appendingPathComponent("position.json")
-        guard let data = try? Files.readData(path) else { return nil }
+        guard let data = try? FileStore.readData(path) else { return nil }
         return try? MarginsJSON.decode(ReadingPosition.self, from: data)
     }
 
@@ -110,7 +110,7 @@ public final class Library {
         var position = position
         position.percent = min(max(position.percent, 0), 100)
         position.updatedAt = RFC3339.now()
-        try Files.writeData(
+        try FileStore.writeData(
             MarginsJSON.encode(position), to: dir.appendingPathComponent("position.json")
         )
     }
@@ -159,7 +159,7 @@ public final class Library {
         }
         let finalDir = bookDir(bookID)
 
-        if Files.isFile(finalDir.appendingPathComponent("meta.json")),
+        if FileStore.isFile(finalDir.appendingPathComponent("meta.json")),
            Files.isFile(finalDir.appendingPathComponent("source.epub")) {
             let existing = try getBook(id: bookID)
             progress(100, "already-imported")
@@ -203,7 +203,7 @@ public final class Library {
         )
 
         progress(95, "saving")
-        try Files.writeData(
+        try FileStore.writeData(
             MarginsJSON.encode(meta), to: staging.appendingPathComponent("meta.json")
         )
         progress(97, "saving")
@@ -250,7 +250,7 @@ public final class Library {
 
         meta.chapters = info.chapters
         meta.chaptersVersion = Self.chaptersVersion
-        try? Files.writeData(
+        try? FileStore.writeData(
             MarginsJSON.encode(meta), to: bookDir.appendingPathComponent("meta.json")
         )
     }
@@ -271,7 +271,7 @@ public final class Library {
 
         var updated = meta
         updated.cover = name
-        try? Files.writeData(
+        try? FileStore.writeData(
             MarginsJSON.encode(updated), to: bookDir.appendingPathComponent("meta.json")
         )
         return name
@@ -310,7 +310,7 @@ public final class Library {
 
     private func readMeta(at path: String) throws -> BookMeta {
         do {
-            return try MarginsJSON.decode(BookMeta.self, from: Files.readData(path))
+            return try MarginsJSON.decode(BookMeta.self, from: FileStore.readData(path))
         } catch let error as CoreError {
             throw error
         } catch {

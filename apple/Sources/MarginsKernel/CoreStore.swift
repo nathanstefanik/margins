@@ -140,7 +140,7 @@ public actor CoreStore {
     /// The book's notes compiled into one spine-ordered document.
     public func compiledNotes(bookId: String) throws -> CompiledNotes {
         let bookDir = library.bookDir(bookId)
-        guard Files.exists(bookDir.appendingPathComponent("meta.json")) else {
+        guard FileStore.exists(bookDir.appendingPathComponent("meta.json")) else {
             throw CoreError.library("book not found: \(bookId)")
         }
         return try Compile.bookNotes(bookDir: bookDir)
@@ -150,7 +150,7 @@ public actor CoreStore {
     /// `options` of `nil` uses the core defaults.
     public func renderNotesMarkdown(bookId: String, options: ExportOptions?) throws -> String {
         let bookDir = library.bookDir(bookId)
-        guard Files.exists(bookDir.appendingPathComponent("meta.json")) else {
+        guard FileStore.exists(bookDir.appendingPathComponent("meta.json")) else {
             throw CoreError.library("book not found: \(bookId)")
         }
         let compiled = try Compile.bookNotes(bookDir: bookDir)

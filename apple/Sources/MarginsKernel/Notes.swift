@@ -12,7 +12,7 @@ public enum Notes {
     public static func writeEmptyIndex(bookDir: String) throws {
         let notesDir = bookDir.appendingPathComponent("notes")
         try Files.createDirectory(notesDir.appendingPathComponent("chapters"))
-        try Files.writeData(
+        try FileStore.writeData(
             MarginsJSON.encode(NotesIndex(chapters: [])),
             to: notesDir.appendingPathComponent("_index.json")
         )
@@ -24,9 +24,9 @@ public enum Notes {
     /// overwrite the index outright.
     public static func readIndex(bookDir: String) throws -> NotesIndex {
         let path = bookDir.appendingPathComponent("notes/_index.json")
-        guard Files.exists(path) else { return NotesIndex(chapters: []) }
+        guard FileStore.exists(path) else { return NotesIndex(chapters: []) }
         do {
-            return try MarginsJSON.decode(NotesIndex.self, from: Files.readData(path))
+            return try MarginsJSON.decode(NotesIndex.self, from: FileStore.readData(path))
         } catch let error as CoreError {
             throw error
         } catch {
@@ -37,7 +37,7 @@ public enum Notes {
     public static func countNotes(bookDir: String) throws -> Int {
         let chaptersDir = bookDir.appendingPathComponent("notes/chapters")
         guard Files.exists(chaptersDir) else { return 0 }
-        return try Files.contents(ofDirectory: chaptersDir)
+        return try FileStore.contents(ofDirectory: chaptersDir)
             .filter { $0.hasSuffix(".md") }
             .count
     }
@@ -51,9 +51,9 @@ public enum Notes {
         let chaptersDir = bookDir.appendingPathComponent("notes/chapters")
         var removed = 0
         if Files.exists(chaptersDir) {
-            for path in try Files.contents(ofDirectory: chaptersDir)
-            where path.hasSuffix(".md") && Files.isFile(path) {
-                try Files.remove(path)
+            for path in try FileStore.contents(ofDirectory: chaptersDir)
+            where path.hasSuffix(".md") && FileStore.isFile(path) {
+                try FileStore.remove(path)
                 removed += 1
             }
         }
@@ -82,7 +82,7 @@ public enum Notes {
     }
 
     static func parseNoteFile(path: String, chapterKey: String) throws -> ChapterNote {
-        let note = try parseNoteContent(try Files.read(path), chapterKey: chapterKey)
+        let note = try parseNoteContent(try FileStore.read(path), chapterKey: chapterKey)
         return ChapterNote(
             frontmatter: note.frontmatter,
             body: note.body,
@@ -122,15 +122,15 @@ public enum Notes {
         if let previous = try readIndex(bookDir: bookDir).chapters
             .first(where: { $0.chapterKey == chapter.key })?.file {
             let source = notesDir.appendingPathComponent(previous)
-            if previous != relativePath, Files.isFile(source), !Files.exists(path) {
-                try? Files.rename(source, to: path)
+            if previous != relativePath, FileStore.isFile(source), !FileStore.exists(path) {
+                try? FileStore.rename(source, to: path)
             }
         }
 
         // Read from the final path — after the rename above, the index may
         // still point at the old name.
-        let existing = Files.isFile(path)
-            ? try? parseNoteContent(try Files.read(path), chapterKey: chapter.key)
+        let existing = FileStore.isFile(path)
+            ? try? parseNoteContent(try FileStore.read(path), chapterKey: chapter.key)
             : nil
 
         let split = Marks.splitBody(body)
@@ -146,7 +146,7 @@ public enum Notes {
         frontmatter.updatedAt = now
         frontmatter.wordCount = countWords(split.body)
 
-        try Files.write(render(frontmatter: frontmatter, body: split.body, items: items), to: path)
+        try FileStore.write(render(frontmatter: frontmatter, body: split.body, items: items), to: path)
         try upsertIndexEntry(
             bookDir: bookDir,
             chapter: chapter,
@@ -336,7 +336,7 @@ public enum Notes {
     static func readMeta(bookDir: String) throws -> BookMeta {
         let path = bookDir.appendingPathComponent("meta.json")
         do {
-            return try MarginsJSON.decode(BookMeta.self, from: Files.readData(path))
+            return try MarginsJSON.decode(BookMeta.self, from: FileStore.readData(path))
         } catch let error as CoreError {
             throw error
         } catch {
@@ -360,8 +360,8 @@ public enum Notes {
     ) throws -> NoteFile? {
         let path = bookDir.appendingPathComponent("notes")
             .appendingPathComponent(try noteRelativePath(bookDir: bookDir, chapter: chapter))
-        guard Files.isFile(path) else { return nil }
-        return try parseNoteContent(try Files.read(path), chapterKey: chapter.key)
+        guard FileStore.isFile(path) else { return nil }
+        return try parseNoteContent(try FileStore.read(path), chapterKey: chapter.key)
     }
 
     private static func writeNoteFile(
@@ -375,7 +375,7 @@ public enum Notes {
         try Files.createDirectory(notesDir.appendingPathComponent("chapters"))
         let path = notesDir
             .appendingPathComponent(try noteRelativePath(bookDir: bookDir, chapter: chapter))
-        try Files.write(render(frontmatter: frontmatter, body: body, items: items), to: path)
+        try FileStore.write(render(frontmatter: frontmatter, body: body, items: items), to: path)
     }
 
     /// Re-writes a note file after a mark-only mutation: body, word count,
@@ -428,7 +428,7 @@ public enum Notes {
         index.chapters = index.chapters.enumerated()
             .sorted { ($0.element.chapterIndex, $0.offset) < ($1.element.chapterIndex, $1.offset) }
             .map(\.element)
-        try Files.writeData(
+        try FileStore.writeData(
             MarginsJSON.encode(index), to: notesDir.appendingPathComponent("_index.json")
         )
     }
