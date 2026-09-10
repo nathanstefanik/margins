@@ -167,7 +167,6 @@ Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architectur
 **Next**
 
 - Mark-text search
-- TestFlight / App Store + public-repo hygiene: [docs/app-store-plan.md](docs/app-store-plan.md)
 
 ## License
 

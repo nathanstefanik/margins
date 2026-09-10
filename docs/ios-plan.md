@@ -20,9 +20,9 @@ every commit.
   scenes; only genuinely shared pieces (model layer, reader glue, compiled-notes
   rendering helpers) move to shared targets
 - No PDF/HTML export, no sync UI on iOS (sync export/import stays unexposed)
-- TestFlight / App Store distribution is a separate plan:
-  `docs/app-store-plan.md`. This document stops at simulator + ad-hoc
-  device installs.
+- TestFlight / App Store distribution happens through Xcode's Organizer
+  from a Release archive (`make ios-archive`); this document stops at
+  simulator + ad-hoc device installs.
 - No gamification; chrome stays zathura-minimal
 
 ## Answers locked in up front
@@ -495,7 +495,7 @@ Met 2026-09-09. Implementation notes:
 - **Xcode installed but not yet usable** — Xcode 26.6 and the iOS SDKs are on
   disk, but Phases 4–7 stay blocked until its license is accepted and a
   simulator runtime is downloaded (see Environment prerequisite). Both need an
-  admin password, so neither is agent-automatable. Phases 1–3 are unblocked
+  admin password, so neither is scriptable. Phases 1–3 are unblocked
   and verified green.
 - **`binaryTarget` on CLT** — the macOS xcframework slice must link cleanly
   without full Xcode; if SwiftPM balks on CLT, `build-core.sh` keeps a

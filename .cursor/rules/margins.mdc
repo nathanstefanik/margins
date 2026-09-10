@@ -1,9 +1,0 @@
----
-description: Margins EPUB reader development conventions
-alwaysApply: true
----
-
-# Margins development rules
-
-All conventions live in `AGENTS.md` at the repository root: commit
-message prefixes, project map, build commands, and platform notes.

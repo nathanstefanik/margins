@@ -84,8 +84,7 @@ make bump VERSION=x.y.z  # bump version everywhere, commit, tag vx.y.z
 The macOS app builds with Command Line Tools alone. The **iOS app needs
 full Xcode**: `make ios-core` for the xcframework slices, then open
 `apple/ios/Margins.xcodeproj` (or `make ios-build`-style `xcodebuild`) —
-see `docs/ios-plan.md`. TestFlight / App Store and the public-repo
-cleanup that goes with it: `docs/app-store-plan.md`. The iOS library
+see `docs/ios-plan.md`. The iOS library
 root lives in the iCloud Documents container when available, falling
 back to local `Documents/Library` at runtime (`LibraryLocation`);
 DEBUG launch env vars

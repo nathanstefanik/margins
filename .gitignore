@@ -57,6 +57,6 @@ Icon
 .agents/
 .claude/
 .codex/
-.cursor/skills/
+.cursor/
 opencode.json
 skills-lock.json
