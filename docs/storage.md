@@ -29,7 +29,7 @@ both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
       source.epub            # imported copy
       cover.jpg              # extracted cover (extension follows the image type)
       position.json          # reading position (chapter, CFI, percent)
-      README.md              # human/agent orientation
+      README.md              # orientation
       notes/
         _index.json          # machine index of chapter notes
         chapters/
@@ -156,7 +156,7 @@ Your notes on this chapter.
 
 ### Why this shape
 
-- **One file per chapter** — agents can `glob **/*.md` or read `_index.json` first
+- **One file per chapter** — plain text throughout: read `_index.json` first, or `glob **/*.md`
 - **Frontmatter** — structured metadata without a DB; easy to parse in any language
 - **`_index.json`** — O(1) lookup of which chapters have notes and word counts
 - **`index.json`** — library-wide catalog for batch operations

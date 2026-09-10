@@ -1,4 +1,4 @@
-// swift-tools-version:6.0
+// swift-tools-version:6.2
 import PackageDescription
 
 // Shared Apple package: one core, two frontends. MarginsCore/MarginsModel
@@ -18,7 +18,7 @@ let package = Package(
     name: "Margins",
     platforms: [
         .macOS(.v14),
-        .iOS(.v17)
+        .iOS(.v26)
     ],
     // Library products consumed by the iOS app's Xcode project
     // (apple/ios/Margins.xcodeproj); the macOS app links the targets

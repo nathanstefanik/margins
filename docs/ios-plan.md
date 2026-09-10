@@ -20,7 +20,9 @@ every commit.
   scenes; only genuinely shared pieces (model layer, reader glue, compiled-notes
   rendering helpers) move to shared targets
 - No PDF/HTML export, no sync UI on iOS (sync export/import stays unexposed)
-- No App Store submission work — simulator + ad-hoc device installs only
+- TestFlight / App Store distribution happens through Xcode's Organizer
+  from a Release archive (`make ios-archive`); this document stops at
+  simulator + ad-hoc device installs.
 - No gamification; chrome stays zathura-minimal
 
 ## Answers locked in up front
@@ -472,17 +474,6 @@ Met 2026-09-09. Implementation notes:
    from Files, VoiceOver listen-through, and the definition-of-done walk
    (import → read → five marks + one chapter note → Notes scene → export).
 
-## Known limitations
-
-- **Size-class flip rebuilds navigation (iOS)** — the iPhone/iPad branch on
-  `horizontalSizeClass` (`LibraryScene`) swaps a `NavigationStack` for a
-  `NavigationSplitView`, so entering Split View or Slide Over on iPad
-  (regular → compact) rebuilds the whole navigation tree and drops the
-  user's place. A single always-on `NavigationSplitView` would collapse
-  gracefully but would also change the iPhone UX (grid → detail becomes
-  sidebar → detail) and break the pushed-detail DEBUG seams; deferred as a
-  deliberate trade-off.
-
 ## Testing
 
 - **Core**: mark parse/serialize round-trip; blob-frontend save preserves
@@ -504,7 +495,7 @@ Met 2026-09-09. Implementation notes:
 - **Xcode installed but not yet usable** — Xcode 26.6 and the iOS SDKs are on
   disk, but Phases 4–7 stay blocked until its license is accepted and a
   simulator runtime is downloaded (see Environment prerequisite). Both need an
-  admin password, so neither is agent-automatable. Phases 1–3 are unblocked
+  admin password, so neither is scriptable. Phases 1–3 are unblocked
   and verified green.
 - **`binaryTarget` on CLT** — the macOS xcframework slice must link cleanly
   without full Xcode; if SwiftPM balks on CLT, `build-core.sh` keeps a

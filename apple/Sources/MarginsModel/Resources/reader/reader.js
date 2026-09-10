@@ -14,9 +14,21 @@ const readerStartCfi = readerParams.get("cfi");
 
 let readerBook = null;
 let readerRendition = null;
-// Latest typography spec from the shell: {fontSize, lineHeight, lineWidthCh}.
-// Applied as soon as the rendition exists and to every section as it loads.
+// Latest typography spec from the shell: {fontSize, unit, lineHeight,
+// lineWidthCh}. fontSize is a number in `unit` ("%" for macOS, "px" for
+// the iOS ladder) and lands on html with !important; body text is forced
+// to inherit it, because publisher sheets pin `p { font-size: ... }` and
+// would otherwise ignore the root size entirely.
 let readerTypography = null;
+// Chosen typeface key ("serif" | "sans" on iOS), resolved in the webview
+// to the system's New York / SF Pro — nothing is bundled. null (macOS)
+// leaves publisher fonts alone.
+let readerFontFace = null;
+
+const READER_FONT_FACES = {
+  serif: "ui-serif, Georgia, serif",
+  sans: "-apple-system, 'Helvetica Neue', sans-serif",
+};
 // True once the first display finished; relayouts are only queued after that.
 let readerOpened = false;
 let readerRelayoutTimer = null;
@@ -72,9 +84,11 @@ async function readerOpen() {
 
   readerRendition.hooks.content.register(readerPreserveAspectRatio);
   readerRendition.hooks.content.register(readerStyleContents);
-  readerRendition.on("relocated", readerReportRelocated);
   readerRendition.on("rendered", (section, view) => {
     if (view && view.contents && view.contents.document && section && section.href) {
+      // Tap zones before the link handler: both are capture-phase, and the
+      // zone logic must see every click (link taps page AND navigate).
+      readerAttachTapZone(view.contents.document);
       readerAttachLinks(view.contents.document, section.href);
     }
   });
@@ -137,12 +151,19 @@ function readerPreserveAspectRatio(contents) {
 }
 
 // Typography (called from Swift): constrain the text column in the outer
-// page, then style each section's content document. Font size goes on the
-// root (so `rem`-based publisher styles scale) with the body inheriting, so
-// publisher `body` font rules don't win; `!important` inline styles sit in
-// the same layer epub.js itself uses for layout, so nothing accumulates.
-function readerApplyTypography(fontSize, lineHeight, lineWidthCh) {
-  readerTypography = { fontSize: fontSize, lineHeight: lineHeight, lineWidthCh: lineWidthCh };
+// page, then style each section's content document. The size goes on html
+// (so `rem`-based publisher styles scale) and the flow containers are
+// forced to inherit it — epub.js's own theme overrides cannot do this job:
+// their Contents#css writes inline styles on body without !important,
+// which the inherit rule would cancel. The `!important` here sits in the
+// same layer epub.js itself uses for layout, so nothing accumulates.
+function readerApplyTypography(fontSize, lineHeight, lineWidthCh, unit) {
+  readerTypography = {
+    fontSize: fontSize,
+    unit: unit || "%",
+    lineHeight: lineHeight,
+    lineWidthCh: lineWidthCh,
+  };
   readerApplyViewerWidth();
   if (readerRendition) {
     readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
@@ -155,13 +176,12 @@ function readerApplyViewerWidth() {
   if (!viewer || !readerTypography) {
     return;
   }
+  // Measure is independent of font size: a ch is relative to the rendered
+  // glyphs already, so scaling the column by the size used to turn size
+  // steps into measure changes instead of bigger type.
   const width = readerTypography.lineWidthCh;
   if (width > 0) {
-    // Line width is the target measure in characters per line of reading
-    // text, so the column scales with font size: stepping the font size
-    // widens the column rather than shrinking the measure.
-    const scaled = width * (readerTypography.fontSize / 100);
-    viewer.style.maxWidth = `${scaled}ch`;
+    viewer.style.maxWidth = `${width}ch`;
     viewer.style.margin = "0 auto";
   } else {
     viewer.style.maxWidth = "none";
@@ -193,14 +213,49 @@ function readerStyleContents(contents) {
   if (!readerTypography || !contents || !contents.document) {
     return;
   }
-  const doc = contents.document;
-  if (doc.documentElement) {
-    doc.documentElement.style.setProperty("font-size", `${readerTypography.fontSize}%`, "important");
+  // Root size on html; body and the common flow containers forced to
+  // inherit it, so publisher rules like `p { font-size: 14px }` cannot
+  // pin glyphs and ignore the preference.
+  const rules = {
+    html: {
+      "font-size": `${readerTypography.fontSize}${readerTypography.unit} !important`,
+    },
+    // Kills tap delay / double-tap zoom inside the reading surface.
+    "html, body": {
+      "touch-action": "manipulation",
+    },
+    "body, p, li, div": {
+      "font-size": "inherit !important",
+    },
+    body: {
+      "line-height": `${readerTypography.lineHeight} !important`,
+    },
+  };
+  // With a face chosen, html carries the family and everything that
+  // usually pins one inherits it; code/pre keep their monospace.
+  if (readerFontFace) {
+    rules.html["font-family"] = `${READER_FONT_FACES[readerFontFace]} !important`;
+    rules[
+      "body, p, li, div, h1, h2, h3, h4, h5, h6, blockquote, figcaption, td, th, dd, dt"
+    ] = {
+      "font-family": "inherit !important",
+    };
   }
-  const body = contents.content || doc.body;
-  if (body) {
-    body.style.setProperty("font-size", "inherit", "important");
-    body.style.setProperty("line-height", String(readerTypography.lineHeight), "important");
+  contents.addStylesheetRules(rules);
+  console.log(
+    `readerStyleContents: ${readerTypography.fontSize}${readerTypography.unit}` +
+      ` face=${readerFontFace || "publisher"} rules=${Object.keys(rules).length}`,
+  );
+}
+
+// Typeface (called from Swift): a key into READER_FONT_FACES, or anything
+// unknown to leave publisher fonts standing.
+function readerSetFontFace(face) {
+  readerFontFace = Object.prototype.hasOwnProperty.call(READER_FONT_FACES, face) ? face : null;
+  if (readerRendition) {
+    readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
+    // Different glyphs re-break lines; the column count can change.
+    readerQueueRelayout();
   }
 }
 
@@ -222,6 +277,33 @@ function readerReportRelocated(location) {
     page: displayed.page || 1,
     totalPages: displayed.total || 0,
   });
+}
+
+// Tap zones: DOM clicks bridge to the shell through the script message
+// handler (the Apple-documented web→native channel). WKWebView's private
+// tap recognizers starve any UITapGestureRecognizer attached to the
+// container on device, but clicks always fire — links and selection
+// prove the event pipeline. Capture phase, registered before the link
+// handler, so the zone logic sees every click. The click lands in the
+// section iframe, so the x is mapped into the parent viewport (the frame
+// is one wide translated column) against the parent's inner width.
+function readerAttachTapZone(doc) {
+  if (!doc || !doc.defaultView) {
+    return;
+  }
+  doc.addEventListener(
+    "click",
+    (event) => {
+      try {
+        const frame = doc.defaultView.frameElement;
+        const frameLeft = frame ? frame.getBoundingClientRect().left : 0;
+        const parent = doc.defaultView.parent;
+        const width = parent ? parent.innerWidth : 0;
+        readerPost({ type: "tap", x: Math.round(frameLeft + event.clientX), width: Math.round(width) });
+      } catch (error) {}
+    },
+    true,
+  );
 }
 
 // Internal links (TOC pages, cross-references): the shell passes
@@ -468,6 +550,8 @@ window.readerScrollBy = readerScrollBy;
 window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
 window.readerApplyTypography = readerApplyTypography;
+window.readerSetFontFace = readerSetFontFace;
+window.readerRelayout = readerQueueRelayout;
 // Capture support (see readerResolveSpineTarget note): highlight a mark's
 // CFI range (epub.js dedupes by range), collapse the active selection, and
 // hand back the current page's CFI for page-anchored marks.
@@ -504,6 +588,16 @@ window.readerCurrentCfi = function () {
   const location = readerRendition ? readerRendition.currentLocation() : null;
   return location && location.start ? location.start.cfi : null;
 };
+
+// Clicks on the top document itself (viewer padding, error page): the
+// section listeners cannot see them across the frame boundary.
+document.addEventListener(
+  "click",
+  (event) => {
+    readerPost({ type: "tap", x: Math.round(event.clientX), width: Math.round(window.innerWidth) });
+  },
+  true,
+);
 
 readerOpen().catch((error) => {
   var detail;

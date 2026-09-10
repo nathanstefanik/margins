@@ -5,8 +5,12 @@
 #
 # Updates package.json, package-lock.json, src-tauri/tauri.conf.json, the
 # root Cargo.toml [workspace.package] version (inherited by all crates),
-# and Cargo.lock; then creates the annotated tag vX.Y.Z on a dedicated
-# "CHORE Bump version" commit.
+# Cargo.lock, and the iOS MARKETING_VERSION; then creates the annotated
+# tag vX.Y.Z on a dedicated "CHORE Bump version" commit.
+#
+# CURRENT_PROJECT_VERSION (the TestFlight build number) is deliberately
+# NOT touched here: TestFlight rejects reused build numbers, so it is a
+# manual integer bumped by the upload path, not by version tags.
 set -eu
 
 usage() {
@@ -43,8 +47,13 @@ tmp=$(mktemp)
 sed 's/^version = ".*"$/version = "'"$version"'"/' Cargo.toml > "$tmp"
 mv "$tmp" Cargo.toml
 
-for file in Cargo.toml package.json src-tauri/tauri.conf.json; do
-  grep -q "$version" "$file" || {
+# iOS marketing version (both Debug and Release configs).
+ios_proj="apple/ios/Margins.xcodeproj/project.pbxproj"
+sed -E 's/^([[:space:]]*MARKETING_VERSION = ).*;$/\1'"$version"';/' "$ios_proj" > "$tmp"
+mv "$tmp" "$ios_proj"
+
+for file in Cargo.toml package.json src-tauri/tauri.conf.json "$ios_proj"; do
+  grep -q "MARKETING_VERSION = $version;" "$file" 2>/dev/null || grep -q "$version" "$file" || {
     echo "failed to update $file" >&2
     exit 1
   }
@@ -52,7 +61,7 @@ done
 
 cargo update --workspace --quiet
 
-git add Cargo.toml Cargo.lock package.json package-lock.json src-tauri/tauri.conf.json
+git add Cargo.toml Cargo.lock package.json package-lock.json src-tauri/tauri.conf.json "$ios_proj"
 git commit -m "CHORE Bump version to $version"
 git tag -a "v$version" -m "v$version"
 

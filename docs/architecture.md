@@ -2,8 +2,8 @@
 
 Margins is one Rust core with three thin frontends: the original Tauri
 (Linux/desktop) app, a native macOS SwiftUI app, and a native iOS SwiftUI
-app (in progress — see `docs/ios-plan.md`). The Apple targets share one
-SwiftPM package. All of them render EPUBs with epub.js and write annotations
+app (see `docs/ios-plan.md`). The Apple targets share one SwiftPM
+package. All of them render EPUBs with epub.js and write annotations
 as plain files — no database anywhere.
 
 ```
@@ -213,4 +213,4 @@ make mac-run     # mac-app + open it
 Requirements: Rust (stable) and Apple Command Line Tools. `cargo test
 --workspace` must keep passing at all times — the Tauri app is never broken
 by Apple-platform work. The iOS build path (`make ios-core`, Xcode, simulator)
-is described in `docs/ios-plan.md` and `docs/ios-agent-prompt.md`.
+is described in `docs/ios-plan.md`.

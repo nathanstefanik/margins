@@ -1,15 +1,18 @@
-// Generates the Margins app icon: a cream paper page with a body-text
+// Generates the Margins app icons: a cream paper page with a body-text
 // column and a rust-colored margin note — minimal, matching the reader's
 // palette. Run from the repo root:
 //   swift scripts/make-icon.swift scripts/assets
-// Expects scripts/assets to exist; writes Margins.icns there via iconutil.
+// Expects scripts/assets to exist. Writes the macOS Margins.iconset there
+// (via iconutil downstream) and the committed iOS asset catalog at
+// apple/ios/Margins/Assets.xcassets (single 1024 icon, edge-to-edge and
+// opaque — iOS masks corners itself and App Store Connect rejects alpha).
 import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
 let canvas: CGFloat = 1024
-let artwork = CGRect(x: 100, y: 100, width: 824, height: 824) // Big Sur grid
+let macArtwork = CGRect(x: 100, y: 100, width: 824, height: 824) // Big Sur grid
 let cornerRadius: CGFloat = 185.4
 
 // Palette (matches the reading surface: cream paper, ink, warm note).
@@ -18,13 +21,14 @@ let paperBottom = CGColor(red: 0.933, green: 0.918, blue: 0.878, alpha: 1)
 let ink = CGColor(red: 0.067, green: 0.067, blue: 0.067, alpha: 0.85)
 let note = CGColor(red: 0.702, green: 0.333, blue: 0.180, alpha: 0.92)
 
-func drawIcon(scale: CGFloat) -> CGImage {
+func drawIcon(scale: CGFloat, artwork: CGRect, cornerRadius: CGFloat, border: Bool, opaque: Bool) -> CGImage {
     let side = canvas * scale
+    let alphaInfo: CGImageAlphaInfo = opaque ? .noneSkipLast : .premultipliedLast
     let context = CGContext(
         data: nil, width: Int(side), height: Int(side),
         bitsPerComponent: 8, bytesPerRow: 0,
         space: CGColorSpace(name: CGColorSpace.sRGB)!,
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        bitmapInfo: alphaInfo.rawValue
     )!
     context.scaleBy(x: scale, y: scale)
     // Draw with a top-left origin so the design reads like a page.
@@ -41,14 +45,19 @@ func drawIcon(scale: CGFloat) -> CGImage {
         locations: [0, 1]
     )!
     context.drawLinearGradient(
-        gradient, start: CGPoint(x: 512, y: 100), end: CGPoint(x: 512, y: 924), options: []
+        gradient,
+        start: CGPoint(x: artwork.midX, y: artwork.minY),
+        end: CGPoint(x: artwork.midX, y: artwork.maxY),
+        options: []
     )
 
     // Hairline border keeps the paper readable on light backgrounds.
-    context.setStrokeColor(ink.copy(alpha: 0.18)!)
-    context.setLineWidth(3)
-    context.addPath(path)
-    context.strokePath()
+    if border {
+        context.setStrokeColor(ink.copy(alpha: 0.18)!)
+        context.setLineWidth(3)
+        context.addPath(path)
+        context.strokePath()
+    }
 
     // Margin rule at roughly 30% across the page.
     let ruleX = artwork.minX + artwork.width * 0.30
@@ -123,7 +132,45 @@ let sizes: [(name: String, points: CGFloat, scale: CGFloat)] = [
     ("icon_512x512", 512, 1), ("icon_512x512@2x", 512, 2),
 ]
 for spec in sizes {
-    let image = drawIcon(scale: spec.points * spec.scale / canvas)
+    let image = drawIcon(
+        scale: spec.points * spec.scale / canvas,
+        artwork: macArtwork,
+        cornerRadius: cornerRadius,
+        border: true,
+        opaque: false
+    )
     try writePNG(image, to: iconset.appendingPathComponent("\(spec.name).png"))
 }
 print("iconset written to \(iconset.path)")
+
+// iOS: one committed 1024×1024 in an asset catalog, edge-to-edge square
+// (iOS rounds the corners itself) and alpha-free (App Store Connect
+// rejects alpha in marketing icons).
+let appiconset = URL(fileURLWithPath: "apple/ios/Margins/Assets.xcassets/AppIcon.appiconset")
+try FileManager.default.createDirectory(at: appiconset, withIntermediateDirectories: true)
+let iosIcon = drawIcon(scale: 1, artwork: CGRect(x: 0, y: 0, width: canvas, height: canvas), cornerRadius: 0, border: false, opaque: true)
+try writePNG(iosIcon, to: appiconset.appendingPathComponent("icon1024.png"))
+let catalogInfo = #"{"info":{"author":"xcode","version":1}}"#
+try catalogInfo.write(
+    to: appiconset.deletingLastPathComponent().appendingPathComponent("Contents.json"),
+    atomically: true,
+    encoding: .utf8
+)
+let appiconContents = """
+{
+  "images" : [
+    {
+      "filename" : "icon1024.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+"""
+try appiconContents.write(to: appiconset.appendingPathComponent("Contents.json"), atomically: true, encoding: .utf8)
+print("iOS app icon written to \(appiconset.path)")

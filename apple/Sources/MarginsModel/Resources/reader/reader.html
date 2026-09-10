@@ -2,6 +2,10 @@
 <html>
 <head>
 <meta charset="utf-8">
+<!-- Device-width layout: without this, iPhone renders the page at the
+     980px default viewport and scales it down, shrinking every px-based
+     size (the text ladder) and the fixed page margins. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Reader</title>
 <style>
   html, body {
@@ -12,6 +16,11 @@
   }
   #viewer {
     height: 100%;
+    box-sizing: border-box;
+    /* Fixed page margins, not insets: body text clears the running
+       header (chapter title) and footer (page number) that overlay the
+       paper, and showing controls never reflows the page. */
+    padding: 2.2rem 1.4rem 2.0rem;
   }
   pre.reader-error {
     margin: 2rem;

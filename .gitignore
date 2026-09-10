@@ -52,3 +52,11 @@ Icon
 .Trashes
 .TemporaryItems
 *.icloud
+
+# Operator-local agent tooling (do not vendor)
+.agents/
+.claude/
+.codex/
+.cursor/
+opencode.json
+skills-lock.json

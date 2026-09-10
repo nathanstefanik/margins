@@ -1,10 +1,19 @@
-.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run ios-core bump
+.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run ios-core ios-archive bump
 
 core:
 	./scripts/build-core.sh
 
 ios-core:
 	./scripts/build-xcframework.sh
+
+# Release archive for TestFlight upload (sign with Apple Distribution via
+# automatic signing; Xcode Organizer → Distribute App does the upload).
+ios-archive: ios-core
+	xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins \
+		-configuration Release \
+		-destination 'generic/platform=iOS' \
+		-archivePath build/Margins.xcarchive \
+		archive
 
 mac-build: core
 	swift build --package-path apple

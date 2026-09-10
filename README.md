@@ -166,7 +166,7 @@ Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architectur
 
 **Next**
 
-- Mark-text search, App Store packaging decisions
+- Mark-text search
 
 ## License
 

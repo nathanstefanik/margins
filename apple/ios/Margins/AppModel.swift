@@ -16,6 +16,9 @@ final class AppModel {
     let locationSource: LibraryLocation.Source
 
     var locationNotice: String?
+    /// True while an evicted `source.epub` is downloading; the library
+    /// scene shows a quiet overlay so Continue reading is not a blank fail.
+    var isMaterializing = false
 
     init() {
         let location = LibraryLocation()
@@ -63,6 +66,27 @@ final class AppModel {
         #endif
         if library.libraryRoot != root {
             await library.setLibraryRoot(root)
+        }
+    }
+
+    /// Ensures `books/{id}/source.epub` is on disk before the reader
+    /// fetches bytes. Local files pass through; an evicted iCloud item
+    /// downloads (bounded) and surfaces a timeout as `library.errorMessage`.
+    @discardableResult
+    func prepareForReading(bookId: String) async -> Bool {
+        let path = library.sourceEpubPath(for: bookId)
+        let url = URL(fileURLWithPath: path)
+        let evicted = LibraryLocation.hasEvictedPlaceholder(for: url)
+        if evicted {
+            isMaterializing = true
+        }
+        defer { isMaterializing = false }
+        do {
+            _ = try await libraryLocation.materializedPath(for: path)
+            return true
+        } catch {
+            library.errorMessage = error.localizedDescription
+            return false
         }
     }
 
