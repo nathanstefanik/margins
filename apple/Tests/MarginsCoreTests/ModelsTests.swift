@@ -11,7 +11,7 @@ import Testing
 struct ModelsTests {
     // MARK: Timestamps
 
-    @Test("RFC3339 parses every fractional width chrono emits")
+    @Test("RFC3339 parses every fractional width chrono emits, and drops a zero fraction")
     func parsesEveryFractionalWidth() throws {
         // chrono serializes with SecondsFormat::AutoSi, which trims trailing
         // zeros to 0, 3, 6, or 9 digits, so all four widths exist on disk.
@@ -23,7 +23,7 @@ struct ModelsTests {
         ]
         for raw in widths {
             let date = try #require(RFC3339.date(from: raw), "could not parse \(raw)")
-            #expect(RFC3339.string(from: date) == "2026-09-05T14:02:11.000Z")
+            #expect(RFC3339.string(from: date) == "2026-09-05T14:02:11Z")
         }
     }
 
@@ -35,7 +35,7 @@ struct ModelsTests {
         // `to_rfc3339()` — what the UniFFI bridge handed the apps — wrote a
         // numeric offset instead of `Z`.
         let offset = try #require(RFC3339.date(from: "2026-09-05T16:02:11+02:00"))
-        #expect(RFC3339.string(from: offset) == "2026-09-05T14:02:11.000Z")
+        #expect(RFC3339.string(from: offset) == "2026-09-05T14:02:11Z")
     }
 
     @Test("RFC3339 rejects text that is not a timestamp")
@@ -151,7 +151,7 @@ struct ModelsTests {
           "chapter_key" : "002",
           "epub_cfi" : "epubcfi(/6/6!/4/2/1:0)",
           "percent" : 42.5,
-          "updated_at" : "2026-09-02T10:00:00.000Z"
+          "updated_at" : "2026-09-02T10:00:00Z"
         }
         """
         // Keys happen to be alphabetical already, so the encoder reproduces
@@ -229,7 +229,7 @@ struct ModelsTests {
         {
           "books" : [
             {
-              "added_at" : "2026-09-02T10:00:00.000Z",
+              "added_at" : "2026-09-02T10:00:00Z",
               "author" : "Fyodor Dostoevsky",
               "chapter_count" : 42,
               "cover" : "cover.jpg",
@@ -370,7 +370,7 @@ struct ModelsTests {
       "title" : "The Brothers Karamazov",
       "author" : "Fyodor Dostoevsky",
       "language" : "en",
-      "added_at" : "2026-09-02T10:00:00.000Z",
+      "added_at" : "2026-09-02T10:00:00Z",
       "source_filename" : "karamazov.epub",
       "chapters" : [
         {

@@ -45,8 +45,33 @@ public enum RFC3339 {
         includingFractionalSeconds: false
     )
 
+    /// Writes UTC with `Z`, dropping the fractional field when it is zero —
+    /// chrono's `SecondsFormat::AutoSi`, which is what produced the
+    /// timestamps in docs/storage.md. Sub-second time is written to
+    /// milliseconds; the Rust core wrote up to nanoseconds, so re-saving a
+    /// file it wrote can shorten a timestamp without changing its meaning.
     public static func string(from date: Date) -> String {
-        fractional.format(date)
+        let formatted = fractional.format(date)
+        guard let zeroFraction = formatted.range(of: ".000Z") else { return formatted }
+        return formatted.replacingCharacters(in: zeroFraction, with: "Z")
+    }
+
+    /// Second precision, the form marks carry in their `at=` attribute
+    /// (docs/storage.md). Sub-second time is truncated, not rounded, so the
+    /// result matches chrono's `SecondsFormat::Secs`.
+    public static func secondsString(from date: Date) -> String {
+        whole.format(Date(timeIntervalSince1970: date.timeIntervalSince1970.rounded(.down)))
+    }
+
+    /// The current time at the codec's own precision.
+    ///
+    /// `Date` is finer-grained than the three fractional digits written to
+    /// disk, so a raw `Date()` would not compare equal to itself after a
+    /// save and a re-read. Round-tripping it through the codec here means a
+    /// timestamp the core stamps is exactly the timestamp callers read back.
+    public static func now() -> Date {
+        let now = Date()
+        return date(from: string(from: now)) ?? now
     }
 
     public static func date(from raw: String) -> Date? {

@@ -102,7 +102,8 @@ let package = Package(
         // goes away with the bridge.
         .testTarget(
             name: "MarginsCoreTests",
-            dependencies: ["MarginsCore", "MarginsKernel"]
+            dependencies: ["MarginsCore", "MarginsKernel"],
+            resources: [.copy("Fixtures")]
         ),
     ]
 )

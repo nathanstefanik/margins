@@ -1,0 +1,30 @@
+{
+  "id": "a1b2c3d4e5f6a1b2c3d4e5f6",
+  "title": "Sample Book",
+  "author": "Test Author",
+  "language": "en",
+  "added_at": "2026-09-02T10:00:00Z",
+  "source_filename": "sample.epub",
+  "chapters": [
+    {
+      "key": "001",
+      "index": 0,
+      "title": "Introduction",
+      "href": "OEBPS/chapter0.xhtml"
+    },
+    {
+      "key": "002",
+      "index": 1,
+      "title": "The Market",
+      "href": "OEBPS/chapter1.xhtml"
+    },
+    {
+      "key": "003",
+      "index": 2,
+      "title": "A Title: With / Punctuation!",
+      "href": "OEBPS/chapter2.xhtml"
+    }
+  ],
+  "cover": "cover.jpg",
+  "chapters_version": 1
+}
