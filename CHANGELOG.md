@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Tauri/Linux frontend. Margins is macOS and iOS only.
+
 ## [0.1.0] - 2026-09-03
 
 Initial release.

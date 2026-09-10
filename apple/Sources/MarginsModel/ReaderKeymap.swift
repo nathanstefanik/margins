@@ -54,10 +54,10 @@ public enum ReaderAction: Equatable, Sendable {
 /// overflow to scroll); `reader.js` interprets the scroll actions as
 /// `rendition.next()`/`prev()` and top/bottom as first/last page.
 ///
-/// Differences from the Tauri keymap (intentional): the pending-`g` chord
-/// expires after one second, and the second `g` of the chord is handled
-/// correctly (the TS `default:` branch was unreachable because `case "g"`
-/// shadowed it). Typing guards (input/textarea targets) are the caller's
+/// Deliberate choices: the pending-`g` chord expires after one second, and
+/// the second `g` of the chord is handled correctly rather than falling
+/// through to an unreachable default branch. Typing guards (input/textarea
+/// targets) are the caller's
 /// responsibility — the webview and the shell monitor each apply their own.
 @MainActor
 public final class ReaderKeymap {
@@ -136,8 +136,7 @@ public final class ReaderKeymap {
             }
             return []
         case "N":
-            // Book view (reader closed): the compiled notes page. Consistent
-            // with the Tauri app's `N` / `:notes`.
+            // Book view (reader closed): the compiled notes page, on `N`.
             return mode == .library ? [.openBookNotes] : []
         case "t":
             // On the compiled notes page: flip between outline and

@@ -1,9 +1,9 @@
 "use strict";
 
-// Margins reader page: mirrors src/reader.ts from the Tauri frontend. The
-// whole-book EPUB is fetched from the margins-reader:// scheme handler and
-// rendered with epub.js in paginated mode. Swift drives chapter changes and
-// scrolling through the window.reader* functions defined here.
+// Margins reader page. The whole-book EPUB is fetched from the
+// margins-reader:// scheme handler and rendered with epub.js in paginated
+// mode. Swift drives chapter changes and scrolling through the
+// window.reader* functions defined here.
 
 const readerParams = new URLSearchParams(window.location.search);
 const readerBookId = readerParams.get("book");

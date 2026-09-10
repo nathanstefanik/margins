@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 /// The compiled notes export flow: `NSSavePanel` for the destination, then
 /// render through the core and write off the main actor. The default name
-/// comes from the core (`suggested_filename`), shared with the Tauri app.
+/// comes from the core (`suggested_filename`).
 enum ExportNotesPanel {
     @MainActor
     static func run(model: LibraryModel, notes: CompiledNotes) async {

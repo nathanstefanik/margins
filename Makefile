@@ -1,4 +1,4 @@
-.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run ios-core ios-archive ios-bump bump
+.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run ios-core ios-archive ios-bump bump vendor-reader
 
 core:
 	./scripts/build-core.sh
@@ -38,6 +38,11 @@ mac-app-universal:
 
 mac-run: mac-app
 	open build/Margins.app
+
+# Re-download the vendored reader JS (epub.js + jszip) at the pinned
+# versions, verifying sha256 before copying into the resource bundle.
+vendor-reader:
+	./scripts/vendor-reader.sh
 
 bump:
 	./scripts/bump-version.sh $(VERSION)

@@ -1,5 +1,8 @@
 # Development plan: compiled Notes page + markdown export
 
+> Historical. The Tauri frontend referenced below was removed on 2026-09-10
+> (docs/apple-only-plan.md Phase 1).
+
 Status: implemented · Owner: TBD · Last updated: 2026-09-02
 
 ## Goal

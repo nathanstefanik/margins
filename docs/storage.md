@@ -174,7 +174,7 @@ chapter_key: '003'
 ---
 
 The long-form, contemplative chapter note. Unchanged semantics: this is
-exactly what the notes panes and Tauri editor edit.
+exactly what the notes panes edit.
 
 <!-- margins:marks -->
 

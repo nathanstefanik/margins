@@ -1,9 +1,5 @@
-# Dependencies
-node_modules/
-
 # Build output
 target/
-dist/
 /build/
 apple/.build/
 
@@ -24,9 +20,6 @@ apple/Sources/MarginsCore/Generated/
 # Icon build intermediates (regenerate with scripts/make-icon.swift)
 scripts/assets/Margins.iconset/
 
-# Tauri
-src-tauri/WixTools/
-
 # Environment and secrets
 .env
 .env.*
@@ -34,7 +27,6 @@ src-tauri/WixTools/
 
 # Logs
 *.log
-npm-debug.log*
 
 # Editor
 .idea/

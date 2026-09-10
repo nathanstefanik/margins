@@ -26,7 +26,7 @@ struct NotesTests {
         #expect(saved.frontmatter.updatedAt != nil)
 
         // The on-disk file is markdown with YAML frontmatter — the exact
-        // format the Tauri app writes (same core code path).
+        // format the core writes (shared code path).
         let contents = try String(contentsOfFile: saved.path, encoding: .utf8)
         #expect(contents.hasPrefix("---\n"))
         #expect(contents.contains("book_id:"))
