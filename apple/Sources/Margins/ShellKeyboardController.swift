@@ -81,7 +81,7 @@ final class ShellKeyboardController {
 
         if let firstResponder = NSApp.keyWindow?.firstResponder, firstResponder is NSTextView {
             // Typing in a text field stays native — except Esc while writing
-            // a note, which hands focus back to the book (Tauri semantics).
+            // a note, which hands focus back to the book.
             if reader.isOpen, event.keyCode == 53, !modalPanelUp {
                 reader.requestReaderFocus()
                 return nil

@@ -361,7 +361,7 @@ public final class LibraryModel {
     /// Which face of the compiled notes page is showing: the outline
     /// (chapter/title list) or the contents (compiled markdown view).
     /// Lives here (not in view state) so the shell keyboard can flip it
-    /// with `t`, the same way the Tauri keymap does.
+    /// with `t`.
     public enum NotesPageTab: Equatable, Sendable {
         case outline
         case contents

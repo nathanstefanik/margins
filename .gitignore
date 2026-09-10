@@ -1,18 +1,16 @@
-# Dependencies
-node_modules/
-
 # Build output
 target/
-dist/
 /build/
 apple/.build/
 
 # iOS signing (local team ID — never committed)
 apple/ios/Signing.local.xcconfig
 
-# Xcode user state
+# Xcode user state (regenerated on open; never commit)
 xcuserdata/
 *.xcuserstate
+apple/.swiftpm/
+apple/ios/Margins.xcodeproj/project.xcworkspace/
 
 # Generated UniFFI bindings (regenerate with make core)
 apple/Sources/margins_ffiFFI/include/
@@ -24,9 +22,6 @@ apple/Sources/MarginsCore/Generated/
 # Icon build intermediates (regenerate with scripts/make-icon.swift)
 scripts/assets/Margins.iconset/
 
-# Tauri
-src-tauri/WixTools/
-
 # Environment and secrets
 .env
 .env.*
@@ -34,7 +29,6 @@ src-tauri/WixTools/
 
 # Logs
 *.log
-npm-debug.log*
 
 # Editor
 .idea/

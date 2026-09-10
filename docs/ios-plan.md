@@ -1,5 +1,8 @@
 # Development plan: iOS app
 
+> Historical. The Tauri frontend referenced below was removed on 2026-09-10
+> (docs/apple-only-plan.md Phase 1).
+
 Status: All phases (1–7) implemented · remaining: on-device gesture pass (see Phase 7 notes) · Last updated: 2026-09-09
 
 ## Goal

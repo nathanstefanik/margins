@@ -1,6 +1,6 @@
 # Margins — agent guide
 
-EPUB reader with three frontends over one Rust core: Tauri 2 + TypeScript (Linux/desktop), a native SwiftUI macOS app, and an in-progress iOS app — all Apple targets share one SwiftPM package in `apple/`. Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`.
+EPUB reader with two frontends over one Rust core: a native SwiftUI macOS app and an iOS app — all Apple targets share one SwiftPM package in `apple/`. Annotations live on disk as markdown + JSON — see `docs/storage.md`. Frontend architecture: `docs/architecture.md`.
 
 ## Commit messages
 
@@ -26,19 +26,13 @@ DOCS Document library sync workflow
 ## Project map
 
 ```
-crates/margins-core/   # the domain core (no Tauri, no UI)
+crates/margins-core/   # the domain core (no UI)
   config.rs            # data dir / library root from env
   library.rs           # import EPUB, book catalog
   notes.rs             # markdown + YAML frontmatter CRUD
   sync.rs              # export/import library trees
   epub_meta.rs         # EPUB spine/metadata parsing
 crates/margins-ffi/    # UniFFI bridge for Swift (thin)
-src-tauri/src/         # Tauri command layer over the core
-src/                   # Tauri frontend
-  app.ts               # UI orchestration
-  reader.ts            # epub.js wrapper
-  keymaps.ts           # vim-style bindings
-  api.ts               # Tauri invoke wrappers
 apple/                 # shared Apple SwiftPM package (macOS + iOS)
   Package.swift        # targets: MarginsFFI (xcframework), margins_ffiFFI,
                        # MarginsCore, MarginsModel, Margins (macOS app),
@@ -64,10 +58,7 @@ scripts/               # build-core.sh, build-xcframework.sh, make-app.sh
 ## Useful commands
 
 ```bash
-npm install
-npm run tauri dev
-npm run tauri build
-cargo test --workspace        # from the repo root (covers core + tauri)
+cargo test --workspace        # from the repo root (core + ffi)
 
 make core        # rebuild margins-ffi, regenerate Swift bindings, refresh
                  # the macOS slice of build/MarginsFFI.xcframework
@@ -101,4 +92,4 @@ toolchain, so always verify with `make mac-test`.
 
 ## Agent tasks
 
-When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding keybindings, update the README (both frontends) and the footer keybar in `index.html` for the Tauri app. When changing the FFI surface, run `make core` so the Swift bindings regenerate.
+When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding keybindings, update the README (both frontends). When changing the FFI surface, run `make core` so the Swift bindings regenerate.

@@ -57,6 +57,10 @@ has shipped a real release. When resumed: Phase 1 → 2 ship the macOS story,
 Phase 3 → 4 the Linux story (the two tracks are independent and can run in
 parallel). Phase 5 waits on repo traction.
 
+2026-09-10: Phases 3–4 (Linux .deb/.rpm/AUR) are **dropped** with the
+Tauri/Linux frontend (docs/apple-only-plan.md Phase 1); the Linux mentions
+above are historical.
+
 ## Phase 1 — macOS: Developer ID signing + notarization (deferred)
 
 - [ ] Enroll in the Apple Developer Program ($99/yr); create a

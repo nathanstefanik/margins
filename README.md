@@ -1,6 +1,6 @@
 # Margins
 
-Minimal cross-platform EPUB reader (Linux, macOS, iOS) with file-based, AI-friendly annotations.
+Minimal EPUB reader for macOS and iOS with file-based, AI-friendly annotations.
 
 Inspired by zathura's restraint: keyboard-first navigation, no clutter, your library stays on disk in plain formats you can sync, grep, and hand to an agent.
 
@@ -19,15 +19,8 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 ## Quick start
 
 ```bash
-cp .env.example .env   # optional overrides
-npm install
-npm run tauri dev
-```
-
-Build a release binary:
-
-```bash
-npm run tauri build
+make core        # build the Rust core + Swift bindings
+make mac-run     # assemble and open build/Margins.app
 ```
 
 ## Apple apps (macOS + iOS)
@@ -119,33 +112,14 @@ macOS keybindings:
 
 See [docs/storage.md](docs/storage.md) for the on-disk layout.
 
-## Keybindings
-
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Scroll (reader) or move selection (library) |
-| `n` / `p` | Next / previous chapter |
-| `N` | Compiled notes page for the current book (reader) |
-| `t` | Toggle outline / contents views on the notes page |
-| `gg` / `G` | Top / bottom of chapter |
-| `i` | Focus notes editor |
-| `/` | Search notes (library-wide) |
-| `Esc` | Return to reader |
-| `l` | Library |
-| `o` | Import EPUB |
-| `E` | Export library |
-| `R` | Choose the library directory |
-| `Enter` | Open selected book (library) or search hit |
-| `:` | Command mode (`:w` save, `:q` library, `:notes` compiled page, `:search`, `:import`, `:export`, `:root`, `:open 3`) |
-
 ## Status
 
 Roadmap detail: [docs/ios-plan.md](docs/ios-plan.md) (phased), [docs/architecture.md](docs/architecture.md) (shape).
 
 **Done**
 
-- Rust core + Tauri 2 frontend (Linux/desktop): library, reader, notes,
-  search, markdown export, library sync
+- Rust core: library, EPUB parsing, notes, search, markdown export,
+  library sync
 - macOS SwiftUI app: library, paginated reader, notes pane, compiled notes
   page, search overlay, keyboard-first control
 - Anchored **marks** in chapter notes (parse/serialize/CRUD in the core,

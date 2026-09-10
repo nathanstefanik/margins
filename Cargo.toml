@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/margins-core", "crates/margins-ffi", "src-tauri"]
+members = ["crates/margins-core", "crates/margins-ffi"]
 resolver = "2"
 
 [workspace.package]

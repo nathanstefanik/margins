@@ -1,26 +1,23 @@
 # Margins architecture
 
-Margins is one Rust core with three thin frontends: the original Tauri
-(Linux/desktop) app, a native macOS SwiftUI app, and a native iOS SwiftUI
-app (see `docs/ios-plan.md`). The Apple targets share one SwiftPM
-package. All of them render EPUBs with epub.js and write annotations
+Margins is one Rust core with two thin frontends: a native macOS SwiftUI
+app and a native iOS SwiftUI app (see `docs/ios-plan.md`). Both share one
+SwiftPM package. Both render EPUBs with epub.js and write annotations
 as plain files — no database anywhere.
 
 ```
-Linux/Tauri app ── src-tauri (thin #[tauri::command] layer)
-                          │
 macOS SwiftUI app ── crates/margins-ffi (UniFFI, thin)
    apple/ (Margins)       │
 iOS SwiftUI app ── MarginsFFI.xcframework
    apple/ (MarginsIOS)    │
-                   crates/margins-core
-        EPUB parsing · library · notes · search · sync
-             (plain-text storage, no Tauri, no UI)
+                    crates/margins-core
+         EPUB parsing · library · notes · search · sync
+              (plain-text storage, no UI)
 ```
 
 ## The core (`crates/margins-core`)
 
-All domain logic lives here and has **no Tauri dependency**:
+All domain logic lives here and has **no UI dependency**:
 
 - `config.rs` — data dir / library root, from `MARGINS_DATA_DIR` /
   `MARGINS_LIBRARY_ROOT` or platform defaults.
@@ -121,12 +118,12 @@ stays unset in the repo — set it locally for device builds.
 
 ### Reader rendering
 
-The vendored `epub.min.js` + `jszip.min.js` (versions pinned in the root
-`package.json`) plus the hand-written `reader.html`/`reader.js` live in
-**`MarginsModel`'s resource bundle** so the macOS app, the iOS app, and the
-scheme handler serve one identical copy. The page mirrors the Tauri
-frontend's `src/reader.ts`: whole-book bytes in, paginated flow,
-`spread: "none"`. Swift drives it through the `window.reader*` functions
+The vendored `epub.min.js` + `jszip.min.js` (versions pinned in
+`scripts/vendor-reader.sh`) plus the hand-written `reader.html`/`reader.js`
+live in **`MarginsModel`'s resource bundle** so the macOS app, the iOS app, and the
+scheme handler serve one identical copy. The page takes whole-book bytes
+in and renders a paginated flow with `spread: "none"`. Swift drives it
+through the `window.reader*` functions
 via `evaluateJavaScript`; the page reports `relocated` back through the
 `reader` script message handler.
 
@@ -154,7 +151,7 @@ The reader webview loads `margins-reader://app/reader.html?book=<id>`; a
 `read_epub_bytes`). Anything else — traversal, nested paths, unknown names —
 is rejected by the pure `ReaderResource` resolution before any I/O, so there
 is no arbitrary-path or filesystem exposure. EPUB content itself is unzipped
-in JS from the whole-book bytes (same as Tauri), never from disk paths.
+in JS from the whole-book bytes, never from disk paths.
 
 Two response-type rules are load-bearing (both bit us once): `fetch()` needs
 HTTP semantics, so `book.epub` is served as an `HTTPURLResponse` — a plain
@@ -185,7 +182,7 @@ reading. ⌘-combos and text-field typing pass through to menus and inputs.
 
 The notes pane edits the chapter note from `get_chapter_note`; ⌘S / `i`-pane
 Save go through `save_chapter_note`, writing the same markdown+frontmatter
-files as the Tauri app. `/` (or ⌘F) opens the search overlay over
+files as the iOS app. `/` (or ⌘F) opens the search overlay over
 `search_notes`; opening a hit jumps straight to that book/chapter. The
 overlay is non-modal (no sheet window) and `LibraryModel.searchOpen` is the
 single source of truth: the shell key monitor closes it on Esc and clicks
@@ -210,7 +207,8 @@ make mac-app     # assemble build/Margins.app (ad-hoc signed)
 make mac-run     # mac-app + open it
 ```
 
-Requirements: Rust (stable) and Apple Command Line Tools. `cargo test
---workspace` must keep passing at all times — the Tauri app is never broken
-by Apple-platform work. The iOS build path (`make ios-core`, Xcode, simulator)
-is described in `docs/ios-plan.md`.
+Requirements: Rust (stable) and Xcode 26 (full Xcode is now required for
+iOS anyway; CI runs the macOS job on `macos-26` pinned to Xcode 26.6).
+`cargo test --workspace` must keep passing at all times so the Apple apps
+are never broken by core changes. The iOS build path (`make ios-core`,
+Xcode, simulator) is described in `docs/ios-plan.md`.
