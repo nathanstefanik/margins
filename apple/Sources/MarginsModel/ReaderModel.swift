@@ -142,7 +142,9 @@ public final class ReaderModel {
     /// page (with page counts settled, new progress reported) and the new
     /// chapter to be the *immediate successor* — a TOC jump from a last
     /// page to a much later chapter is not finishing the chapter in
-    /// between. Pure so the views and tests share one definition.
+    /// between. Succession is by position in `chapters`, not by raw spine
+    /// index: the list omits `linear="no"` items, so its indexes can have
+    /// gaps. Pure so the views and tests share one definition.
     public nonisolated static func finishedChapter(
         previousKey: String,
         previousProgress: ReaderProgress?,
@@ -155,24 +157,28 @@ public final class ReaderModel {
               previousKey != newKey,
               previousProgress.totalPages > 0,
               previousProgress.page >= previousProgress.totalPages,
-              let finished = chapters.first(where: { $0.key == previousKey }),
-              let newChapter = chapters.first(where: { $0.key == newKey }),
-              newChapter.index == finished.index + 1
+              let finishedIndex = chapters.firstIndex(where: { $0.key == previousKey }),
+              let newIndex = chapters.firstIndex(where: { $0.key == newKey }),
+              newIndex == finishedIndex + 1
         else { return nil }
-        return finished
+        return chapters[finishedIndex]
     }
 
     /// Percent complete for the whole book (0–100), interpolated from the
-    /// chapter index and the page position within the chapter — being on
-    /// page k of m means k/m of the chapter is behind you, so the final
-    /// page of the final chapter reaches exactly 100. Display math only;
-    /// the persisted value is clamped again by the core.
+    /// chapter's position in `book.chapters` and the page position within
+    /// the chapter — being on page k of m means k/m of the chapter is
+    /// behind you, so the final page of the final chapter reaches exactly
+    /// 100. Position in the filtered list, not the raw spine index:
+    /// `linear="no"` items leave gaps that would overshoot. Display math
+    /// only; the persisted value is clamped again by the core.
     public var bookPercent: Double? {
-        guard let book, let chapter, let progress, !book.chapters.isEmpty else { return nil }
+        guard let book, let chapter, let progress,
+              let position = book.chapters.firstIndex(where: { $0.key == chapter.key })
+        else { return nil }
         let fraction = progress.totalPages > 0
             ? Double(progress.page) / Double(progress.totalPages)
             : 0
-        let percent = (Double(chapter.index) + fraction) / Double(book.chapters.count) * 100
+        let percent = (Double(position) + fraction) / Double(book.chapters.count) * 100
         return min(max(percent, 0), 100)
     }
 

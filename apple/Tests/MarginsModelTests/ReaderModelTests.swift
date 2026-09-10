@@ -183,6 +183,35 @@ struct ReaderModelTests {
         #expect(reader.bookPercent == nil)
     }
 
+    @Test("progress and succession follow the filtered chapter list, not raw spine indexes")
+    func filteredSpinePositions() {
+        // "002" was `linear="no"`, so the raw indexes skip: 0, 2. A percent
+        // keyed on the raw index would reach 125% here.
+        let book = BookMeta(
+            id: "book-2", title: "Gappy", author: "Author",
+            addedAt: Date(timeIntervalSince1970: 0), sourceFilename: "gappy.epub",
+            chapters: [
+                ChapterMeta(key: "001", index: 0, title: "One", href: "one.xhtml"),
+                ChapterMeta(key: "003", index: 2, title: "Three", href: "three.xhtml"),
+            ]
+        )
+        let reader = ReaderModel()
+        reader.open(book: book, chapter: book.chapters[1])
+        reader.relocated(page: 5, totalPages: 10, href: nil, cfi: nil)
+        // Position 1 of 2, halfway through: 75%.
+        #expect(abs(reader.bookPercent! - 75.0) < 0.001)
+
+        // The second listed chapter is the first one's immediate successor
+        // even though its raw index skipped a number.
+        #expect(
+            ReaderModel.finishedChapter(
+                previousKey: "001", previousProgress: ReaderProgress(page: 4, totalPages: 4),
+                newKey: "003", newProgress: ReaderProgress(page: 1, totalPages: 9),
+                chapters: book.chapters
+            )?.key == "001"
+        )
+    }
+
     private final class SaveSpy: @unchecked Sendable {
         private let lock = NSLock()
         private var saved: [(String, ReadingPosition)] = []
