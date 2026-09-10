@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 /// The compiled notes page: every chapter note in spine order, with a
@@ -271,7 +271,7 @@ struct NotesPageView: View {
         if !chapter.marks.isEmpty {
             parts.append(MarkDisplay.countText(chapter.marks.count))
         }
-        if let updated = chapter.updatedAt.flatMap(LibraryModel.parseRFC3339) {
+        if let updated = chapter.updatedAt {
             parts.append("updated \(LibraryModel.dateText(updated))")
         }
         return parts.joined(separator: " · ")

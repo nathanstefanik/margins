@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 @Suite("ReaderModel")
@@ -12,7 +12,7 @@ struct ReaderModelTests {
             title: "Test Book",
             author: "Author",
             language: "en",
-            addedAt: "2026-01-01",
+            addedAt: Date(timeIntervalSince1970: 1_767_225_600), // 2026-01-01T00:00:00Z
             sourceFilename: "test.epub",
             chapters: [
                 ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml", fragment: nil),
@@ -200,6 +200,22 @@ struct ReaderModelTests {
         }
     }
 
+    /// Waits for the debounced save to land, then lets a full debounce
+    /// window pass so a collapse bug (extra saves) can still surface. The
+    /// wait is a poll with a generous timeout, not a fixed sleep: parallel
+    /// test load can starve the debounced task past any fixed window.
+    private func settle(
+        until condition: () -> Bool,
+        quietPeriod: Duration = .milliseconds(250),
+        timeout: Duration = .seconds(5)
+    ) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while !condition(), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: quietPeriod)
+    }
+
     @Test("position saves debounce to one latest-wins write")
     func positionSavesDebounce() async throws {
         let spy = SaveSpy()
@@ -215,13 +231,15 @@ struct ReaderModelTests {
         reader.relocated(page: 2, totalPages: 10, href: "one.xhtml", cfi: "cfi-2")
         reader.relocated(page: 3, totalPages: 10, href: "one.xhtml", cfi: "cfi-3")
 
-        try await Task.sleep(for: .milliseconds(250))
+        try await settle { !spy.all.isEmpty }
         let saved = spy.all
         #expect(saved.count == 1)
         #expect(saved.first?.0 == book.id)
         #expect(saved.first?.1.epubCfi == "cfi-3")
         #expect(saved.first?.1.chapterKey == "ch1")
-        #expect(saved.first!.1.percent >= 0 && saved.first!.1.percent <= 100)
+        #expect(
+            saved.first.map { (0...100).contains($0.1.percent) } == true
+        )
     }
 
     @Test("closing the reader flushes the pending position save")
@@ -239,7 +257,7 @@ struct ReaderModelTests {
         reader.relocated(page: 4, totalPages: 10, href: "two.xhtml", cfi: "cfi-late")
         reader.close()
 
-        try await Task.sleep(for: .milliseconds(100))
+        try await settle { !spy.all.isEmpty }
         let saved = spy.all
         #expect(saved.count == 1)
         #expect(saved.first?.1.chapterKey == "ch2")

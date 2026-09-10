@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 /// The reader scene: the epub.js page full-bleed, with tap zones for

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 @Suite("Notes")
@@ -194,7 +194,7 @@ struct NotesTests {
         reader.noteSaved(
             path: "/tmp/n.md",
             wordCount: 3,
-            updatedAt: "2026-09-02T00:00:00+00:00",
+            updatedAt: Date(timeIntervalSince1970: 1_788_307_200),
             savedBody: "loaded text edited"
         )
         #expect(!reader.isNoteDirty)
@@ -239,6 +239,13 @@ struct NotesTests {
         reader.noteBody = "final text after the burst"
         reader.noteEdited()
 
+        // Wait for the debounced save, then a quiet period, so a collapse
+        // bug (extra saves) can still surface. Polling keeps this robust
+        // under parallel test load, where a fixed sleep is unreliable.
+        let deadline = ContinuousClock.now + .seconds(5)
+        while spy.all.isEmpty, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         try await Task.sleep(for: .milliseconds(250))
         let saved = spy.all
         #expect(saved.count == 1)
@@ -385,7 +392,7 @@ struct NotesTests {
             title: "Test Book",
             author: "Author",
             language: "en",
-            addedAt: "2026-01-01",
+            addedAt: Date(timeIntervalSince1970: 1_767_225_600), // 2026-01-01T00:00:00Z
             sourceFilename: "test.epub",
             chapters: [
                 ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml", fragment: nil),

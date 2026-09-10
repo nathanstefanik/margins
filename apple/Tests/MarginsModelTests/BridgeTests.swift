@@ -1,8 +1,8 @@
 import Foundation
 import Testing
-import MarginsCore
+import MarginsKernel
 
-@Suite("MarginsCore bridge")
+@Suite("Core store")
 struct BridgeTests {
     @Test("dataDir is honored")
     func dataDirIsHonored() async throws {
@@ -12,10 +12,10 @@ struct BridgeTests {
         #expect(resolved == dir)
     }
 
-    @Test("import through the bridge agrees with the stored metadata")
+    @Test("import through the store agrees with the stored metadata")
     func importAgreesWithStoredMetadata() async throws {
         let fixtures = try fixtureEpubs()
-        #expect(!fixtures.isEmpty, "expected at least one fixtures/*.epub to exercise the bridge")
+        #expect(!fixtures.isEmpty, "expected at least one fixtures/*.epub to exercise the store")
 
         for fixture in fixtures {
             let store = try CoreStore(dataDir: try makeTempDataDir())
@@ -25,7 +25,7 @@ struct BridgeTests {
             #expect(!imported.author.isEmpty)
             #expect(!imported.chapters.isEmpty)
 
-            // Reading back through a second bridge call must agree with the
+            // Reading back through a second store call must agree with the
             // import-time parse (same contract as the core integration test).
             let reread = try await store.getBook(id: imported.id)
             #expect(reread.title == imported.title)
@@ -35,11 +35,11 @@ struct BridgeTests {
             let summaries = try await store.listBooks()
             #expect(summaries.count == 1)
             #expect(summaries.first?.id == imported.id)
-            #expect(summaries.first?.chapterCount == UInt32(imported.chapters.count))
+            #expect(summaries.first?.chapterCount == imported.chapters.count)
         }
     }
 
-    @Test("cover path crosses the FFI and points at an existing file")
+    @Test("the cover path resolves to an existing file")
     func coverPathCrossesTheBridge() async throws {
         // The fixture EPUB declares its cover via EPUB2 <meta name="cover">;
         // the extraction must surface it as an absolute path on both records.
@@ -60,7 +60,7 @@ struct BridgeTests {
         #expect(summaries.first?.coverPath == coverPath)
     }
 
-    @Test("search hits cross the FFI with kind, score, and match ranges")
+    @Test("search hits carry kind, score, and match ranges")
     func searchHitsCrossTheBridge() async throws {
         let store = try CoreStore(dataDir: try makeTempDataDir())
         let fixture = try #require(try fixtureEpubs().first)

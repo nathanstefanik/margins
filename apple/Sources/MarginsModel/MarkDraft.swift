@@ -1,5 +1,5 @@
 import Foundation
-import MarginsCore
+import MarginsKernel
 
 /// Sheet-draft for editing a mark's text; keeps the original mark around
 /// for the update call.

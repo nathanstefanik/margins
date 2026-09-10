@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 @Suite("Library model")
@@ -42,7 +42,7 @@ struct LibraryModelTests {
             #expect(!book.chapters.isEmpty)
 
             // Chapter count in the detail view agrees with the list summary.
-            #expect(model.books.first?.chapterCount == UInt32(book.chapters.count))
+            #expect(model.books.first?.chapterCount == book.chapters.count)
         }
     }
 
@@ -212,15 +212,22 @@ struct LibraryModelTests {
         ]
         // Index order must not matter: the spine defines the row order.
         let index = [
-            NoteIndexEntry(chapterKey: "003", chapterIndex: 2, chapterTitle: "Three", wordCount: 41, markCount: 0, updatedAt: nil),
-            NoteIndexEntry(chapterKey: "001", chapterIndex: 0, chapterTitle: "One", wordCount: 98, markCount: 3, updatedAt: "2026-09-01T12:00:00+00:00"),
+            NotesIndexEntry(
+                chapterKey: "003", file: "chapters/003-three.md", chapterIndex: 2,
+                chapterTitle: "Three", wordCount: 41, markCount: 0, updatedAt: nil
+            ),
+            NotesIndexEntry(
+                chapterKey: "001", file: "chapters/001-one.md", chapterIndex: 0,
+                chapterTitle: "One", wordCount: 98, markCount: 3,
+                updatedAt: Date(timeIntervalSince1970: 1_788_264_000)
+            ),
         ]
 
         let rows = LibraryModel.annotatedChapterRows(chapters: chapters, index: index)
 
         #expect(rows.map(\.chapter.key) == ["001", "003"])
         #expect(rows[0].wordCount == 98)
-        #expect(rows[0].updatedAt == "2026-09-01T12:00:00+00:00")
+        #expect(rows[0].updatedAt == Date(timeIntervalSince1970: 1_788_264_000))
         #expect(rows[1].wordCount == 41)
     }
 

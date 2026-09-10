@@ -1,15 +1,15 @@
 import Foundation
 import Testing
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 @Suite("Notes page")
 struct NotesPageTests {
     private func makeCompiledNotes(
-        chaptersWithNotes: UInt32 = 3,
-        chapterCount: UInt32 = 5,
-        totalWords: UInt32 = 1240,
-        lastUpdatedAt: String? = "2026-09-01T12:00:00+00:00"
+        chaptersWithNotes: Int = 3,
+        chapterCount: Int = 5,
+        totalWords: Int = 1240,
+        lastUpdatedAt: Date? = Date(timeIntervalSince1970: 1_788_264_000) // 2026-09-01T12:00:00Z
     ) -> CompiledNotes {
         CompiledNotes(
             bookId: "book-1",
@@ -56,7 +56,8 @@ struct NotesPageTests {
 
     @Test("dateText renders a fixed-locale abbreviated date")
     func dateText() throws {
-        let date = try #require(LibraryModel.parseRFC3339("2026-09-01T12:00:00+00:00"))
+        // 2026-09-01T12:00:00Z.
+        let date = Date(timeIntervalSince1970: 1_788_264_000)
         #expect(LibraryModel.dateText(date) == "Sep 1, 2026")
     }
 
@@ -85,7 +86,7 @@ struct NotesPageTests {
         #expect(model.detailMode == .notes)
         #expect(model.compiledNotes?.bookId == book.id)
         #expect(notes.chaptersWithNotes == 2)
-        #expect(notes.chapterCount == UInt32(book.chapters.count))
+        #expect(notes.chapterCount == book.chapters.count)
         #expect(notes.chapters.count == 2)
         #expect(notes.suggestedFilename.contains("notes.md"))
         #expect(!notes.suggestedFilename.isEmpty)

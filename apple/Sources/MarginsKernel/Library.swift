@@ -116,7 +116,16 @@ public final class Library {
     }
 
     public func readEpubBytes(bookID: String) throws -> Data {
-        let path = bookDir(bookID).appendingPathComponent("source.epub")
+        try Self.readEpubBytes(bookId: bookID, root: root)
+    }
+
+    /// Root-parameterized byte read. Exists for `CoreStore.readEpubBytesSync`,
+    /// which the reader's scheme handler calls from WebKit threads — off the
+    /// actor, so it carries the root with the call instead of reading the
+    /// instance's.
+    public static func readEpubBytes(bookId bookID: String, root: String) throws -> Data {
+        let path = root.appendingPathComponent("books").appendingPathComponent(bookID)
+            .appendingPathComponent("source.epub")
         guard Files.exists(path) else {
             throw CoreError.library("epub missing for book: \(bookID)")
         }

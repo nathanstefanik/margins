@@ -1,5 +1,5 @@
 import Foundation
-import MarginsCore
+import MarginsKernel
 
 /// A titled block of palette results: navigation targets ("Chapters") above
 /// content hits ("Notes").

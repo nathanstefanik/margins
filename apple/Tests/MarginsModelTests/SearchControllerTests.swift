@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 @Suite("SearchController")

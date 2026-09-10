@@ -1,6 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 /// The Library scene: every imported book as a cover grid, import via the

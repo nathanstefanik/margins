@@ -20,9 +20,12 @@ let package = Package(
     ],
     // Library products consumed by the iOS app's Xcode project
     // (apple/ios/Margins.xcodeproj); the macOS app links the targets
-    // directly from within the package.
+    // directly from within the package. MarginsCore is the bridge era's
+    // product and stays exported until step 7 deletes the bridge;
+    // MarginsKernel carries the Swift core the apps actually use.
     products: [
         .library(name: "MarginsCore", targets: ["MarginsCore"]),
+        .library(name: "MarginsKernel", targets: ["MarginsKernel"]),
         .library(name: "MarginsModel", targets: ["MarginsModel"]),
     ],
     dependencies: [
@@ -45,10 +48,13 @@ let package = Package(
         // module map. The target name must stay `margins_ffiFFI`: the
         // generated Swift bindings do `#if canImport(margins_ffiFFI)`.
         .target(name: "margins_ffiFFI"),
-        // Generated bindings (Sources/MarginsCore/Generated/) plus hand
-        // written ergonomic wrappers, statically linked against the Rust
-        // staticlib inside the xcframework. liblzma / libbz2 satisfy the
-        // zip -> xz2 / bzip2 C dependencies (both in the SDK).
+        // Generated bindings (Sources/MarginsCore/Generated/) plus the old
+        // actor wrapper, statically linked against the Rust staticlib inside
+        // the xcframework. Dead since step 4 — the apps' CoreStore lives in
+        // MarginsKernel now — and kept only so the bridge smoke test in
+        // MarginsCoreTests still exercises it until step 7 deletes it.
+        // liblzma / libbz2 satisfy the zip -> xz2 / bzip2 C dependencies
+        // (both in the SDK).
         .target(
             name: "MarginsCore",
             dependencies: ["margins_ffiFFI", "MarginsFFI"],
@@ -67,10 +73,11 @@ let package = Package(
         // selection, errors). Separate target so the test targets can
         // unit-test it without touching SwiftUI. Carries the vendored
         // epub.js reader bundle + scheme handler so both Apple apps serve
-        // identical reader assets.
+        // identical reader assets. Since step 4 the apps run on the Swift
+        // core: the model layer depends on MarginsKernel, not the bridge.
         .target(
             name: "MarginsModel",
-            dependencies: ["MarginsCore"],
+            dependencies: ["MarginsKernel"],
             resources: [
                 // Vendored epub.js renderer (see docs/architecture.md).
                 .copy("Resources/reader")
@@ -78,7 +85,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "Margins",
-            dependencies: ["MarginsCore", "MarginsModel"]
+            dependencies: ["MarginsKernel", "MarginsModel"]
         ),
         // Swift Testing tests for the model layer and the apps' shared
         // logic. Converted from a runner executable to a real test target
@@ -86,10 +93,12 @@ let package = Package(
         // Phase 2 step 1).
         .testTarget(
             name: "MarginsModelTests",
-            dependencies: ["MarginsCore", "MarginsModel"]
+            dependencies: ["MarginsKernel", "MarginsModel"]
         ),
         // The hand-written Swift core, under its temporary name while the
-        // UniFFI bridge still owns `MarginsCore` (step 7 renames it).
+        // UniFFI bridge still owns `MarginsCore` (step 7 renames it). Since
+        // step 4 the apps' `CoreStore` actor facade lives here too, so the
+        // model layer and both frontends run on this module alone.
         .target(
             name: "MarginsKernel",
             dependencies: [

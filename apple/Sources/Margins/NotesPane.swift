@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 struct NotesPane: View {

@@ -1,7 +1,7 @@
 import AppKit
 import Observation
 import WebKit
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 /// Owns the reader's WKWebView: builds it, loads the reader page, and
@@ -24,7 +24,7 @@ final class ReaderController: NSObject {
 
     func makeWebView() -> WKWebView {
         let fallbackProvider: @Sendable (String) throws -> Data = { _ in
-            throw CoreError.Message(message: "library is not open yet")
+            throw CoreError.library("library is not open yet")
         }
         let bytesProvider = (try? model.makeReaderBytesProvider()) ?? fallbackProvider
 

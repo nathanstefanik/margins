@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 /// Non-modal Spotlight-style command palette inside the main window. The

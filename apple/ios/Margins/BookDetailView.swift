@@ -1,5 +1,5 @@
 import SwiftUI
-import MarginsCore
+import MarginsKernel
 import MarginsModel
 
 /// The book detail: cover, metadata, progress, and **Continue reading**;
@@ -183,7 +183,7 @@ private struct ContentsList: View {
 
     @Environment(LibraryModel.self) private var library
 
-    private var libraryNotesIndex: [NoteIndexEntry] {
+    private var libraryNotesIndex: [NotesIndexEntry] {
         library.selectedBookNotesIndex
     }
 
@@ -431,7 +431,7 @@ private struct NotesTab: View {
         if words > 0 { parts.append("\(words) words") }
         let markCount = chapter.marks.count
         if markCount > 0 { parts.append(MarkDisplay.countText(markCount)) }
-        if let updated = chapter.updatedAt.flatMap(LibraryModel.parseRFC3339) {
+        if let updated = chapter.updatedAt {
             parts.append("updated \(LibraryModel.dateText(updated))")
         }
         return parts.isEmpty ? "—" : parts.joined(separator: " · ")
