@@ -210,7 +210,9 @@ make mac-app     # assemble build/Margins.app (ad-hoc signed)
 make mac-run     # mac-app + open it
 ```
 
-Requirements: Rust (stable) and Apple Command Line Tools. `cargo test
+Requirements: Rust (stable) and Xcode 26 (full Xcode is now required for
+iOS anyway; CI runs the macOS job on `macos-26` pinned to Xcode 26.6).
+`cargo test
 --workspace` must keep passing at all times — the Tauri app is never broken
 by Apple-platform work. The iOS build path (`make ios-core`, Xcode, simulator)
 is described in `docs/ios-plan.md`.
