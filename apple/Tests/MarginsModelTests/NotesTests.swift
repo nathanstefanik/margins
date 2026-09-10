@@ -223,7 +223,10 @@ struct NotesTests {
     func autosaveDebounce() async throws {
         let spy = SaveSpy()
         let reader = ReaderModel()
-        reader.noteSaveDebounce = 0.02
+        // Collapse the debounce window: the typing burst still collapses to
+        // one save, but the test no longer depends on a real timer firing
+        // under CI scheduling load.
+        reader.debounceSleep = { _ in }
         reader.noteSaver = { bookId, chapterKey, body in
             spy.record(bookId, chapterKey, body)
         }

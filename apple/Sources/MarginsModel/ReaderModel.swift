@@ -39,6 +39,12 @@ public final class ReaderModel {
 
     /// Debounce window for position saves; injectable for tests.
     public var positionSaveDebounce: TimeInterval = 0.8
+    /// Suspends for a debounce window. Injectable so tests can collapse it
+    /// and make the save fire on the next main-actor turn instead of racing
+    /// the scheduler under heavy parallel test load.
+    public var debounceSleep: @Sendable (TimeInterval) async throws -> Void = { delay in
+        try await Task.sleep(for: .seconds(delay))
+    }
     private var positionSaveTask: Task<Void, Never>?
     private var pendingPosition: (bookId: String, position: ReadingPosition)?
 
@@ -194,9 +200,10 @@ public final class ReaderModel {
         )
         pendingPosition = (book.id, position)
         positionSaveTask?.cancel()
+        let sleep = debounceSleep
         let delay = positionSaveDebounce
         positionSaveTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
+            try? await sleep(delay)
             guard !Task.isCancelled else { return }
             self?.commitPendingPosition()
         }
@@ -395,9 +402,10 @@ public final class ReaderModel {
         guard isOpen, isNoteDirty else { return }
         noteSaveStatus = .edited
         noteSaveTask?.cancel()
+        let sleep = debounceSleep
         let delay = noteSaveDebounce
         noteSaveTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
+            try? await sleep(delay)
             guard !Task.isCancelled else { return }
             self?.commitNoteSave()
         }

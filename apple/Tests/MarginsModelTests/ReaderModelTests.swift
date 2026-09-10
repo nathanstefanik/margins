@@ -249,7 +249,10 @@ struct ReaderModelTests {
     func positionSavesDebounce() async throws {
         let spy = SaveSpy()
         let reader = ReaderModel()
-        reader.positionSaveDebounce = 0.02
+        // Collapse the debounce window: three synchronous relocations still
+        // cancel each other down to one save, but the test no longer depends
+        // on a real timer firing under CI scheduling load.
+        reader.debounceSleep = { _ in }
         reader.positionSaver = { bookId, position in
             spy.record(bookId, position)
         }
