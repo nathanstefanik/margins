@@ -61,6 +61,20 @@ or `xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins -destination
 'platform=iOS Simulator,name=iPhone 17 Pro'`). See
 [docs/ios-plan.md](docs/ios-plan.md) for the phased status.
 
+**iOS TestFlight/App Store release**: the app record must exist in App Store
+Connect first (bundle ID `io.github.nathanstefanik.margins`, registered with
+the iCloud container on developer.apple.com — automatic signing creates the
+App ID during the archive if it is missing). Then, per upload:
+
+```bash
+make ios-bump    # increment CURRENT_PROJECT_VERSION (TestFlight rejects reused numbers)
+make ios-archive # Release archive at build/Margins.xcarchive
+```
+
+then in Xcode's Organizer: *Distribute App → App Store Connect → Upload*.
+`ITSAppUsesNonExemptEncryption` is already `false` in `Info.plist`, so no
+encryption-compliance answer is needed per build.
+
 **iOS device signing** (never committed): copy
 `apple/ios/Signing.local.xcconfig.example` to `Signing.local.xcconfig` and
 fill in your Team ID — the project loads it via an optional include. In

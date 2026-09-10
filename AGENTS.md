@@ -72,6 +72,8 @@ cargo test --workspace        # from the repo root (covers core + tauri)
 make core        # rebuild margins-ffi, regenerate Swift bindings, refresh
                  # the macOS slice of build/MarginsFFI.xcframework
 make ios-core    # also build the iOS device/simulator xcframework slices
+make ios-archive # Release iOS archive at build/Margins.xcarchive (needs ASC app record + Signing.local.xcconfig)
+make ios-bump    # bump CURRENT_PROJECT_VERSION (run before every TestFlight upload)
                  # (needs full Xcode: the zip stack's C deps require the
                  # iOS SDK, which Command Line Tools do not ship)
 make mac-build   # build the macOS Swift package

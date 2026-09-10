@@ -1,4 +1,4 @@
-.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run ios-core ios-archive bump
+.PHONY: core mac-build mac-test mac-app mac-app-universal mac-run ios-core ios-archive ios-bump bump
 
 core:
 	./scripts/build-core.sh
@@ -8,12 +8,20 @@ ios-core:
 
 # Release archive for TestFlight upload (sign with Apple Distribution via
 # automatic signing; Xcode Organizer → Distribute App does the upload).
+# -allowProvisioningUpdates lets Xcode register the App ID + iCloud
+# container and (re)generate profiles during the archive.
 ios-archive: ios-core
 	xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins \
 		-configuration Release \
 		-destination 'generic/platform=iOS' \
 		-archivePath build/Margins.xcarchive \
+		-allowProvisioningUpdates \
 		archive
+
+# Bump the TestFlight build number (CURRENT_PROJECT_VERSION); run before
+# every upload. Optional argument sets an explicit number.
+ios-bump:
+	./scripts/bump-build.sh
 
 mac-build: core
 	swift build --package-path apple
