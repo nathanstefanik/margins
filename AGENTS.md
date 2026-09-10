@@ -35,14 +35,14 @@ crates/margins-core/   # the domain core (no UI)
 crates/margins-ffi/    # UniFFI bridge for Swift (thin)
 apple/                 # shared Apple SwiftPM package (macOS + iOS)
   Package.swift        # targets: MarginsFFI (xcframework), margins_ffiFFI,
-                       # MarginsCore, MarginsModel, Margins (macOS app),
-                       # MarginsTests; products MarginsCore/MarginsModel
+                       # MarginsCore, MarginsModel, Margins (macOS app);
+                       # products MarginsCore/MarginsModel
                        # are consumed by the iOS app's Xcode project
   Sources/MarginsCore/ # generated bindings + CoreStore actor
   Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap,
                        # LibraryLocation (iCloud root, materialization, conflicts)
   Sources/Margins/     # macOS SwiftUI views, reader webview glue, key routing
-  Sources/MarginsTests/# Swift Testing suite (runner executable)
+  Tests/               # MarginsModelTests + MarginsCoreTests (Swift Testing)
   ios/                 # iOS app: Margins.xcodeproj + Sources (SwiftUI scenes)
 build/MarginsFFI.xcframework/  # generated (make core / make ios-core)
 scripts/               # build-core.sh, build-xcframework.sh, make-app.sh
@@ -86,9 +86,10 @@ drive simulator verification flows. Device signing uses the team ID in
 `apple/ios/Signing.local.xcconfig` (gitignored — created from
 `Signing.local.xcconfig.example`; never commit it).
 
-macOS tests use Swift Testing (`import Testing`) via the `MarginsTests`
-runner executable — `swift test` silently runs nothing on a CLT-only
-toolchain, so always verify with `make mac-test`.
+macOS tests use Swift Testing (`import Testing`) via the
+`MarginsModelTests`/`MarginsCoreTests` test targets — always verify with
+`make mac-test` (`swift test --package-path apple`; full Xcode required,
+a CLT-only toolchain silently runs nothing).
 
 ## Agent tasks
 

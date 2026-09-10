@@ -27,7 +27,7 @@ mac-build: core
 	swift build --package-path apple
 
 mac-test: core
-	swift run --package-path apple MarginsTests
+	swift test --package-path apple
 
 mac-app: core
 	./scripts/make-app.sh

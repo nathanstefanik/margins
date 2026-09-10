@@ -69,10 +69,7 @@ the generated bindings import. The old `.unsafeFlags` link of
 ## The Apple package (`apple/`)
 
 A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
-`.iOS(.v17)` — iOS 17 because the model layer uses `@Observable`). No
-`.xcodeproj` for the macOS side; builds with Command Line Tools alone —
-note that `swift test` never invokes test bundles on a CLT-only toolchain,
-so tests run through the `MarginsTests` runner executable. Targets:
+`.iOS(.v26)`). No `.xcodeproj` for the macOS side. Targets:
 
 - `margins_ffiFFI` — C target carrying the generated FFI header/module map
   (module source for the generated bindings; the archive itself comes from
@@ -85,11 +82,12 @@ so tests run through the `MarginsTests` runner executable. Targets:
   (vim-style key state machine), `LibraryLocation` (iOS library root:
   iCloud container resolution with runtime fallback, placeholder
   materialization, coordinated staging of picked files, conflict
-  detection). Unit-tested via `MarginsTests`.
+  detection). Unit-tested via `MarginsModelTests`.
 - `Margins` — macOS SwiftUI app: library browser, reader (WKWebView +
   epub.js), notes pane, search overlay, keyboard/trackpad routing.
-- `MarginsTests` — a Swift Testing **runner executable** (SwiftPM's test
-  runner never invokes test bundles on the CLT toolchain; see the plan doc).
+- `MarginsModelTests` / `MarginsCoreTests` — Swift Testing test targets,
+  run by `swift test` (full Xcode required; a CLT-only toolchain never
+  invokes test bundles).
 
 ## The iOS app (`apple/ios/`)
 

@@ -3,16 +3,14 @@ import PackageDescription
 
 // Shared Apple package: one core, two frontends. MarginsCore/MarginsModel
 // are platform-agnostic (macOS + iOS); the Margins executable is the macOS
-// app, MarginsIOS the iOS app (Phase 4 wires the real scenes; see
-// docs/ios-plan.md).
+// app, the iOS app is built from apple/ios/Margins.xcodeproj against the
+// MarginsCore/MarginsModel products.
 
-// This machine has Command Line Tools only (no full Xcode). The Swift
-// Testing framework ships with the CLT but SwiftPM only adds it via -I,
-// which does not resolve framework modules; pass -F explicitly.
-// https://github.com/swiftlang/swift-package-manager/issues/8285
-let cltDeveloperFrameworks = "/Library/Developer/CommandLineTools/Library/Developer/Frameworks"
-// Home of lib_TestingInterop.dylib, which Testing.framework loads via @rpath.
-let cltDeveloperLib = "/Library/Developer/CommandLineTools/Library/Developer/usr/lib"
+// During the Swift-core port (docs/apple-only-plan.md Phase 2) the package
+// temporarily carries both the UniFFI bridge (MarginsFFI + margins_ffiFFI +
+// the generated bindings) and, from step 2 on, the hand-written core under
+// the temporary module name MarginsKernel. The bridge targets are deleted in
+// step 7; MarginsKernel is renamed MarginsCore then.
 
 let package = Package(
     name: "Margins",
@@ -27,6 +25,10 @@ let package = Package(
         .library(name: "MarginsCore", targets: ["MarginsCore"]),
         .library(name: "MarginsModel", targets: ["MarginsModel"]),
     ],
+    dependencies: [
+        // EPUB archive reading/writing for the Swift core (step 2+).
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20"),
+    ],
     targets: [
         // UniFFI static archive, assembled per platform by
         // scripts/build-core.sh (macOS slice) and
@@ -37,6 +39,7 @@ let package = Package(
         // SwiftPM links the archive into dependents but does not expose
         // headers from binary targets, so the `margins_ffiFFI` module the
         // generated bindings import still comes from the C target below.
+        // (Deleted in Phase 2 step 7.)
         .binaryTarget(name: "MarginsFFI", path: "../build/MarginsFFI.xcframework"),
         // Header-only C target carrying the UniFFI-generated FFI header and
         // module map. The target name must stay `margins_ffiFFI`: the
@@ -51,6 +54,8 @@ let package = Package(
             dependencies: ["margins_ffiFFI", "MarginsFFI"],
             swiftSettings: [
                 // UniFFI 0.29 generated code is not strict-concurrency clean.
+                // Dies with the bridge in Phase 2 step 7; everything else is
+                // Swift 6 mode.
                 .swiftLanguageMode(.v5)
             ],
             linkerSettings: [
@@ -58,15 +63,11 @@ let package = Package(
                 .linkedLibrary("bz2")
             ]
         ),
-        .executableTarget(
-            name: "Margins",
-            dependencies: ["MarginsCore", "MarginsModel"]
-        ),
         // UI-agnostic model layer for the library browser (import, remove,
-        // selection, errors). Separate target so MarginsTests can unit-test
-        // it without touching SwiftUI. Carries the vendored epub.js reader
-        // bundle + scheme handler so both Apple apps serve identical
-        // reader assets.
+        // selection, errors). Separate target so the test targets can
+        // unit-test it without touching SwiftUI. Carries the vendored
+        // epub.js reader bundle + scheme handler so both Apple apps serve
+        // identical reader assets.
         .target(
             name: "MarginsModel",
             dependencies: ["MarginsCore"],
@@ -75,26 +76,23 @@ let package = Package(
                 .copy("Resources/reader")
             ]
         ),
-        // Swift Testing tests. This is an executable rather than a
-        // .testTarget because SwiftPM 6.3.2 on this CLT-only machine links
-        // test bundles but never invokes the runner ("swift test" silently
-        // exits 0 without running anything). The executable calls
-        // Testing.__swiftPMEntryPoint() itself; revisit once full Xcode
-        // (xcodebuild test) is available — do not break `make mac-test`.
         .executableTarget(
-            name: "MarginsTests",
-            dependencies: ["MarginsCore", "MarginsModel"],
-            swiftSettings: [
-                .unsafeFlags(["-F\(cltDeveloperFrameworks)"])
-            ],
-            linkerSettings: [
-                .unsafeFlags([
-                    "-F", cltDeveloperFrameworks,
-                    "-Xlinker", "-rpath", "-Xlinker", cltDeveloperFrameworks,
-                    "-Xlinker", "-rpath", "-Xlinker", cltDeveloperLib,
-                    "-Xlinker", "-framework", "-Xlinker", "Testing"
-                ])
-            ]
-        )
+            name: "Margins",
+            dependencies: ["MarginsCore", "MarginsModel"]
+        ),
+        // Swift Testing tests for the model layer and the apps' shared
+        // logic. Converted from a runner executable to a real test target
+        // now that full Xcode runs `swift test` (docs/apple-only-plan.md
+        // Phase 2 step 1).
+        .testTarget(
+            name: "MarginsModelTests",
+            dependencies: ["MarginsCore", "MarginsModel"]
+        ),
+        // Tests for the hand-written Swift core (step 2+). Grows the
+        // Fixtures resource bundle when the ported fixtures land in step 3.
+        .testTarget(
+            name: "MarginsCoreTests",
+            dependencies: ["MarginsCore"]
+        ),
     ]
 )

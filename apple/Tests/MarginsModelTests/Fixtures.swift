@@ -1,9 +1,9 @@
 import Foundation
 
 let repoRoot = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent() // MarginsTests/
-    .deletingLastPathComponent() // Sources/
-    .deletingLastPathComponent() // macos/
+    .deletingLastPathComponent() // MarginsModelTests/
+    .deletingLastPathComponent() // Tests/
+    .deletingLastPathComponent() // apple/
     .deletingLastPathComponent() // repo root
 
 /// A fresh, empty data directory for one test.
