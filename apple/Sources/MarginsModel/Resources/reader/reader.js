@@ -230,6 +230,12 @@ function readerStyleContents(contents) {
     body: {
       "line-height": `${readerTypography.lineHeight} !important`,
     },
+    // Publisher sheets commonly justify body text; ragged-right reads
+    // better and avoids the uneven word spacing justification creates.
+    // Headings and other display elements keep their own alignment.
+    "body, p, li, dd, dt, blockquote, td, th, figcaption": {
+      "text-align": "left !important",
+    },
   };
   // With a face chosen, html carries the family and everything that
   // usually pins one inherits it; code/pre keep their monospace.

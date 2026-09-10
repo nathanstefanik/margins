@@ -29,7 +29,8 @@ struct LibraryTests {
     }
 
     /// Rewrites a book's `meta.json` the way a pre-TOC import left it: no
-    /// `chapters_version`, no fragments, titles from `<title>`.
+    /// `chapters_version`, no fragments, titles from `<title>`, and none of
+    /// the v2 outline fields.
     private func downgradeChapters(bookDir: String) throws {
         let path = bookDir.appendingPathComponent("meta.json")
         var meta = try MarginsJSON.decode(BookMeta.self, from: Files.readData(path))
@@ -38,13 +39,25 @@ struct LibraryTests {
             var chapter = chapter
             chapter.fragment = nil
             chapter.title = "Chapter \(index + 1)"
+            chapter.matter = .body
+            chapter.level = 0
+            chapter.sections = []
             return chapter
         }
-        // Written as the old core would have: the version key absent entirely.
+        // Written as the old core would have: absent version and outline
+        // keys entirely.
         var object = try #require(
             try JSONSerialization.jsonObject(with: MarginsJSON.encode(meta)) as? [String: Any]
         )
         object.removeValue(forKey: "chapters_version")
+        if var chapters = object["chapters"] as? [[String: Any]] {
+            for index in chapters.indices {
+                chapters[index].removeValue(forKey: "matter")
+                chapters[index].removeValue(forKey: "level")
+                chapters[index].removeValue(forKey: "sections")
+            }
+            object["chapters"] = chapters
+        }
         try Files.writeData(
             JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted]), to: path
         )
@@ -151,9 +164,20 @@ struct LibraryTests {
 
         let upgraded = try harness.library.getBook(id: meta.id)
         #expect(upgraded.chaptersVersion == Library.chaptersVersion)
+        #expect(upgraded.chaptersVersion == 2)
         #expect(upgraded.chapters[0].key == "001")
         #expect(upgraded.chapters[0].title == "Opening Remarks")
         #expect(upgraded.chapters[0].fragment == "start")
+        // v2 fields: matter classified and every TOC entry kept as a section.
+        #expect(upgraded.chapters[0].matter == .body)
+        #expect(upgraded.chapters[0].level == 0)
+        #expect(
+            upgraded.chapters[0].sections
+                == [
+                    ChapterSection(title: "Opening Remarks", fragment: "start", level: 0),
+                    ChapterSection(title: "A Nested Aside", fragment: "aside", level: 1),
+                ]
+        )
 
         // The note still resolves under the same key, body intact.
         #expect(

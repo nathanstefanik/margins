@@ -137,9 +137,10 @@ struct SearchSelectionTests {
             makeHit(bookId: "title", kind: .chapterTitle),
         ]
         controller.setExecutor { _ in hits }
+        controller.debounceSleep = { _ in }
 
         controller.setQuery("query")
-        try await Task.sleep(for: .milliseconds(300))
+        await waitForResults(controller, count: 3)
         // Within the Chapters section, the backend's relevance order stands.
         #expect(controller.orderedResults.map(\.bookId) == ["book", "title", "note"])
 
@@ -153,6 +154,16 @@ struct SearchSelectionTests {
         #expect(controller.selectedHit?.bookId == "book", "selection wraps to the first row")
         controller.moveSelection(-1)
         #expect(controller.selectedHit?.bookId == "note", "selection wraps past the top")
+    }
+
+    /// Event-driven wait for the debounced search to land; a fixed sleep
+    /// raced the debounce on loaded CI runners.
+    private func waitForResults(_ controller: SearchController, count: Int) async {
+        for _ in 0..<1_000 {
+            if controller.orderedResults.count == count { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("timed out waiting for \(count) ordered results")
     }
 
     private func makeDefaults() -> UserDefaults {

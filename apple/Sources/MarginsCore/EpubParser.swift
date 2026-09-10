@@ -1,12 +1,12 @@
 import Foundation
 import ZIPFoundation
 
-// Reads an EPUB's metadata, spine, table of contents, and cover.
+// Reads an EPUB's metadata, spine, table of contents, cover, and structure.
 //
-// Two parsing styles, following the Rust original. The OPF metadata, the
-// NCX, and the EPUB3 nav document are real XML and go through `XMLParser`.
-// Everything else — the container's OPF pointer, the spine's `itemref`
-// order, the EPUB2 cover pointer, and the `<title>`/`<h1>` probes inside
+// Two parsing styles, following the Rust original. The OPF metadata and
+// spine, the NCX, and the EPUB3 nav document are real XML and go through
+// `XMLParser`. Everything else — the container's OPF pointer, the EPUB2
+// cover pointer, `epub:type` probes, and the `<title>`/`<h1>` probes inside
 // chapter documents — is scanned out of the raw text, because chapter XHTML
 // in the wild is frequently not well-formed and a strict parse would fail
 // the import over markup nobody reads.
@@ -33,6 +33,14 @@ public enum EpubParser {
     /// chapter name.
     static let sharedTitleLimit = 3
 
+    /// Per-document `epub:type` lives on `<body>` or the first `<section>`;
+    /// only the head of the document is scanned for it.
+    static let documentTypeScanLimit = 8 * 1024
+
+    /// A file with almost no visible text and an image is a cover wrapper
+    /// (Gutenberg's `wrap0000.html`), not a chapter.
+    static let coverShapeTextLimit = 40
+
     public static func parse(path: String) throws -> EpubInfo {
         let archive = try openArchive(path)
 
@@ -45,34 +53,41 @@ public enum EpubParser {
 
         let metadata = try parseMetadata(opf)
         let items = parseManifestItems(opf)
-        let manifest = Dictionary(items.map { ($0.id, $0.href) }, uniquingKeysWith: { first, _ in first })
+        let manifest = Dictionary(items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let spine = parseSpine(opf)
         let cover = extractCover(archive, opf: opf, opfDir: opfDir)
         let toc = indexByPath(parseTOC(archive, opf: opf, opfDir: opfDir))
+        let bookSignals = mergeSignals(
+            guide: parseGuide(opf, opfDir: opfDir),
+            landmarks: parseLandmarks(archive, opf: opf, opfDir: opfDir)
+        )
 
         // Titles resolve in two passes: collect every candidate first, then
         // pick, because the `<title>` rung needs to know which titles the
         // whole book shares before it can tell a chapter name from
-        // boilerplate.
+        // boilerplate. Classification runs after titles too, because the
+        // title heuristics read them.
         var candidates: [ChapterCandidate] = []
-        for (index, idref) in spine.enumerated() {
-            guard let href = manifest[idref], isProbablyContent(href) else { continue }
-            let fullHref = joinHref(opfDir, href)
+        for (index, item) in spine.enumerated() {
+            guard item.linear, let manifestItem = manifest[item.idref],
+                  isContentItem(manifestItem) else { continue }
+            let fullHref = joinHref(opfDir, manifestItem.href)
             let document = try? readText(archive, fullHref)
-            let entry = toc[normalizePath(fullHref)]
             candidates.append(
                 ChapterCandidate(
                     index: index,
                     href: fullHref,
-                    fragment: entry?.fragment,
-                    tocTitle: entry?.title,
+                    tocEntries: toc[normalizePath(fullHref)] ?? [],
                     heading: document.flatMap(headingFromDocument),
-                    documentTitle: document.flatMap(titleFromDocument)
+                    documentTitle: document.flatMap(titleFromDocument),
+                    explicitMatter: bookSignals[normalizePath(fullHref)]
+                        ?? document.flatMap(documentEpubType).flatMap(documentTypeMatter)
+                        ?? (document.map(isCoverByShape) == true ? .cover : nil)
                 )
             )
         }
 
-        let chapters = resolveChapterTitles(candidates, bookTitle: metadata.title)
+        let chapters = resolveChapters(candidates, bookTitle: metadata.title)
         guard !chapters.isEmpty else {
             throw CoreError.epub("invalid epub: no readable chapters found")
         }
@@ -231,20 +246,64 @@ public enum EpubParser {
         }
     }
 
-    /// Spine order, scanned rather than parsed: `<spine>` is a flat list of
-    /// `itemref`s and this survives a package document that does not parse.
-    static func parseSpine(_ opf: String) -> [String] {
-        var result: [String] = []
-        var cursor = opf.startIndex
-        while let open = opf.range(of: "<itemref", range: cursor..<opf.endIndex) {
-            guard let close = opf.range(of: ">", range: open.upperBound..<opf.endIndex) else { break }
-            let tag = opf[open.upperBound..<close.lowerBound]
-            if let idref = attributeValue("idref", in: tag), !idref.isEmpty {
-                result.append(idref)
+    /// One `<itemref>`: the manifest id and whether it is part of the
+    /// linear reading order.
+    struct SpineItem: Equatable {
+        var idref: String
+        var linear: Bool
+    }
+
+    /// Spine order via `XMLParser`, keeping `linear` so `linear="no"` items
+    /// can be dropped without disturbing the raw positions keys come from.
+    static func parseSpine(_ opf: String) -> [SpineItem] {
+        let delegate = SpineDelegate()
+        guard runParser(opf, delegate) else { return [] }
+        return delegate.items
+    }
+
+    private final class SpineDelegate: NSObject, XMLParserDelegate {
+        var items: [SpineItem] = []
+
+        func parser(
+            _ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
+            qualifiedName: String?, attributes: [String: String]
+        ) {
+            guard localName(name) == "itemref" else { return }
+            let attributes = attributes.reduce(into: [String: String]()) { result, pair in
+                result[localName(pair.key)] = pair.value
             }
-            cursor = close.upperBound
+            guard let idref = attributes["idref"], !idref.isEmpty else { return }
+            items.append(SpineItem(idref: idref, linear: attributes["linear"]?.lowercased() != "no"))
         }
-        return result
+    }
+
+    /// EPUB2 `<guide><reference type= href=>`: the book-level classification
+    /// map for older books, resolved against the OPF's directory.
+    static func parseGuide(_ opf: String, opfDir: String) -> [String: Matter] {
+        let delegate = GuideDelegate()
+        guard runParser(opf, delegate) else { return [:] }
+        var signals: [String: Matter] = [:]
+        for reference in delegate.references {
+            guard let matter = guideMatter(reference.type) else { continue }
+            signals[resolveTarget(baseDir: opfDir, href: reference.href)] = matter
+        }
+        return signals
+    }
+
+    private final class GuideDelegate: NSObject, XMLParserDelegate {
+        var references: [(type: String, href: String)] = []
+
+        func parser(
+            _ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
+            qualifiedName: String?, attributes: [String: String]
+        ) {
+            guard localName(name) == "reference" else { return }
+            let attributes = attributes.reduce(into: [String: String]()) { result, pair in
+                result[localName(pair.key)] = pair.value
+            }
+            guard let type = attributes["type"], let href = attributes["href"] else { return }
+            references.append((type, href))
+        }
     }
 
     /// The OPF's path, from `<rootfile full-path="…">`.
@@ -349,6 +408,9 @@ public enum EpubParser {
         /// In-zip path of the target file, normalized for comparison.
         var path: String
         var fragment: String?
+        /// Outline depth: 0 for a top-level entry, one deeper per nesting
+        /// level. Inferred from the label when the whole TOC is flat.
+        var level: Int
     }
 
     /// The book's table of contents, preferring the EPUB3 nav document and
@@ -364,7 +426,7 @@ public enum EpubParser {
             let path = joinHref(opfDir, nav.href)
             if let document = try? readText(archive, path) {
                 let entries = parseNavDocument(document, baseDir: parentDirectory(path))
-                if !entries.isEmpty { return entries }
+                if !entries.isEmpty { return withInferredLevels(entries) }
             }
         }
 
@@ -376,21 +438,59 @@ public enum EpubParser {
         if let ncx {
             let path = joinHref(opfDir, ncx.href)
             if let document = try? readText(archive, path) {
-                return parseNCX(document, baseDir: parentDirectory(path))
+                return withInferredLevels(parseNCX(document, baseDir: parentDirectory(path)))
             }
         }
         return []
     }
 
-    /// Indexes the TOC by target path, first entry in reading order winning:
-    /// a file split into several TOC entries starts at the first of them.
-    static func indexByPath(_ entries: [TOCEntry]) -> [String: TOCEntry] {
-        Dictionary(entries.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+    /// Indexes the TOC by target path, keeping every entry in reading order:
+    /// a file split into several TOC entries carries them all.
+    static func indexByPath(_ entries: [TOCEntry]) -> [String: [TOCEntry]] {
+        var index: [String: [TOCEntry]] = [:]
+        for entry in entries {
+            index[entry.path, default: []].append(entry)
+        }
+        return index
+    }
+
+    /// Infers levels from labels for entries the TOC itself left at level 0:
+    /// parts/volumes open a level 0 run, books are level 1 under them, and
+    /// everything else is a leaf one below the deepest container seen so
+    /// far. Entries at a deeper authored level keep it — a nested TOC is
+    /// authoritative for what it nests — but they raise the container floor
+    /// for later level-0 siblings. (Karamazov's NCX is flat for its 118 body
+    /// entries except for one incidental nested front-matter point; a strict
+    /// "only when every entry is level 0" test would leave its parts, books,
+    /// and chapters undifferentiated.)
+    static func withInferredLevels(_ entries: [TOCEntry]) -> [TOCEntry] {
+        let hasParts = entries.contains {
+            titleMatches($0.title, "part") || titleMatches($0.title, "volume")
+        }
+        var container = -1
+        return entries.map { entry in
+            guard entry.level == 0 else {
+                container = max(container, entry.level)
+                return entry
+            }
+            var entry = entry
+            if titleMatches(entry.title, "part") || titleMatches(entry.title, "volume") {
+                entry.level = 0
+                container = 0
+            } else if titleMatches(entry.title, "book") {
+                entry.level = hasParts ? 1 : 0
+                container = max(container, entry.level)
+            } else {
+                entry.level = container + 1
+            }
+            return entry
+        }
     }
 
     /// EPUB3 nav document: the `<nav>` marked as the TOC (`epub:type="toc"`,
     /// else `role="doc-toc"`, else the first one with links), flattened to
-    /// its anchors in document order.
+    /// its anchors in document order, each at its `<ol>` depth inside the
+    /// chosen nav.
     static func parseNavDocument(_ xml: String, baseDir: String) -> [TOCEntry] {
         let delegate = NavDelegate()
         guard runParser(xml, delegate) else { return [] }
@@ -401,21 +501,69 @@ public enum EpubParser {
             ?? delegate.sections.first { !$0.anchors.isEmpty }
 
         guard let chosen else { return [] }
-        return chosen.anchors.compactMap { tocEntry(baseDir: baseDir, src: $0.href, label: $0.label) }
+        return chosen.anchors.compactMap {
+            tocEntry(baseDir: baseDir, src: $0.href, label: $0.label, level: $0.level)
+        }
+    }
+
+    /// The book-level classification map from the nav document's landmarks
+    /// (`epub:type="landmarks"` anchors). Resolved like TOC targets.
+    static func parseLandmarks(
+        _ archive: Archive, opf: String, opfDir: String
+    ) -> [String: Matter] {
+        let items = parseManifestItems(opf)
+        guard let nav = items.first(where: {
+            $0.properties?.split(whereSeparator: \.isWhitespace).contains("nav") == true
+        }) else { return [:] }
+        let path = joinHref(opfDir, nav.href)
+        guard let document = try? readText(archive, path) else { return [:] }
+
+        let delegate = NavDelegate()
+        guard runParser(document, delegate) else { return [:] }
+        guard let landmarks = delegate.sections.first(where: {
+            $0.epubType?.split(whereSeparator: \.isWhitespace).contains("landmarks") == true
+        }) else { return [:] }
+
+        var signals: [String: Matter] = [:]
+        for anchor in landmarks.anchors {
+            guard let type = anchor.type, let matter = landmarkMatter(type) else { continue }
+            signals[resolveTarget(baseDir: parentDirectory(path), href: anchor.href)] = matter
+        }
+        return signals
+    }
+
+    /// Landmarks override the guide: EPUB3 metadata is more specific than
+    /// the EPUB2 guide it replaced.
+    static func mergeSignals(
+        guide: [String: Matter], landmarks: [String: Matter]
+    ) -> [String: Matter] {
+        var merged = guide
+        merged.merge(landmarks) { _, landmark in landmark }
+        return merged
     }
 
     private final class NavDelegate: NSObject, XMLParserDelegate {
+        struct Anchor {
+            var href: String
+            var label: String
+            var type: String?
+            var level: Int
+        }
+
         struct Section {
             var epubType: String?
             var role: String?
-            var anchors: [(href: String, label: String)] = []
+            var anchors: [Anchor] = []
         }
 
         var sections: [Section] = []
         /// Indices of the `<nav>` elements currently open; anchors belong to
         /// the innermost one.
         private var open: [Int] = []
-        private var anchor: (href: String, label: String)?
+        /// `<ol>` elements open inside the innermost nav; an anchor's level
+        /// is its `<ol>` nesting minus one.
+        private var listDepth = 0
+        private var anchor: (href: String, type: String?, label: String)?
 
         func parser(
             _ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
@@ -430,8 +578,11 @@ public enum EpubParser {
                 sections.append(
                     Section(epubType: attributes["type"], role: attributes["role"])
                 )
+                listDepth = 0
+            case "ol" where !open.isEmpty:
+                listDepth += 1
             case "a" where !open.isEmpty:
-                anchor = attributes["href"].map { ($0, "") }
+                anchor = (attributes["href"] ?? "", attributes["type"], "")
             default:
                 break
             }
@@ -448,12 +599,20 @@ public enum EpubParser {
             switch localName(name) {
             case "nav":
                 _ = open.popLast()
+                listDepth = 0
                 anchor = nil
+            case "ol" where !open.isEmpty:
+                listDepth = max(0, listDepth - 1)
             case "a":
-                if let anchor, let index = open.last {
-                    sections[index].anchors.append(anchor)
+                if let anchor, let index = open.last, !anchor.href.isEmpty {
+                    sections[index].anchors.append(
+                        Anchor(
+                            href: anchor.href, label: anchor.label, type: anchor.type,
+                            level: max(0, listDepth - 1)
+                        )
+                    )
                 }
-                anchor = nil
+                self.anchor = nil
             default:
                 break
             }
@@ -471,10 +630,12 @@ public enum EpubParser {
 
     private final class NCXDelegate: NSObject, XMLParserDelegate {
         /// A navPoint being read: `slot` is where it goes in reading order,
-        /// held open until `</navPoint>` so a parent still precedes the
-        /// children that close before it.
+        /// `level` is its depth (0 at the top), held open until
+        /// `</navPoint>` so a parent still precedes the children that close
+        /// before it.
         private struct Pending {
             var slot: Int
+            var level: Int
             var label = ""
             var src: String?
         }
@@ -495,7 +656,7 @@ public enum EpubParser {
         ) {
             switch localName(name) {
             case "navPoint":
-                stack.append(Pending(slot: entries.count))
+                stack.append(Pending(slot: entries.count, level: stack.count))
             case "navLabel":
                 inLabel = true
             case "text" where inLabel:
@@ -525,7 +686,9 @@ public enum EpubParser {
             case "navPoint":
                 guard let pending = stack.popLast() else { return }
                 if let src = pending.src,
-                   let entry = EpubParser.tocEntry(baseDir: baseDir, src: src, label: pending.label) {
+                   let entry = EpubParser.tocEntry(
+                       baseDir: baseDir, src: src, label: pending.label, level: pending.level
+                   ) {
                     entries.insert(entry, at: pending.slot)
                 }
             case "navLabel":
@@ -540,37 +703,77 @@ public enum EpubParser {
 
     /// Builds an entry from a raw TOC target and label, dropping ones with
     /// no usable label or path.
-    static func tocEntry(baseDir: String, src: String, label: String) -> TOCEntry? {
+    static func tocEntry(
+        baseDir: String, src: String, label: String, level: Int = 0
+    ) -> TOCEntry? {
         guard let title = cleanText(label) else { return nil }
+        guard !src.isEmpty else { return nil }
         let parts = src.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
         let path = normalizePath(resolveRelative(baseDir, percentDecode(String(parts[0]))))
         guard !path.isEmpty else { return nil }
         let fragment = parts.count > 1 ? percentDecode(String(parts[1])) : nil
         return TOCEntry(
-            title: title, path: path, fragment: fragment.flatMap { $0.isEmpty ? nil : $0 }
+            title: title, path: path, fragment: fragment.flatMap { $0.isEmpty ? nil : $0 },
+            level: level
         )
     }
 
-    // MARK: Titles
+    /// Resolves a book-level signal target (landmark or guide reference)
+    /// against the declaring document, dropping any fragment and decoding
+    /// percent escapes, so it matches the manifest path.
+    static func resolveTarget(baseDir: String, href: String) -> String {
+        let path = href.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
+        return normalizePath(resolveRelative(baseDir, percentDecode(String(path[0]))))
+    }
 
-    /// Every title source found for one spine item, before the chain picks
-    /// between them.
+    // MARK: Titles and matter
+
+    /// Every title and classification source found for one spine item,
+    /// before the chain picks between the titles and the signals decide the
+    /// matter.
     struct ChapterCandidate {
         var index: Int
         var href: String
-        var fragment: String?
-        var tocTitle: String?
+        /// Every TOC entry for the file, in reading order.
+        var tocEntries: [TOCEntry]
         var heading: String?
         var documentTitle: String?
+        /// From landmarks, the guide, the document's `epub:type`, or its
+        /// shape; `nil` when no signal names the file.
+        var explicitMatter: Matter?
     }
 
-    /// Applies the title chain — TOC label, first heading, `<title>`, then a
-    /// positional fallback — with the shared-title pass that disqualifies
-    /// boilerplate. TOC labels are trusted as-is; they are per-entry by
-    /// construction.
-    static func resolveChapterTitles(
+    /// Applies the title chain and then classifies each file. TOC labels are
+    /// trusted as-is; they are per-entry by construction.
+    static func resolveChapters(
         _ candidates: [ChapterCandidate], bookTitle: String
     ) -> [ChapterMeta] {
+        let titles = resolveTitles(candidates, bookTitle: bookTitle)
+        let matters = classifyMatter(candidates, titles: titles, bookTitle: bookTitle)
+
+        return candidates.enumerated().map { index, candidate in
+            let sections = candidate.tocEntries.map {
+                ChapterSection(title: $0.title, fragment: $0.fragment, level: $0.level)
+            }
+            return ChapterMeta(
+                key: String(format: "%03d", candidate.index + 1),
+                index: candidate.index,
+                title: titles[index],
+                href: candidate.href,
+                fragment: sections.first?.fragment,
+                matter: matters[index],
+                level: sections.first?.level ?? 0,
+                sections: sections
+            )
+        }
+    }
+
+    /// The title chain — TOC label, first heading, `<title>`, then a
+    /// positional fallback — with the shared-title pass that disqualifies
+    /// boilerplate.
+    static func resolveTitles(
+        _ candidates: [ChapterCandidate], bookTitle: String
+    ) -> [String] {
         let sharedHeadings = sharedValues(candidates.compactMap(\.heading))
         let sharedTitles = sharedValues(candidates.compactMap(\.documentTitle))
 
@@ -579,16 +782,290 @@ public enum EpubParser {
             let documentTitle = candidate.documentTitle.flatMap {
                 sharedTitles.contains($0) || isBoilerplateTitle($0, bookTitle: bookTitle) ? nil : $0
             }
-            let title = candidate.tocTitle ?? heading ?? documentTitle
+            return candidate.tocEntries.first?.title ?? heading ?? documentTitle
                 ?? "Chapter \(candidate.index + 1)"
-            return ChapterMeta(
-                key: String(format: "%03d", candidate.index + 1),
-                index: candidate.index,
-                title: title,
-                href: candidate.href,
-                fragment: candidate.fragment
-            )
         }
+    }
+
+    // MARK: Matter classification
+
+    /// The title heuristics' front-matter list. Matched case-insensitively
+    /// as the whole trimmed title or as a prefix followed by a non-letter;
+    /// "introduction" catches "Introduction" and "Introduction: …" but not
+    /// "Introductionary".
+    static let frontMatterTitles = [
+        "half title", "halftitle", "half-title", "title page", "series page",
+        "copyright", "acknowledgments", "acknowledgements", "dedication",
+        "contents", "table of contents", "epigraph", "about the author",
+        "also by", "by the same author", "a note on the", "note on the",
+        "translator's note", "translators' note", "texts used",
+        "select bibliography", "further reading", "chronology", "a chronology",
+        "principal characters", "list of", "introduction", "preface",
+        "foreword", "from the author", "author's note",
+    ]
+
+    /// The title heuristics' back-matter list.
+    static let backMatterTitles = [
+        "notes", "endnotes", "footnotes", "explanatory notes", "glossary",
+        "index", "appendix", "afterword", "bibliography", "colophon",
+        "about the publisher", "other books by", "also available",
+    ]
+
+    /// The classification pass: signals 1–3 decide first, then title
+    /// heuristics inside the front and back runs, then position. A file the
+    /// TOC labels as a part/book/volume/chapter (or begins with a number or
+    /// Roman numeral) is Body regardless of its title. Keys and order are
+    /// never affected.
+    static func classifyMatter(
+        _ candidates: [ChapterCandidate], titles: [String], bookTitle: String
+    ) -> [Matter] {
+        let count = candidates.count
+        var matters = [Matter?](repeating: nil, count: count)
+        var structural = [Bool](repeating: false, count: count)
+
+        for index in 0..<count {
+            matters[index] = candidates[index].explicitMatter
+            let labels = candidates[index].tocEntries.map(\.title) + [titles[index]]
+            structural[index] = labels.contains(where: isStructuralLabel)
+        }
+
+        // Where Body starts: an explicit signal, then a structural label,
+        // then position — the first file that is neither Cover nor Front by
+        // signals 2–4.
+        var bodyStart: Int?
+        if let first = matters.firstIndex(of: .body) {
+            bodyStart = first
+        } else if let first = structural.firstIndex(of: true) {
+            bodyStart = first
+        } else {
+            var index = 0
+            while index < count {
+                if matters[index] == .cover || matters[index] == .front || matters[index] == .back {
+                    index += 1
+                    continue
+                }
+                if frontMatter(titles[index], bookTitle: bookTitle) != nil {
+                    index += 1
+                    continue
+                }
+                break
+            }
+            bodyStart = index < count ? index : nil
+        }
+
+        // The run before Body: title heuristics name front matter; leftovers
+        // are front matter by position, unless a section label makes them
+        // Body (a part before an explicit `bodymatter` landmark, say).
+        if let bodyStart {
+            for index in 0..<bodyStart where matters[index] == nil {
+                if structural[index] {
+                    matters[index] = .body
+                } else {
+                    matters[index] = frontMatter(titles[index], bookTitle: bookTitle) ?? .front
+                }
+            }
+        }
+
+        // A structural label is Body unless a book-level signal said
+        // otherwise (landmarks/guide outrank the title sanity rule).
+        for index in 0..<count where structural[index] && matters[index] == nil {
+            matters[index] = .body
+        }
+
+        // The run after Body: back titles only, as a maximal suffix; the
+        // files between the last body item and that suffix stay Body.
+        let lastBody = matters.lastIndex(of: .body) ?? -1
+        if lastBody + 1 < count {
+            for index in stride(from: count - 1, through: lastBody + 1, by: -1) {
+                if matters[index] == .back { continue }
+                guard matters[index] == nil, !structural[index],
+                      backMatter(titles[index]) != nil else { break }
+                matters[index] = .back
+            }
+            for index in (lastBody + 1)..<count where matters[index] == nil {
+                matters[index] = .body
+            }
+        }
+
+        // Sanity: a book with no Body at all (an all-front-matter TOC) reads
+        // from its first non-cover file.
+        if !matters.contains(.body) {
+            for index in 0..<count where matters[index] != .cover {
+                matters[index] = .body
+            }
+        }
+
+        return matters.map { $0 ?? .body }
+    }
+
+    /// Front-matter titles, plus "Cover" (its own matter), the book's own
+    /// title, and an all-caps short title — a series name stamped on a
+    /// front-matter page.
+    static func frontMatter(_ title: String, bookTitle: String) -> Matter? {
+        if titleMatches(title, "cover") { return .cover }
+        if frontMatterTitles.contains(where: { titleMatches(title, $0) }) { return .front }
+        let trimmed = title.trimmed
+        if trimmed.compare(bookTitle.trimmed, options: .caseInsensitive) == .orderedSame {
+            return .front
+        }
+        let words = trimmed.split(whereSeparator: \.isWhitespace)
+        if !words.isEmpty, words.count <= 4,
+           trimmed.uppercased() == trimmed, trimmed.contains(where: \.isLetter) {
+            return .front
+        }
+        return nil
+    }
+
+    /// Back-matter titles for the trailing run only.
+    static func backMatter(_ title: String) -> Matter? {
+        backMatterTitles.contains(where: { titleMatches(title, $0) }) ? .back : nil
+    }
+
+    /// The sanity escape hatch: a section labeled part/book/volume/chapter,
+    /// or numbered (Arabic or Roman), is Body whatever its title says.
+    static func isStructuralLabel(_ label: String) -> Bool {
+        let trimmed = String(label.trimmed)
+        for prefix in ["part", "book", "volume", "chapter"] where titleMatches(trimmed, prefix) {
+            return true
+        }
+        if let first = trimmed.first, first.isNumber { return true }
+        return startsWithRomanNumeral(trimmed)
+    }
+
+    /// Whole-string or prefix-until-non-letter, case-insensitive:
+    /// "introduction" matches "Introduction: A Note" but not "Introductions".
+    static func titleMatches(_ title: String, _ needle: String) -> Bool {
+        let title = title.trimmed.lowercased()
+        guard title.hasPrefix(needle) else { return false }
+        guard title.count > needle.count else { return true }
+        return !title[title.index(title.startIndex, offsetBy: needle.count)].isLetter
+    }
+
+    /// `^[IVXLCDM]+\b`, case-insensitive: "I. Fyodor", "IV", and "V." count;
+    /// "In", "Very", and "Mitya" do not.
+    static func startsWithRomanNumeral(_ label: String) -> Bool {
+        let letters = CharacterSet(charactersIn: "IVXLCDM")
+        let upper = label.trimmed.uppercased()
+        var count = 0
+        for scalar in upper.unicodeScalars {
+            guard letters.contains(scalar) else { break }
+            count += 1
+        }
+        guard count > 0 else { return false }
+        let rest = upper.dropFirst(count)
+        return rest.isEmpty || !rest.first!.isLetter
+    }
+
+    /// The classification value of one `epub:type` token list (from a
+    /// `<body>`, a `<section>`, a landmark, or a guide reference).
+    static func documentTypeMatter(_ raw: String) -> Matter? {
+        let tokens = raw.lowercased().split(whereSeparator: \.isWhitespace)
+        if tokens.contains("cover") { return .cover }
+        if tokens.contains("bodymatter") { return .body }
+        if tokens.contains("frontmatter") { return .front }
+        if tokens.contains("backmatter") { return .back }
+        for token in tokens {
+            switch token {
+            case "titlepage", "halftitlepage", "copyright-page", "toc", "dedication",
+                 "acknowledgments", "acknowledgements", "epigraph", "foreword", "preface",
+                 "introduction", "landmarks", "loi", "lot":
+                return .front
+            case "part", "chapter", "volume", "prologue", "epilogue":
+                return .body
+            case "afterword", "appendix", "bibliography", "colophon", "endnotes",
+                 "footnotes", "glossary", "index", "notes":
+                return .back
+            default:
+                continue
+            }
+        }
+        return nil
+    }
+
+    /// The EPUB3 landmarks vocabulary, mapped to matters.
+    static func landmarkMatter(_ raw: String) -> Matter? {
+        let tokens = raw.lowercased().split(whereSeparator: \.isWhitespace)
+        if tokens.contains("cover") { return .cover }
+        if tokens.contains("bodymatter") { return .body }
+        if tokens.contains("backmatter") { return .back }
+        if tokens.contains("frontmatter") { return .front }
+        for token in tokens {
+            switch token {
+            case "titlepage", "toc", "copyright-page": return .front
+            default: continue
+            }
+        }
+        return nil
+    }
+
+    /// The EPUB2 guide vocabulary, mapped to matters.
+    static func guideMatter(_ raw: String) -> Matter? {
+        switch raw.trimmed.lowercased() {
+        case "text": return .body
+        case "cover": return .cover
+        case "title-page", "toc", "copyright-page", "acknowledgements",
+             "acknowledgments", "dedication", "epigraph", "foreword", "preface",
+             "loi", "lot":
+            return .front
+        case "bibliography", "glossary", "index", "notes", "colophon": return .back
+        default: return nil
+        }
+    }
+
+    /// The document's own `epub:type`, taken from `<body>` or the first
+    /// `<section>` in its first 8 KB.
+    static func documentEpubType(_ document: String) -> String? {
+        let scan = String(document.prefix(documentTypeScanLimit))
+        for tag in ["body", "section"] {
+            if let range = tagBodyRange(named: tag, in: scan),
+               let type = attributeValue("epub:type", in: range) {
+                return type
+            }
+        }
+        return nil
+    }
+
+    /// A cover wrapper: an image and almost no visible text (Gutenberg's
+    /// `wrap0000.html`).
+    static func isCoverByShape(_ document: String) -> Bool {
+        guard let body = bodyContent(document) else { return false }
+        guard body.range(of: "<img", options: .caseInsensitive) != nil
+            || body.range(of: "<svg", options: .caseInsensitive) != nil
+        else { return false }
+        let text = cleanText(String(body)) ?? ""
+        return text.count < coverShapeTextLimit
+    }
+
+    /// The inner text of the document's `<body>`, or `nil` when it has none.
+    static func bodyContent(_ document: String) -> Substring? {
+        guard let open = document.range(of: "<body", options: .caseInsensitive) else { return nil }
+        guard let close = document.range(of: ">", range: open.upperBound..<document.endIndex)
+        else { return nil }
+        if let end = document.range(
+            of: "</body", options: .caseInsensitive, range: close.upperBound..<document.endIndex
+        ) {
+            return document[close.upperBound..<end.lowerBound]
+        }
+        return document[close.upperBound...]
+    }
+
+    /// The body of the first `<name …>` tag at or after the start.
+    private static func tagBodyRange(named name: String, in text: String) -> Substring? {
+        var cursor = text.startIndex
+        while let open = text.range(
+            of: "<" + name, options: .caseInsensitive, range: cursor..<text.endIndex
+        ) {
+            let after = open.upperBound
+            if after == text.endIndex || text[after].isWhitespace
+                || text[after] == ">" || text[after] == "/" {
+                guard let close = text.range(of: ">", range: after..<text.endIndex) else {
+                    return nil
+                }
+                return text[after..<close.lowerBound]
+            }
+            cursor = open.upperBound
+        }
+        return nil
     }
 
     private static func sharedValues(_ values: [String]) -> Set<String> {
@@ -672,6 +1149,21 @@ public enum EpubParser {
         let collapsed = decodeEntities(stripped)
             .split(whereSeparator: \.isWhitespace)
             .joined(separator: " ")
+        // Ebookmaker wraps a cover page's `<title>` in literal quotes
+        // (`<title>"Cover"</title>`); one pair around the whole title is
+        // punctuation, not part of the name. A title that quotes itself
+        // (`"A" and "B"`) keeps its marks.
+        let quoted = (collapsed.hasPrefix("\"") && collapsed.hasSuffix("\""))
+            || (collapsed.hasPrefix("\u{201C}") && collapsed.hasSuffix("\u{201D}"))
+        if quoted, collapsed.count >= 2 {
+            let inner = String(collapsed.dropFirst().dropLast())
+            let innerHasQuotes = collapsed.hasPrefix("\"")
+                ? inner.contains("\"")
+                : inner.contains("\u{201C}") || inner.contains("\u{201D}")
+            if !innerHasQuotes {
+                return inner.isEmpty ? nil : inner
+            }
+        }
         return collapsed.isEmpty ? nil : collapsed
     }
 
@@ -733,17 +1225,20 @@ public enum EpubParser {
 
     // MARK: Paths
 
-    static func isProbablyContent(_ href: String) -> Bool {
-        let lower = href.lowercased()
-        return !(lower.hasSuffix(".ncx")
-            || lower.contains("toc")
-            || lower.contains("nav")
-            || lower.hasSuffix(".css")
-            || lower.hasSuffix(".jpg")
-            || lower.hasSuffix(".jpeg")
-            || lower.hasSuffix(".png")
-            || lower.hasSuffix(".gif")
-            || lower.hasSuffix(".svg"))
+    /// Whether a manifest item can be a chapter: a content document that is
+    /// not the nav. The manifest's media type and `properties` decide; the
+    /// href extension is only consulted when the media type is missing, so a
+    /// chapter named `navarre.xhtml` is kept while an NCX or the nav
+    /// document itself is dropped.
+    static func isContentItem(_ item: ManifestItem) -> Bool {
+        if let mediaType = item.mediaType, !mediaType.isEmpty {
+            let lower = mediaType.lowercased()
+            guard lower == "application/xhtml+xml" || lower == "text/html" else { return false }
+            let properties = item.properties?.split(whereSeparator: \.isWhitespace) ?? []
+            return !properties.contains("nav")
+        }
+        let lower = item.href.lowercased()
+        return [".xhtml", ".html", ".htm", ".xml"].contains { lower.hasSuffix($0) }
     }
 
     static func joinHref(_ baseDir: String, _ href: String) -> String {

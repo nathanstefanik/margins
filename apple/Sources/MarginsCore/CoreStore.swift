@@ -227,7 +227,7 @@ public actor CoreStore {
     }
 
     public func searchNotes(query: String) throws -> [NoteSearchHit] {
-        try library.searchNotes(query: query)
+        library.searchNotes(query: query)
     }
 
     /// The spine's chapter record for a key, or an error for unknown keys.

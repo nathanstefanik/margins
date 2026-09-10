@@ -23,6 +23,12 @@ public final class SearchController {
 
     /// Injectable for tests; production uses the default.
     public var debounceInterval: TimeInterval = SearchController.defaultDebounceInterval
+    /// Suspends for a debounce window. Injectable so tests can collapse it
+    /// and drive results on the next main-actor turn instead of racing the
+    /// scheduler under heavy parallel test load.
+    public var debounceSleep: @Sendable (TimeInterval) async throws -> Void = { delay in
+        try await Task.sleep(for: .seconds(delay))
+    }
 
     public private(set) var query = ""
     public private(set) var results: [NoteSearchHit] = []
@@ -69,9 +75,10 @@ public final class SearchController {
         isSearching = true
 
         let myGeneration = generation
+        let sleep = debounceSleep
         let delay = debounceInterval
         task = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
+            try? await sleep(delay)
             guard !Task.isCancelled, let self, self.generation == myGeneration else { return }
             let searched = self.query
             let hits = await self.execute(searched)

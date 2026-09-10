@@ -91,6 +91,24 @@ struct ModelsTests {
         // Resolved at call time from the library root, never read from disk.
         #expect(meta.coverPath == nil)
         #expect(meta.progressPercent == nil)
+        // The v2 outline fields default for files written before them.
+        #expect(meta.chapters[0].matter == .body)
+        #expect(meta.chapters[0].level == 0)
+        #expect(meta.chapters[0].sections.isEmpty)
+    }
+
+    @Test("the v2 outline fields round-trip through meta.json")
+    func outlineFieldsRoundTrip() throws {
+        var meta = try MarginsJSON.decode(BookMeta.self, from: Data(Self.metaJSON.utf8))
+        meta.chapters[0].matter = .front
+        meta.chapters[0].level = 1
+        meta.chapters[0].sections = [
+            ChapterSection(title: "Preface", fragment: "pref", level: 1),
+            ChapterSection(title: "Acknowledgements", level: 2),
+        ]
+        let decoded = try MarginsJSON.decode(BookMeta.self, from: try MarginsJSON.encode(meta))
+        #expect(decoded == meta)
+        #expect(decoded.chapters[0].sections[1].fragment == nil)
     }
 
     @Test("meta.json re-encodes with serde's key order and omissions")
@@ -109,6 +127,7 @@ struct ModelsTests {
             "added_at", "author", "chapters", "chapters_version", "cover", "href",
             "href", "id", "index", "index", "key", "key", "language", "fragment",
             "source_filename", "title", "title", "title",
+            "level", "level", "matter", "matter", "sections", "sections",
         ].sorted())
         // The values survive the trip; only the key order differs from what
         // serde wrote (see `MarginsJSON`).
