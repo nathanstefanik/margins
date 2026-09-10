@@ -17,6 +17,10 @@ struct ReaderScene: View {
     @Environment(ReaderModel.self) private var reader
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Shared with the library grid so the reader grows out of the cover.
+    let zoomNamespace: Namespace.ID
 
     /// The page rests without chrome; a center tap reveals it.
     @State private var chromeVisible = false
@@ -51,7 +55,7 @@ struct ReaderScene: View {
 
     var body: some View {
         ZStack {
-            Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
+            DesignTokens.paper
                 .ignoresSafeArea()
             IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
                 .overlay(alignment: .top) { headerOverlay }
@@ -64,13 +68,13 @@ struct ReaderScene: View {
                 }
             if let finished = finishedChapter {
                 notePrompt(for: finished)
-                    .transition(.opacity)
+                    .transition(promptTransition)
             }
             if flashVisible {
                 flashBadge
             }
         }
-        .animation(.easeOut(duration: 0.2), value: chromeVisible)
+        .animation(reduceMotion ? nil : DesignTokens.Motion.chrome, value: chromeVisible)
         // The paper is fixed cream regardless of the system theme; the
         // chrome ink must follow the paper — in dark mode `.secondary`
         // resolves to a light gray that vanishes on it (sheets presented
@@ -78,11 +82,14 @@ struct ReaderScene: View {
         .preferredColorScheme(.light)
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationTransition(.zoom(sourceID: reader.book?.id ?? "", in: zoomNamespace))
         // The custom chrome carries the back affordance, the title, and
         // the actions and fades with `chromeVisible`; the system bar would
         // be a second, always-on header stacked on top of it (and push
-        // the page content down).
+        // the page content down). The tab bar hides too: reading is the
+        // immersive content layer, and a floating bar would sit on the page.
         .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .sheet(isPresented: $settingsPresented, onDismiss: presentPendingDestination) {
             ReaderSettingsSheet(preferences: reader.preferences) { destination in
                 pendingDestination = destination
@@ -193,19 +200,19 @@ struct ReaderScene: View {
     }
 
     private func flash() {
-        withAnimation { flashVisible = true }
+        withAnimation(reduceMotion ? nil : DesignTokens.Motion.chrome) { flashVisible = true }
         Task {
             try? await Task.sleep(for: .seconds(1.4))
-            withAnimation { flashVisible = false }
+            withAnimation(reduceMotion ? nil : DesignTokens.Motion.chrome) { flashVisible = false }
         }
     }
 
     private var flashBadge: some View {
         Text("Mark saved")
             .font(.footnote)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.thinMaterial, in: Capsule())
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(.regular, in: .capsule)
             .transition(.opacity)
             .accessibilityIdentifier("reader-flash")
     }
@@ -241,12 +248,19 @@ struct ReaderScene: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 17, weight: .medium))
+                .font(.body.weight(.medium))
                 .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(label)
+    }
+
+    /// Motion explains structure: the prompt rises from its control. Under
+    /// Reduce Motion only opacity changes.
+    private var promptTransition: AnyTransition {
+        reduceMotion ? .opacity : .scale(scale: 0.9, anchor: .bottom).combined(with: .opacity)
     }
 
     /// The running head: chapter title centered at the top of the paper,
@@ -263,14 +277,16 @@ struct ReaderScene: View {
                 .padding(.trailing, chromeVisible ? 96 : 24)
                 .allowsHitTesting(false)
             if chromeVisible {
-                HStack(spacing: 0) {
-                    chromeButton("chevron.left", "Back to book") { dismiss() }
-                    Spacer(minLength: 0)
-                    chromeButton("square.and.pencil", "New note at this page") {
-                        newNote()
-                    }
-                    chromeButton("line.3.horizontal", "Reader menu") {
-                        settingsPresented = true
+                GlassEffectContainer(spacing: DesignTokens.Spacing.chrome) {
+                    HStack(spacing: DesignTokens.Spacing.chrome) {
+                        chromeButton("chevron.left", "Back to book") { dismiss() }
+                        Spacer(minLength: 0)
+                        chromeButton("square.and.pencil", "New note at this page") {
+                            newNote()
+                        }
+                        chromeButton("line.3.horizontal", "Reader menu") {
+                            settingsPresented = true
+                        }
                     }
                 }
                 .transition(.opacity)
@@ -339,7 +355,9 @@ struct ReaderScene: View {
         else { return }
         let silencedKey = "notePrompt.dismissed.\(reader.book?.id ?? "").\(finished.key)"
         if !UserDefaults.standard.bool(forKey: silencedKey) {
-            finishedChapter = finished
+            withAnimation(reduceMotion ? nil : DesignTokens.Motion.prompt) {
+                finishedChapter = finished
+            }
         }
     }
 
@@ -359,7 +377,9 @@ struct ReaderScene: View {
                         true,
                         forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
                     )
-                    finishedChapter = nil
+                    withAnimation(reduceMotion ? nil : DesignTokens.Motion.prompt) {
+                        finishedChapter = nil
+                    }
                 }
                 .buttonStyle(.bordered)
                 Button("Write note") {
@@ -369,8 +389,8 @@ struct ReaderScene: View {
                 .buttonStyle(.borderedProminent)
             }
         }
-        .padding(14)
-        .background(.thinMaterial, in: .rect(cornerRadius: 12))
+        .padding(16)
+        .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.Radius.card, style: .continuous))
         .padding(.bottom, 16)
         .frame(maxHeight: .infinity, alignment: .bottom)
         .accessibilityElement(children: .combine)
@@ -448,8 +468,12 @@ struct ReaderScene: View {
     /// Development seams for simulator verification (no touch synthesis):
     /// `MARGINS_CAPTURE_FIXTURE=<text>` simulates a selection capture,
     /// `MARGINS_HIGHLIGHT_FIXTURE=1` commits a highlight at the current
-    /// page, `MARGINS_EDITOR_FIXTURE=1` opens the chapter-note editor.
+    /// page, `MARGINS_EDITOR_FIXTURE=1` opens the chapter-note editor, and
+    /// `MARGINS_CHROME_FIXTURE=1` reveals the floating control layer.
     private func runDebugFixture() async {
+        if ProcessInfo.processInfo.environment["MARGINS_CHROME_FIXTURE"] != nil {
+            chromeVisible = true
+        }
         guard let fixture = ProcessInfo.processInfo.environment["MARGINS_CAPTURE_FIXTURE"] else {
             if ProcessInfo.processInfo.environment["MARGINS_EDITOR_FIXTURE"] != nil {
                 editorPresented = true

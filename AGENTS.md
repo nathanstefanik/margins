@@ -51,6 +51,10 @@ scripts/               # make-app.sh, bump-version.sh, bump-build.sh,
 - Keep annotation storage plain-text; do not introduce a database without strong reason
 - Sensitive paths belong in `.env`, never committed
 - Match existing minimal/zathura-like UI patterns (dark, keyboard-first)
+- iOS UI follows the iOS 26 content-under-glass model: system controls
+  first, glass only on the control plane (never content), layout by size
+  class — never `interfaceOrientation`. Shared tokens live in
+  `apple/ios/Margins/DesignTokens.swift`.
 - GPL-3.0-or-later — preserve license on distribution
 
 ## Useful commands

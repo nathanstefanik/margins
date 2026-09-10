@@ -109,8 +109,9 @@ shared `LibraryModel`; the library root is resolved per launch by
 `LibraryLocation` (ubiquity container paths change between installs),
 falling back to local `Documents/Library` with the reason surfaced in the
 UI. DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`,
-`MARGINS_DELETE_FIXTURE`) drive deterministic simulator verification flows.
-EPUBs handed over by Files/Mail arrive through `onOpenURL` as
+`MARGINS_DELETE_FIXTURE`, `MARGINS_OPEN_FIXTURE`, `MARGINS_CHROME_FIXTURE`)
+drive deterministic simulator verification flows. EPUBs handed over by
+Files/Mail arrive through `onOpenURL` as
 security-scoped URLs and are staged (`NSFileCoordinator`) before the core
 imports its own copy into the library. The signing team lives in
 `apple/ios/Signing.local.xcconfig` (gitignored; see
@@ -121,6 +122,27 @@ container as a document scope (the `NSUbiquitousContainer*` keys nested
 under `NSUbiquitousContainers` → the container id, plus
 `UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`). Signing team
 stays unset in the repo — set it locally for device builds.
+
+### Navigation, layout, and the control layer
+
+The iOS app follows the iOS 26 content-under-controls model: an immersive
+content layer (the library grid, the paper) with a lightweight glass
+control layer floating above it. Glass belongs to controls and navigation
+only — never to cards, list rows, or content, and never nested in glass.
+
+One information architecture adapts to the available space instead of a
+per-device layout: `LibraryScene` is a `TabView` with a **Library** tab
+and a dedicated **Search** tab, styled `.sidebarAdaptable` so it is a
+floating tab bar on a compact canvas and a sidebar on a regular one. The
+Library tab is a `NavigationStack` (`LibraryRoute`) pushing book detail
+and then the reader; the reader fires a matched-geometry zoom out of the
+tapped cover (`.matchedTransitionSource` / `.navigationTransition(.zoom)`).
+Global notes search owns the Search tab (scope: the whole library); the
+contextual search for a book's contents would live inline over that
+content. Layout keys off size classes (`verticalSizeClass` shrinks the
+book-detail cover on a constrained height), never `interfaceOrientation`,
+so it survives Split View, landscape, and iPhone Mirroring. Shared sizing
+and rounding live in `DesignTokens.swift`.
 
 ### Reader rendering
 

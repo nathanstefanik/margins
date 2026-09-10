@@ -1,7 +1,7 @@
 # Plan: Apple-only consolidation, Swift core, and chapter outline
 
-Status: Phases 0–5 implemented (2026-09-10) · Phase 6 proposed ·
-Audience: an AI agent implementing it.
+Status: Phases 0–6 implemented (2026-09-10) · Audience: an AI agent
+implementing it.
 
 End state: a macOS app and an iOS app, both SwiftUI, over one pure-Swift
 core in a single SwiftPM package. No Rust, no UniFFI, no xcframework, no

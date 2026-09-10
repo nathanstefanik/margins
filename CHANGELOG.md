@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fixture.
 - The version source is now `apple/VERSION` (read by `make-app.sh` and
   the release workflow's tag check).
+- iOS redesigned for the iOS 26 content-under-controls model: a
+  `Library`/`Search` tab anatomy that adapts from a floating tab bar to a
+  sidebar, a dedicated search tab, glass only on the control plane, a
+  zoom transition from cover to reader, size-class layout instead of
+  orientation, and shared geometry/motion tokens.
 
 ### Removed
 

@@ -273,7 +273,7 @@ struct ChapterNoteEditorSheet: View {
                     ))
                     .focused($editorFocused)
                     .scrollContentBackground(.hidden)
-                    .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 8))
+                    .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: DesignTokens.Radius.control, style: .continuous))
                     .padding(4)
                     if reader.noteBody.isEmpty {
                         Text("What did this chapter leave you with…")
@@ -334,7 +334,7 @@ struct ChapterNoteEditorSheet: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(6)
-                            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 6))
+                            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
                         }
                     }
                 }
