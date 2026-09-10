@@ -77,6 +77,11 @@ struct ReaderScene: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: chromeVisible)
+        // The paper is fixed cream regardless of the system theme; the
+        // chrome ink must follow the paper — in dark mode `.secondary`
+        // resolves to a light gray that vanishes on it (sheets presented
+        // from the reader follow too, which keeps them consistent).
+        .preferredColorScheme(.light)
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
         // The custom chrome carries the back affordance, the title, and
