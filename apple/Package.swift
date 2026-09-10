@@ -88,11 +88,21 @@ let package = Package(
             name: "MarginsModelTests",
             dependencies: ["MarginsCore", "MarginsModel"]
         ),
+        // The hand-written Swift core, under its temporary name while the
+        // UniFFI bridge still owns `MarginsCore` (step 7 renames it).
+        .target(
+            name: "MarginsKernel",
+            dependencies: [
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+            ]
+        ),
         // Tests for the hand-written Swift core (step 2+). Grows the
         // Fixtures resource bundle when the ported fixtures land in step 3.
+        // Still depends on MarginsCore for the bridge smoke test, which
+        // goes away with the bridge.
         .testTarget(
             name: "MarginsCoreTests",
-            dependencies: ["MarginsCore"]
+            dependencies: ["MarginsCore", "MarginsKernel"]
         ),
     ]
 )
