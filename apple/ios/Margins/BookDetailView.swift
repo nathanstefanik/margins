@@ -225,7 +225,9 @@ private struct ContentsList: View {
                 }
                 ForEach(outline.body) { row in
                     self.row(row)
-                    Divider()
+                    if row.id != outline.body.last?.id {
+                        Divider()
+                    }
                 }
                 if !outline.back.isEmpty {
                     DisclosureGroup(isExpanded: $backExpanded) {
@@ -309,14 +311,7 @@ private struct ContentsList: View {
 
     private func accessibilityLabel(_ row: OutlineRow) -> String {
         let notes = notedKeys.contains(row.chapter.key) ? ", has notes" : ""
-        switch row.kind {
-        case let .chapter(number):
-            return "Chapter \(number), \(row.title)\(notes)"
-        case .heading:
-            return "\(row.title), heading\(notes)"
-        case .matter:
-            return "\(row.title)\(notes)"
-        }
+        return row.accessibilityLabel + notes
     }
 }
 

@@ -30,6 +30,16 @@ public struct OutlineRow: Identifiable, Equatable, Sendable {
     /// names one). Nil means the top of `chapter.href`.
     public var jumpFragment: String? { section?.fragment ?? chapter.fragment }
 
+    /// VoiceOver label shared by both outlines: numbered rows read as
+    /// chapters, containers as headings, matter by its title alone.
+    public var accessibilityLabel: String {
+        switch kind {
+        case let .chapter(number): "Chapter \(number), \(title)"
+        case .heading: "\(title), heading"
+        case .matter: title
+        }
+    }
+
     public init(
         id: String,
         chapter: ChapterMeta,
@@ -49,11 +59,13 @@ public struct OutlineRow: Identifiable, Equatable, Sendable {
 /// cover, the reading body, and the back matter. Built once from
 /// `BookMeta.chapters`; pure so the views and tests share one definition.
 public struct ContentsOutline: Equatable, Sendable {
-    /// Cover and front matter, spine order.
+    /// Cover and front matter, one row per file in spine order.
     public let front: [OutlineRow]
-    /// Body headings and numbered chapters, reading order.
+    /// Body headings and numbered chapters, one row per TOC entry in reading
+    /// order (a file holding "Book II" and its first chapter contributes
+    /// both).
     public let body: [OutlineRow]
-    /// Back matter, spine order.
+    /// Back matter, one row per file in spine order.
     public let back: [OutlineRow]
 
     public init(front: [OutlineRow], body: [OutlineRow], back: [OutlineRow]) {
@@ -81,19 +93,34 @@ public struct ContentsOutline: Equatable, Sendable {
         for chapter in chapters {
             switch chapter.matter {
             case .cover, .front:
-                front.append(contentsOf: rows(for: chapter, kind: .matter))
+                front.append(matterRow(for: chapter))
             case .back:
-                back.append(contentsOf: rows(for: chapter, kind: .matter))
+                back.append(matterRow(for: chapter))
             case .body:
-                body.append(contentsOf: rows(for: chapter, kind: nil))
+                body.append(contentsOf: bodyRows(for: chapter))
             }
         }
         return ContentsOutline(front: front, body: number(body), back: back)
     }
 
-    /// Expands one chapter into a row per TOC entry. A chapter the TOC never
-    /// names becomes a single row carrying its own title.
-    private static func rows(for chapter: ChapterMeta, kind: OutlineRow.Kind?) -> [OutlineRow] {
+    /// One row for a front- or back-matter file. A page the TOC names several
+    /// times (Gutenberg's title page carries the title, translator, and
+    /// publisher as separate entries) is still one page in the outline; front
+    /// and back matter are not nested reading content.
+    private static func matterRow(for chapter: ChapterMeta) -> OutlineRow {
+        OutlineRow(
+            id: "\(chapter.key)#0",
+            chapter: chapter,
+            section: chapter.sections.first,
+            title: chapter.title,
+            kind: .matter
+        )
+    }
+
+    /// Expands one body chapter into a row per TOC entry, so a file holding
+    /// "Book II" and its first chapter contributes both. A body chapter the
+    /// TOC never names becomes a single row carrying its own title.
+    private static func bodyRows(for chapter: ChapterMeta) -> [OutlineRow] {
         let sections = chapter.sections
         if sections.isEmpty {
             return [
@@ -102,7 +129,7 @@ public struct ContentsOutline: Equatable, Sendable {
                     chapter: chapter,
                     section: nil,
                     title: chapter.title,
-                    kind: kind ?? .chapter(number: 0)
+                    kind: .chapter(number: 0)
                 )
             ]
         }
@@ -112,7 +139,7 @@ public struct ContentsOutline: Equatable, Sendable {
                 chapter: chapter,
                 section: section,
                 title: section.title,
-                kind: kind ?? .chapter(number: 0)
+                kind: .chapter(number: 0)
             )
         }
     }
@@ -158,7 +185,7 @@ public struct ContentsOutline: Equatable, Sendable {
                         chapter: row.chapter,
                         section: row.section,
                         title: row.title,
-                        kind: .heading(level: level(row))
+                        kind: .heading(level: max(level(row), 0))
                     )
                 )
             } else {

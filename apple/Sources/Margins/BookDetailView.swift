@@ -193,6 +193,7 @@ struct BookDetailView: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(row.accessibilityLabel)
     }
 
     /// Only the annotated chapters, in spine order, with their note stats.

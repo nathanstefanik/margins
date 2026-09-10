@@ -540,7 +540,7 @@ private struct TOCSheet: View {
             }
         }
         .foregroundStyle(.primary)
-        .accessibilityLabel(rowAccessibilityLabel(row))
+        .accessibilityLabel(row.accessibilityLabel)
     }
 
     @ViewBuilder
@@ -571,11 +571,4 @@ private struct TOCSheet: View {
         }
     }
 
-    private func rowAccessibilityLabel(_ row: OutlineRow) -> String {
-        switch row.kind {
-        case let .chapter(number): "Chapter \(number), \(row.title)"
-        case .heading: "\(row.title), heading"
-        case .matter: row.title
-        }
-    }
 }

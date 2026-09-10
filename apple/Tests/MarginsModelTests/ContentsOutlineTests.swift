@@ -179,6 +179,76 @@ struct ContentsOutlineTests {
         ])
     }
 
+    @Test("a front-matter page the TOC names several times is still one row")
+    func multiSectionMatterCollapses() {
+        let outline = ContentsOutline.build(from: [
+            chapter(key: "001", title: "Cover", matter: .cover),
+            chapter(key: "002", title: "The Brothers Karamazov", matter: .front, sections: [
+                ChapterSection(title: "The Brothers Karamazov", fragment: "a", level: 0),
+                ChapterSection(title: "Translated from the Russian of", fragment: "b", level: 0),
+                ChapterSection(title: "The Lowell Press New York", fragment: "c", level: 0),
+            ]),
+            chapter(key: "003", title: "Chapter One", sections: [
+                ChapterSection(title: "Chapter One", fragment: "c1", level: 0),
+            ]),
+        ])
+        #expect(outline.front.count == 2)
+        #expect(outline.front.last?.title == "The Brothers Karamazov")
+        #expect(outline.front.last?.jumpFragment == "a")
+        #expect(outline.numberedChapterCount == 1)
+    }
+
+    @Test("the Karamazov fixture builds the outline the UI shows")
+    func karamazovFixtureOutline() throws {
+        let path = repoRoot
+            .appendingPathComponent("fixtures", isDirectory: true)
+            .appendingPathComponent("dostoyevsky_the_karamazov_brothers.epub")
+            .path
+        let info = try EpubParser.parse(path: path)
+        let outline = ContentsOutline.build(from: info.chapters)
+
+        // 001 (cover) and 002 (Gutenberg's title page, whose NCX carries
+        // several entries) are two rows, not two plus the page's sub-entries.
+        #expect(outline.front.count == 2)
+        #expect(outline.front.first?.chapter.matter == .cover)
+        #expect(outline.front.last?.chapter.key == "002")
+        #expect(outline.front.last?.title == "The Brothers Karamazov")
+        #expect(outline.front.allSatisfy { $0.kind == .matter })
+        #expect(outline.back.map(\.title) == ["FOOTNOTES"])
+
+        // Parts and books are unnumbered headings above the chapters.
+        #expect(
+            outline.body.contains {
+                $0.title == "PART I" && $0.kind == .heading(level: 0)
+            }
+        )
+        #expect(
+            outline.body.contains {
+                $0.title == "Book I. The History Of A Family" && $0.kind == .heading(level: 1)
+            }
+        )
+        #expect(
+            outline.body.contains {
+                $0.title == "Book II. An Unfortunate Gathering" && $0.kind == .heading(level: 1)
+            }
+        )
+
+        // Every one of the NCX's 96 chapter labels is a numbered leaf, and
+        // none of the Gutenberg boilerplate leaked in.
+        let chapterRows = outline.numberedChapters.filter { $0.title.hasPrefix("Chapter ") }
+        #expect(chapterRows.count == 96)
+        #expect(outline.numberedChapters.first?.title.hasPrefix("Chapter ") == true)
+        #expect(
+            !outline.body.contains { $0.title.hasPrefix("The Project Gutenberg eBook") }
+        )
+        // Numbering starts at 1 and is contiguous across parts and books.
+        let numbers = outline.numberedChapters.compactMap { row -> Int? in
+            if case let .chapter(number) = row.kind { return number }
+            return nil
+        }
+        #expect(numbers == Array(1...numbers.count))
+    }
+
     @Test("rows carry stable ids and section anchors")
     func rowIdentityAndAnchors() {
         let outline = ContentsOutline.build(from: [
