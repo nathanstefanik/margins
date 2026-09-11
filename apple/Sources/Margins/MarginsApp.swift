@@ -4,6 +4,7 @@ import MarginsModel
 @main
 struct MarginsApp: App {
     @State private var model = LibraryModel()
+    @State private var clubs = ClubModel()
     @State private var reader = ReaderModel()
 
     init() {
@@ -23,13 +24,14 @@ struct MarginsApp: App {
         WindowGroup("Margins") {
             ContentView()
                 .environment(model)
+                .environment(clubs)
                 .environment(reader)
         }
         .commands {
-            MarginsCommands(model: model, reader: reader)
+            MarginsCommands(model: model, clubs: clubs, reader: reader)
         }
         Settings {
-            SettingsView(model: model, reader: reader)
+            SettingsView(model: model, clubs: clubs, reader: reader)
         }
     }
 }

@@ -10,6 +10,7 @@ import MarginsModel
 final class AppModel {
     let library: LibraryModel
     let reader: ReaderModel
+    let clubs: ClubModel
     let libraryLocation: LibraryLocation
     /// Where the library root resolved to this launch; the scene surfaces
     /// the reason whenever the runtime fallback kicked in.
@@ -34,6 +35,7 @@ final class AppModel {
         try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         library = LibraryModel(dataDir: support.path)
         reader = ReaderModel()
+        clubs = ClubModel()
 
         // Wire the reader into the library: removals close the reader, and
         // the debounced position/note savers persist through the store.
@@ -66,6 +68,11 @@ final class AppModel {
         #endif
         if library.libraryRoot != root {
             await library.setLibraryRoot(root)
+        }
+        // Clubs reuse the library's store actor; data dir is app-support,
+        // so club state never lands in the synced library folder.
+        if let store = library.coreStore {
+            await clubs.activate(store: store)
         }
     }
 

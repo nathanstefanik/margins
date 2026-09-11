@@ -4,6 +4,7 @@ import MarginsModel
 
 struct MarginsCommands: Commands {
     let model: LibraryModel
+    let clubs: ClubModel
     let reader: ReaderModel
 
     var body: some Commands {
@@ -29,6 +30,28 @@ struct MarginsCommands: Commands {
                 reader.flushNoteSave()
             }
             .keyboardShortcut("s", modifiers: .command)
+        }
+        CommandMenu("Clubs") {
+            Button("New Book Club…") {
+                clubs.createSheetPresented = true
+            }
+            Button("Join Book Club…") {
+                clubs.joinSheetPresented = true
+            }
+            .disabled(!clubs.supportsSharing)
+            Divider()
+            Button("Sync My Notes") {
+                Task { await clubs.publishOwnSnapshot() }
+            }
+            .disabled(clubs.selectedClub == nil)
+            Button("Export Club Notes…") {
+                Task { await ClubExportPanel.run(model: clubs) }
+            }
+            .disabled(clubs.selectedClub == nil)
+            Button("Copy Club Notes") {
+                Task { await ClubExportPanel.copy(model: clubs) }
+            }
+            .disabled(clubs.selectedClub == nil)
         }
         CommandMenu("Go") {
             Button("Next Chapter") {

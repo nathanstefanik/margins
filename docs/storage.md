@@ -296,6 +296,39 @@ written wherever the user chooses and nothing new is stored in the library
 tree — recompiling is always possible from the note files, so deleting an
 export never loses data.
 
+## Book clubs
+
+Club state is social state, not library content: it is derived from notes,
+shared through CloudKit (`docs/book-clubs-plan.md`), and stored under the app
+**data directory** rather than the library root. Pointing the library at a
+synced folder therefore never replicates club membership between machines.
+
+```
+{data_dir}/clubs/
+  {club_id}/
+    club.json                    # name, book, invite code, roster
+    members/{member_id}.json     # one member's derived notes snapshot
+```
+
+- `club.json` is a `Club` record: the book identity (`book_id`, title,
+  author), the four-character invite code, and the roster with roles. One
+  club reads exactly one book; there is no reading list and no persistence
+  of notes into a next book.
+- `members/{member_id}.json` is a `ClubMemberNotes` snapshot: that member's
+  chapters with content, compiled from their local notes. Snapshots are
+  derived artifacts — deleting one loses nothing, because
+  `ClubCompile.snapshot` rebuilds it from the library tree.
+- Members never see another member's raw note files. Shared records and the
+  UI carry snapshots and the merged view only.
+- Remote state lives in CloudKit (`docs/book-clubs-plan.md`): one private
+  record zone per club holds the `Club` roster record and one `Snapshot`
+  record per member behind a `CKShare`; a public `ClubInvite` record maps
+  the invite code to the share URL until it expires. Unsigned builds fall
+  back to `LocalClubSyncEngine`, where clubs stay on the device.
+- The spoiler-protection setting is global and lives in `config.json`
+  (`club_spoiler_protection`, default `true`); it is never part of shared
+  club state.
+
 ## Sync workflow
 
 1. Point the library root at a synced folder (`MARGINS_LIBRARY_ROOT`, or

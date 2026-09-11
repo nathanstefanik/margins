@@ -5,6 +5,7 @@ import MarginsModel
 /// root. Both drive the same persisted state the reading surface uses.
 struct SettingsView: View {
     let model: LibraryModel
+    let clubs: ClubModel
     let reader: ReaderModel
 
     var body: some View {
@@ -13,8 +14,38 @@ struct SettingsView: View {
                 .tabItem { Label("Reading", systemImage: "book") }
             libraryTab
                 .tabItem { Label("Library", systemImage: "folder") }
+            clubsTab
+                .tabItem { Label("Clubs", systemImage: "person.2") }
         }
-        .frame(width: 420, height: 260)
+        .frame(width: 420, height: 300)
+    }
+
+    private var clubsTab: some View {
+        Form {
+            Section("Book Clubs") {
+                Toggle(
+                    "Spoiler protection",
+                    isOn: Binding(
+                        get: { clubs.spoilerProtection },
+                        set: { value in Task { await clubs.setSpoilerProtection(value) } }
+                    )
+                )
+                Text("Hide another member's notes for the chapter you're reading and every later chapter. Your own notes always stay visible.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                LabeledContent("Sharing") {
+                    Text(clubs.supportsSharing ? "iCloud" : "This Mac only")
+                }
+                Text(
+                    clubs.supportsSharing
+                        ? "Clubs are private: members join only with an invite code you share."
+                        : "Sign in to iCloud in System Settings to invite other readers. Until then clubs stay on this Mac."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 
     private var typographyTab: some View {

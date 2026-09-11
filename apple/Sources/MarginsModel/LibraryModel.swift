@@ -30,6 +30,11 @@ public final class LibraryModel {
     private let dataDir: String?
     private var store: CoreStore?
 
+    /// The underlying core store once `activate()` ran. Sibling models
+    /// (clubs) share this one actor instead of opening a second store over
+    /// the same files.
+    public var coreStore: CoreStore? { store }
+
     /// - Parameter dataDir: explicit data directory for the core, or `nil`
     ///   to let it resolve `MARGINS_DATA_DIR` / the platform default.
     public init(dataDir: String? = nil) {

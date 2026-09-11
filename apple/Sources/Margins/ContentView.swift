@@ -3,10 +3,12 @@ import MarginsModel
 
 struct ContentView: View {
     @Environment(LibraryModel.self) private var model
+    @Environment(ClubModel.self) private var clubs
     @Environment(ReaderModel.self) private var reader
     @State private var keyboardController: ShellKeyboardController?
 
     var body: some View {
+        @Bindable var clubs = clubs
         NavigationSplitView {
             SidebarView()
         } detail: {
@@ -30,7 +32,22 @@ struct ContentView: View {
         }
         .animation(.easeOut(duration: 0.15), value: model.searchOpen)
         .animation(.easeOut(duration: 0.15), value: model.helpOpen)
-        .task { await model.activate() }
+        .sheet(isPresented: $clubs.createSheetPresented) {
+            CreateClubSheet()
+                .environment(model)
+                .environment(clubs)
+        }
+        .sheet(isPresented: $clubs.joinSheetPresented) {
+            JoinClubSheet()
+                .environment(model)
+                .environment(clubs)
+        }
+        .task {
+            await model.activate()
+            if let store = model.coreStore {
+                await clubs.activate(store: store)
+            }
+        }
         .onAppear {
             if keyboardController == nil {
                 let controller = ShellKeyboardController(model: model, reader: reader)
