@@ -2,7 +2,7 @@ import Foundation
 @testable import MarginsCore
 import Testing
 
-/// Translated from `crates/margins-core/src/library.rs`'s test module. The
+/// Translated from the legacy core's library test module. The
 /// recurring concern is that a book directory is either whole or absent: an
 /// interrupted import must not surface as a book, and a repair must not
 /// destroy the source it is repairing from.

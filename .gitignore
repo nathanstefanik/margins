@@ -32,10 +32,6 @@ DerivedData/
 /build/
 *.dmg
 
-# Rust build directory. The core left Rust behind, but stale working
-# trees and old checkouts may still hold one — never let it come back.
-target/
-
 # Local signing (team ID — never commit)
 apple/ios/Signing.local.xcconfig
 

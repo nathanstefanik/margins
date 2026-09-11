@@ -2,7 +2,7 @@ import Foundation
 @testable import MarginsCore
 import Testing
 
-/// Translated from `crates/margins-core/src/marks.rs`'s test module. The
+/// Translated from the legacy core's marks test module. The
 /// marks section is the one place where byte identity is the contract:
 /// editing one mark must not rewrite its neighbours, and content the parser
 /// cannot understand must survive a round trip untouched.
@@ -224,7 +224,7 @@ struct MarksTests {
 
 @Suite("AppConfig")
 struct AppConfigTests {
-    /// Translated from `config.rs`. The Rust tests drove the real process
+    /// Translated from the legacy config tests. They drove the real process
     /// environment behind a mutex; these use an explicit data directory
     /// instead, which is what the apps pass and what keeps the suite
     /// parallel-safe.
@@ -263,7 +263,7 @@ struct AppConfigTests {
         #expect(reloaded.libraryRoot == libraryRoot)
     }
 
-    @Test("config.json keeps the key the Rust core wrote")
+    @Test("config.json keeps the key the legacy core wrote")
     func configJSONKeepsItsKey() throws {
         let base = try temporaryDirectory()
         let dataDir = base.appendingPathComponent("data")
@@ -276,7 +276,7 @@ struct AppConfigTests {
         )
         #expect(raw.contains("\"library_root\""))
 
-        // And a config.json written by the Rust core loads.
+        // And a config.json written by the legacy core loads.
         let other = base.appendingPathComponent("other")
         try #"{"library_root":"\#(other)"}"#
             .write(toFile: dataDir.appendingPathComponent("config.json"), atomically: true, encoding: .utf8)

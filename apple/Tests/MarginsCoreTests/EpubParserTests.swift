@@ -2,7 +2,7 @@ import Foundation
 @testable import MarginsCore
 import Testing
 
-/// Translated from `crates/margins-core/src/epub_meta.rs`'s test module.
+/// Translated from the legacy core's EPUB parser test module.
 /// Most of these are about where a chapter's *name* comes from: the TOC
 /// label, the file's first heading, its `<title>`, or its position — and
 /// about the boilerplate that has to be rejected on the way.

@@ -5,7 +5,7 @@ import Foundation
 // Note frontmatter is a flat map of scalars and nothing else, so this is a
 // hand-written emitter and line parser rather than a YAML library. What it
 // has to reproduce is `serde_yaml` 0.9's output, because the Swift core must
-// write files the Rust core wrote and read the ones already on disk: keys in
+// write files the legacy core wrote and read the ones already on disk: keys in
 // declaration order, `key: value` with one space, optional fields omitted
 // rather than nulled, and a plain scalar wherever YAML would read it back as
 // the same string.

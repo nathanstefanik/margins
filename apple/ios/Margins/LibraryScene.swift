@@ -3,177 +3,118 @@ import UniformTypeIdentifiers
 import MarginsCore
 import MarginsModel
 
-/// The Library scene: every imported book as a cover grid, import via the
-/// document picker, delete with confirmation, and library-wide notes
-/// search. One `NavigationSplitView` on every size class so Split View /
-/// Slide Over does not rebuild the tree and drop the reader's place;
-/// compact collapses to sidebar → detail.
+/// The app's tab anatomy: **Library** and **Search**, one information
+/// architecture that adapts from a compact floating tab bar to a regular
+/// sidebar (`.sidebarAdaptable`) instead of a hand-built per-device layout.
+/// Global notes search owns its own tab — its scope is the whole library —
+/// while contextual search belongs over the content it filters.
+enum AppTab: Hashable {
+    case library
+    case search
+}
+
+/// A book pushed onto the Library tab's navigation stack.
+enum LibraryRoute: Hashable {
+    case book(id: String)
+}
+
 struct LibraryScene: View {
     @Environment(LibraryModel.self) private var library
     @Environment(AppModel.self) private var app
 
+    @State private var selectedTab: AppTab = .library
+    @State private var libraryPath: [LibraryRoute] = []
     @State private var query = ""
     @State private var hits: [NoteSearchHit] = []
     @State private var importPresented = false
     @State private var bookPendingDeletion: BookSummary?
     @State private var readerActive = false
-    @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
+
+    /// Shared by the grid covers and the reader so the reader grows out of
+    /// the cover that was tapped.
+    @Namespace private var zoomNamespace
 
     var body: some View {
-        NavigationSplitView(preferredCompactColumn: $preferredCompactColumn) {
-            sidebar
-        } detail: {
-            NavigationStack {
-                BookDetailView(readerActive: $readerActive)
-                    .navigationDestination(isPresented: $readerActive) {
-                        ReaderScene()
-                    }
+        TabView(selection: $selectedTab) {
+            Tab("Library", systemImage: "books.vertical", value: AppTab.library) {
+                libraryTab
+            }
+            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
+                searchTab
             }
         }
-        .overlay {
-            if app.isMaterializing {
-                ZStack {
-                    Color.black.opacity(0.2).ignoresSafeArea()
-                    ProgressView("Downloading book…")
-                        .padding(20)
-                        .background(.thinMaterial, in: .rect(cornerRadius: 12))
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Downloading book from iCloud")
-            }
-        }
-    }
-
-    // MARK: Containers
-
-    private var sidebar: some View {
-        NavigationStack {
-            content(onSelect: selectFromSidebar)
-        }
-        .navigationSplitViewColumnWidth(min: 280, ideal: 320)
-    }
-
-    private func selectFromSidebar(_ id: String) {
-        Task { await library.selectBook(id: id) }
-        preferredCompactColumn = .detail
-    }
-
-    @ViewBuilder
-    private func content(onSelect: @escaping (String) -> Void) -> some View {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        Group {
-            if trimmed.isEmpty {
-                bookGrid(onSelect: onSelect)
-            } else {
-                searchResults(onSelect: onSelect)
-            }
-        }
-        .navigationTitle("Margins")
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search notes")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    importPresented = true
-                } label: {
-                    Label("Import EPUB", systemImage: "plus")
-                }
-                .help("Import an EPUB from Files")
-            }
-        }
-        .fileImporter(
-            isPresented: $importPresented,
-            allowedContentTypes: [.epub, .data],
-            allowsMultipleSelection: false
-        ) { result in
-            handleImportResult(result)
-        }
-        .confirmationDialog(
-            "Delete Book?",
-            isPresented: Binding(
-                get: { bookPendingDeletion != nil },
-                set: { if !$0 { bookPendingDeletion = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete Book", role: .destructive) {
-                guard let book = bookPendingDeletion else { return }
-                bookPendingDeletion = nil
-                Task { await library.removeBook(id: book.id) }
-            }
-            Button("Cancel", role: .cancel) {
-                bookPendingDeletion = nil
-            }
-        } message: {
-            Text("Remove \"\(bookPendingDeletion?.title ?? "")\" and its notes from the library? The original EPUB file is untouched.")
-        }
-        .alert(
-            "Something went wrong",
-            isPresented: Binding(
-                get: { library.errorMessage != nil },
-                set: { if !$0 { library.errorMessage = nil } }
-            )
-        ) {
-            Button("OK") {}
-        } message: {
-            Text(library.errorMessage ?? "")
-        }
-        .task(id: query) {
-            await runSearch()
-        }
+        .tabViewStyle(.sidebarAdaptable)
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .overlay { materializingOverlay }
         #if DEBUG
-        .task {
-            // The fixtures must not race the app's library-root pin
-            // (`app.activate()`): importing into the pre-switch root and
-            // then reading from the pinned one leaves ghosts and
-            // not-found errors. Idempotent, and a no-op when the App
-            // task already ran it.
-            await app.activate()
-            await importFixtureIfRequested()
-        }
-        .task {
-            await app.activate()
-            // Development seams for simulator verification (no UI-automation
-            // tooling in this environment): prefill the search query, and
-            // drive the delete-confirmation flow (`prompt` shows the dialog,
-            // `confirm` also runs the deletion after a beat).
-            if ProcessInfo.processInfo.environment["MARGINS_SEARCH_FIXTURE"] != nil {
-                // Wait out the initial load so the query runs against real data.
-                for _ in 0..<50 where library.books.isEmpty {
-                    try? await Task.sleep(for: .milliseconds(200))
-                }
-                query = ProcessInfo.processInfo.environment["MARGINS_SEARCH_FIXTURE"] ?? ""
-            }
-            if ProcessInfo.processInfo.environment["MARGINS_OPEN_FIXTURE"] != nil {
-                // Select the first book so the detail column (and its
-                // DEBUG reader/notes seams) is reachable without touch.
-                for _ in 0..<50 where library.books.isEmpty {
-                    try? await Task.sleep(for: .milliseconds(200))
-                }
-                if let first = library.books.first {
-                    await library.selectBook(id: first.id)
-                    preferredCompactColumn = .detail
-                }
-            }
-            if let mode = ProcessInfo.processInfo.environment["MARGINS_DELETE_FIXTURE"] {
-                for _ in 0..<50 where library.books.isEmpty {
-                    try? await Task.sleep(for: .milliseconds(200))
-                }
-                guard let book = library.books.first else { return }
-                bookPendingDeletion = book
-                if mode == "confirm" {
-                    try? await Task.sleep(for: .seconds(1.5))
-                    await library.removeBook(id: book.id)
-                    bookPendingDeletion = nil
-                }
-            }
-        }
+        .task { await runDebugSeams() }
         #endif
     }
 
-    // MARK: Grid
+    // MARK: Library tab
+
+    private var libraryTab: some View {
+        NavigationStack(path: $libraryPath) {
+            libraryContent
+                .navigationTitle("Margins")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            importPresented = true
+                        } label: {
+                            Label("Import EPUB", systemImage: "plus")
+                        }
+                        .help("Import an EPUB from Files")
+                    }
+                }
+                .navigationDestination(for: LibraryRoute.self) { _ in
+                    BookDetailView(readerActive: $readerActive)
+                        .navigationDestination(isPresented: $readerActive) {
+                            ReaderScene(zoomNamespace: zoomNamespace)
+                        }
+                }
+                .fileImporter(
+                    isPresented: $importPresented,
+                    allowedContentTypes: [.epub, .data],
+                    allowsMultipleSelection: false
+                ) { result in
+                    handleImportResult(result)
+                }
+                .confirmationDialog(
+                    "Delete Book?",
+                    isPresented: Binding(
+                        get: { bookPendingDeletion != nil },
+                        set: { if !$0 { bookPendingDeletion = nil } }
+                    ),
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete Book", role: .destructive) {
+                        guard let book = bookPendingDeletion else { return }
+                        bookPendingDeletion = nil
+                        Task { await library.removeBook(id: book.id) }
+                    }
+                    Button("Cancel", role: .cancel) {
+                        bookPendingDeletion = nil
+                    }
+                } message: {
+                    Text("Remove \"\(bookPendingDeletion?.title ?? "")\" and its notes from the library? The original EPUB file is untouched.")
+                }
+                .alert(
+                    "Something went wrong",
+                    isPresented: Binding(
+                        get: { library.errorMessage != nil },
+                        set: { if !$0 { library.errorMessage = nil } }
+                    )
+                ) {
+                    Button("OK") {}
+                } message: {
+                    Text(library.errorMessage ?? "")
+                }
+        }
+    }
 
     @ViewBuilder
-    private func bookGrid(onSelect: @escaping (String) -> Void) -> some View {
+    private var libraryContent: some View {
         if library.books.isEmpty {
             ContentUnavailableView {
                 Label("No books yet", systemImage: "book")
@@ -203,19 +144,23 @@ struct LibraryScene: View {
                         .padding(.top, 8)
                 }
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 104, maximum: 160), spacing: 16)],
-                    spacing: 20
+                    columns: [GridItem(.adaptive(minimum: 104, maximum: 160), spacing: DesignTokens.Spacing.gridCell)],
+                    spacing: DesignTokens.Spacing.grid
                 ) {
                     ForEach(library.books) { book in
-                        BookGridCell(book: book)
-                            .onTapGesture { onSelect(book.id) }
-                            .contextMenu {
-                                Button(role: .destructive) {
-                                    bookPendingDeletion = book
-                                } label: {
-                                    Label("Delete…", systemImage: "trash")
-                                }
+                        Button {
+                            select(book.id)
+                        } label: {
+                            BookGridCell(book: book, zoomNamespace: zoomNamespace)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                bookPendingDeletion = book
+                            } label: {
+                                Label("Delete…", systemImage: "trash")
                             }
+                        }
                     }
                 }
                 .padding()
@@ -223,26 +168,42 @@ struct LibraryScene: View {
         }
     }
 
-    // MARK: Search
+    private func select(_ id: String) {
+        Task {
+            await library.selectBook(id: id)
+            libraryPath.append(.book(id: id))
+        }
+    }
+
+    // MARK: Search tab
+
+    private var searchTab: some View {
+        NavigationStack {
+            searchResults
+                .navigationTitle("Search")
+                .searchable(text: $query, prompt: "Search notes")
+                .task(id: query) {
+                    await runSearch()
+                }
+        }
+    }
 
     @ViewBuilder
-    private func searchResults(onSelect: @escaping (String) -> Void) -> some View {
-        List {
-            if hits.isEmpty {
-                Text("No notes match.")
-                    .foregroundStyle(.secondary)
-            } else {
+    private var searchResults: some View {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            ContentUnavailableView {
+                Label("Search your notes", systemImage: "magnifyingglass")
+            } description: {
+                Text("Find a phrase across every book's annotations.")
+            }
+        } else if hits.isEmpty {
+            ContentUnavailableView.search
+        } else {
+            List {
                 ForEach(hits) { hit in
                     Button {
-                        Task {
-                            guard await app.prepareForReading(bookId: hit.bookId) else { return }
-                            await library.openPassage(
-                                bookId: hit.bookId,
-                                chapterKey: hit.chapterKey,
-                                cfi: nil
-                            )
-                            onSelect(hit.bookId)
-                        }
+                        openFromSearch(hit)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(hit.chapterTitle)
@@ -257,10 +218,17 @@ struct LibraryScene: View {
                 }
             }
         }
-        .overlay {
-            if hits.isEmpty {
-                ContentUnavailableView.search(text: query)
-            }
+    }
+
+    /// A hit opens the reader inside the Library tab; switching tabs and
+    /// rebuilding the path keeps the reader in the same navigation tree the
+    /// grid owns rather than a detached one.
+    private func openFromSearch(_ hit: NoteSearchHit) {
+        Task {
+            guard await app.prepareForReading(bookId: hit.bookId) else { return }
+            await library.openPassage(bookId: hit.bookId, chapterKey: hit.chapterKey, cfi: nil)
+            selectedTab = .library
+            libraryPath = [.book(id: hit.bookId)]
         }
     }
 
@@ -276,6 +244,23 @@ struct LibraryScene: View {
         hits = await library.searchNotes(trimmed)
     }
 
+    // MARK: Overlays
+
+    @ViewBuilder
+    private var materializingOverlay: some View {
+        if app.isMaterializing {
+            ZStack {
+                Color.black.opacity(0.2).ignoresSafeArea()
+                ProgressView("Downloading book…")
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .glassEffect(.regular, in: .capsule)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Downloading book from iCloud")
+        }
+    }
+
     // MARK: Import
 
     private func handleImportResult(_ result: Result<[URL], Error>) {
@@ -289,9 +274,43 @@ struct LibraryScene: View {
     }
 
     #if DEBUG
-    /// Development seam for simulator verification: launch with
-    /// `MARGINS_IMPORT_FIXTURE=/path/to/book.epub` and an empty library to
-    /// import a fixture without driving the document picker by hand.
+    /// Development seams for simulator verification: import a fixture,
+    /// prefill search, preselect a book, or drive the delete flow without
+    /// touch synthesis. Sequential so the fixture does not race activation.
+    private func runDebugSeams() async {
+        await app.activate()
+        await importFixtureIfRequested()
+        if let search = ProcessInfo.processInfo.environment["MARGINS_SEARCH_FIXTURE"] {
+            for _ in 0..<50 where library.books.isEmpty {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            selectedTab = .search
+            query = search
+        }
+        if ProcessInfo.processInfo.environment["MARGINS_OPEN_FIXTURE"] != nil {
+            for _ in 0..<50 where library.books.isEmpty {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            if let first = library.books.first {
+                select(first.id)
+            }
+        }
+        if let mode = ProcessInfo.processInfo.environment["MARGINS_DELETE_FIXTURE"] {
+            for _ in 0..<50 where library.books.isEmpty {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            guard let book = library.books.first else { return }
+            bookPendingDeletion = book
+            if mode == "confirm" {
+                try? await Task.sleep(for: .seconds(1.5))
+                await library.removeBook(id: book.id)
+                bookPendingDeletion = nil
+            }
+        }
+    }
+
+    /// Launch with `MARGINS_IMPORT_FIXTURE=/path/to/book.epub` and an empty
+    /// library to import a fixture without driving the document picker.
     private func importFixtureIfRequested() async {
         guard library.books.isEmpty,
               let fixture = ProcessInfo.processInfo.environment["MARGINS_IMPORT_FIXTURE"],
@@ -303,16 +322,19 @@ struct LibraryScene: View {
 }
 
 /// Grid cell: cover (or placeholder), title, author, note count, and a
-/// reading-progress bar from `progress_percent`.
+/// reading-progress bar from `progress_percent`. Wrapped in a `Button` by
+/// the grid so VoiceOver sees an action, not a tap gesture.
 struct BookGridCell: View {
     let book: BookSummary
+    var zoomNamespace: Namespace.ID
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             CoverView(coverPath: book.coverPath, title: book.title)
                 .frame(height: 150)
-                .clipShape(.rect(cornerRadius: 8))
+                .clipShape(.rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
+                .matchedTransitionSource(id: book.id, in: zoomNamespace)
             Text(book.title)
                 .font(.footnote.weight(.medium))
                 .lineLimit(2, reservesSpace: true)

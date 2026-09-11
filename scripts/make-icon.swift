@@ -1,5 +1,5 @@
 // Generates the Margins app icons: a cream paper page with a body-text
-// column and a rust-colored margin note — minimal, matching the reader's
+// column and a sienna-colored margin note — minimal, matching the reader's
 // palette. Run from the repo root:
 //   swift scripts/make-icon.swift scripts/assets
 // Expects scripts/assets to exist. Writes the macOS Margins.iconset there
@@ -86,7 +86,7 @@ func drawIcon(scale: CGFloat, artwork: CGRect, cornerRadius: CGFloat, border: Bo
         bodyY += bodyGap
     }
 
-    // The margin note: short rust lines in the margin, with a leader
+    // The margin note: short sienna lines in the margin, with a leader
     // curving out to the first body line.
     let noteLineHeight: CGFloat = 20
     let noteX = artwork.minX + artwork.width * 0.075

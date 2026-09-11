@@ -6,8 +6,8 @@ import Testing
 ///
 /// `serde_yaml` decided how every note file on disk is spelled, so the
 /// scalar table below is not hand-reasoned: it is the real output of
-/// `serde_yaml::to_string` for each input, captured from the Rust core
-/// before it was deleted. Getting one of these wrong means writing a note
+/// `serde_yaml::to_string` for each input, captured from the legacy core
+/// before the port. Getting one of these wrong means writing a note
 /// file that reads back as a number, or churning every file on first save.
 @Suite("Frontmatter")
 struct FrontmatterTests {
@@ -71,7 +71,7 @@ struct FrontmatterTests {
 
     // MARK: Golden files
 
-    @Test("frontmatter captured from the Rust core round-trips byte for byte")
+    @Test("frontmatter captured from the legacy core round-trips byte for byte")
     func goldenFrontmatterRoundTrips() throws {
         for name in ["frontmatter-full", "frontmatter-bare"] {
             let raw = try Fixtures.text("notes/\(name).yaml")
@@ -124,8 +124,8 @@ struct FrontmatterTests {
         #expect(try Frontmatter.decode(yaml).wordCount == 4)
     }
 
-    /// `serde_yaml::to_string` output for each input, captured from the Rust
-    /// core (`examples/probe_yaml.rs`).
+    /// `serde_yaml::to_string` output for each input, captured from the legacy
+    /// core's probe program.
     private static let scalarCases: [(String, String)] = [
         ("Introduction", "Introduction"),
         ("The Market", "The Market"),

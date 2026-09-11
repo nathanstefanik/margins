@@ -1,11 +1,13 @@
 # Plan: Apple-only consolidation, Swift core, and chapter outline
 
-Status: proposed · Written 2026-09-10 · Audience: an AI agent implementing it.
+Status: Phases 0–6 implemented (2026-09-10) · Audience: an AI agent
+implementing it.
 
 End state: a macOS app and an iOS app, both SwiftUI, over one pure-Swift
 core in a single SwiftPM package. No Rust, no UniFFI, no xcframework, no
 Node, no Linux. `swift test` runs every test. The chapter list shows a
-clean outline instead of the raw spine.
+clean outline instead of the raw spine. Both apps read as native iOS 26 /
+macOS 26 software: content under a lightweight, adaptive control layer.
 
 | Phase | What | Why this position |
 |-------|------|-------------------|
@@ -15,6 +17,7 @@ clean outline instead of the raw spine.
 | 3 | Chapter identification in the Swift core: matter classification, outline levels, multi-entry files | The user-facing bug. |
 | 4 | Outline UI on macOS and iOS | Consumes Phase 3. |
 | 5 | Docs and cleanup | Low risk, last. |
+| 6 | iOS 26/27 design-system pass: content-under-controls layering, native navigation/tab structures, modern search placement, adaptive sizing, glass discipline | The apps were built with iOS 17 mental models; ship the design update once the domain shape has settled. |
 
 Every phase is one PR (Phase 2 may be several, see its steps).
 Commit-message prefixes per `AGENTS.md`.
@@ -755,6 +758,167 @@ Same walk on macOS via `make run`.
 
 ---
 
+## Phase 6 — iOS 26/27 design-system pass
+
+Goal: the iOS app stops reading like "screens containing controls" and
+starts reading like iOS 26/27: **immersive content under a lightweight,
+adaptive control layer**. No new features, no storage change — this is a
+UI refactor and a set of rules the later work inherits. The app already
+targets `.iOS(.v26)` and is SwiftUI, so the Liquid Glass APIs are
+available; the macOS app keeps its zathura-style minimalism and does not
+adopt iOS glass.
+
+Concrete references are to today's files; re-grep before acting, they
+move. API names below are the intended ones (WWDC25-era SwiftUI) —
+confirm exact spelling against the installed iOS 26 SDK before use.
+
+The five highest-leverage items, in order: **content-vs-control layering,
+edge-to-edge, native navigation/tab structures, adaptive sizing instead of
+orientation, and search placement.** Glass effects come last, not first.
+
+### Step 1 — Fix the content/control two-layer model
+
+Apple's current framing is a content layer underneath a UI/navigation
+layer, and glass belongs to the upper layer only.
+
+- Inventory every material/background in `apple/ios/Margins/`:
+  `git grep -n "thinMaterial\|regularMaterial\|ultraThin\|Color\.\|\.background(" apple/ios`
+- `LibraryScene.swift` download overlay: the full-screen
+  `Color.black.opacity(0.2)` scrim plus a `.thinMaterial` box is the
+  iOS 17 "modal card" pattern. Replace it with a single glass control
+  (`ProgressView` in a `.glassEffect(..., in: .capsule)` over a
+  content-dimming layer) — the content behind stays content, not glass.
+- `ReaderScene.swift` flash badge and end-of-chapter prompt
+  (`.thinMaterial` + `.rect(cornerRadius: 12)`) become glass capsules;
+  the reader's custom header buttons (`chromeButton`) sit in a
+  `GlassEffectContainer` so related controls can merge and morph.
+- Rule to encode in `docs/architecture.md` and `AGENTS.md`: **glass on
+  controls and navigation only; content uses plain fills, materials are
+  reserved for the paper.** Do not glass cards, list rows, or sheets, and
+  never nest glass inside glass.
+
+### Step 2 — Edge-to-edge content and floating bars
+
+- Content must scroll under the navigation bar and tab bar rather than
+  below opaque boxes. Audit the library grid (`LibraryScene.bookGrid`) and
+  book detail (`BookDetailView.detail`): both are `ScrollView`s inside
+  `NavigationStack`; use the iOS 26 scroll-edge effect
+  (`scrollEdgeEffectStyle`) instead of relying on an opaque bar, and stop
+  adding top padding to dodge the bar.
+- The reader is already full-bleed and floats its chrome; keep that, but
+  make the chrome glass (Step 1) so it reads as a layer above the page
+  instead of a header over it. The hardcoded paper
+  `Color(red: 244/255, ...)` in `ReaderScene.swift` is the content layer —
+  keep it, and let it run under the status bar and home indicator.
+- Remove any explicit opaque `systemBackground`/separator that boxes off a
+  toolbar region. There are none today; do not add any.
+
+### Step 3 — Native navigation and tab anatomy
+
+One information architecture — `Library → Book → Reader`, plus global
+notes search — that adapts across canvases (principle 13), instead of
+hand-built per-device navigation:
+
+- iPhone (compact): a floating `TabView` with a **Library** tab and a
+  **Search** tab; book detail and the reader are stack pushes. Set
+  `tabBarMinimizeBehavior` so the bar minimizes on scroll.
+- iPad (regular): the same `TabView` with `.tabViewStyle(.sidebarAdaptable)`
+  so it becomes a sidebar automatically; keep the
+  `NavigationSplitView` column widths.
+- Mac: the existing `NavigationSplitView` (sidebar → list → detail) is the
+  wide-canvas form of the same anatomy; do not diverge further.
+- Replace `LibraryScene`'s single `NavigationSplitView` +
+  `.searchable(placement: .navigationBarDrawer(displayMode: .always))`
+  with the size-class-driven structure above. Read size from
+  `@Environment(\.horizontalSizeClass)`, never from orientation.
+- Search's home (principle 6): **global notes search is the dedicated
+  Search tab** on iPhone (scope = the whole library, shown as a full
+  screen); on iPad/Mac it lives in the sidebar/toolbar. Contextual search
+  belongs inline over the content it filters (a future in-reader search
+  goes in the reader, not here). Keep the existing debounce in
+  `runSearch()`; only the placement changes.
+
+### Step 4 — Adaptive sizing, not device orientation
+
+- Delete every orientation assumption. Audit with:
+  `git grep -n "interfaceOrientation\|UIDevice.current.orientation\|UIScreen.main" apple/ios`.
+  Today none exist; a regression test/CI grep keeps it that way.
+- Layout keys off `horizontalSizeClass`/`verticalSizeClass`, `ViewThatFits`,
+  `containerRelativeFrame`, and space actually available. The book detail's
+  fixed 110×165 cover block should yield on constrained height (landscape
+  phone, iPad Split View, iPhone Mirroring), letting the outline take the
+  space.
+- The reader's tap thirds (`ReaderScene.handleTap`) use the webview's own
+  width — already space-based, leave it.
+- Verify on iPhone Mirroring and an iPad resizable window, not just a
+  portrait simulator.
+
+### Step 5 — Toolbars as priority systems, and control continuity
+
+- Rank each screen's actions: critical → frequent → contextual → overflow.
+  Book detail keeps "Continue reading" as the primary content action and
+  pushes delete/export into an overflow `Menu`, so space-constrained
+  toolbars never crowd; use `ToolbarItem(placement:)` and visibility
+  priority where the SDK supports it.
+- The reader's resting screen has no bar, and its revealed chrome is three
+  controls (back, new note, menu) with the rest inside the menu. Keep that
+  shape; document the ranking in a comment so it does not grow.
+- Motion explains structure (principle 12): the grid cover → reader should
+  grow from the tapped cover via `matchedTransitionSource` on
+  `BookGridCell`'s cover and `navigationTransition(.zoom(sourceID:in:))`
+  on `ReaderScene`. The end-of-chapter prompt and flash should transition
+  from the control that spawned them (scale/origin), not a bare fade.
+  Gate non-essential motion behind `accessibilityReduceMotion`.
+
+### Step 6 — Concentric geometry and restrained color
+
+- Normalize corner radii. Grep:
+  `git grep -n "cornerRadius\|Capsule()\|\.rect(" apple/ios`.
+  Today covers are 8pt, overlays 12pt, sheets 17pt, badges capsules. Use
+  container-concentric shapes (`containerShape`/`ConcentricRectangle` on
+  iOS 26) so a control's radius follows its container, and standard
+  capsule/rounded-rect shapes otherwise. Mac can keep its tighter scale.
+- Color communicates meaning only: selected state, current position,
+  has-notes, primary action, status. Audit `.tint`/`.foregroundStyle(.tint)`;
+  clear decorative uses. Glass controls should read neutral until acted on.
+
+### Step 7 — Prefer system controls; keep accessibility
+
+- Use system `TabView`, `NavigationSplitView`, `List`, `Menu`, `Picker`,
+  `ShareLink`, `ContentUnavailableView`, `.searchable`, and glass button
+  styles. These absorb Liquid Glass behavior, adaptive geometry, and
+  future styling for free (principle 14). Inventory custom controls and
+  replace any that only exist because an older SDK lacked the API; keep the
+  reader's custom chrome and hit targets, which are deliberate.
+- Every custom control keeps `accessibilityLabel`/`Value`/`Hint`, a ≥44pt
+  target, and a non-gesture path (the reader already exposes
+  `accessibilityAction`s). Verify with VoiceOver and Switch Control and at
+  the largest Dynamic Type sizes (principle 15).
+
+### Step 8 — Documents and rules
+
+- `docs/architecture.md`: expand "The iOS app" with the size-class
+  navigation anatomy, the search placement rule, and the content/control
+  layering.
+- `AGENTS.md` conventions: "iOS work follows the iOS 26 content-under-glass
+  layout: system controls first, glass only on the control plane, layout by
+  size class — never `interfaceOrientation`."
+
+### Verify
+
+- iOS 26 simulator, light and dark: iPhone (portrait + landscape), iPad
+  (portrait, landscape, Split View / Slide Over), iPhone Mirroring.
+- Import the Karamazov fixture (`MARGINS_IMPORT_FIXTURE`): search tab
+  scope, minimize-on-scroll tab bar, cover → reader zoom, glass chrome
+  over a full-bleed page, no glass-on-glass.
+- VoiceOver traversal of library, book detail, reader chrome, and sheets;
+  largest Dynamic Type; Reduce Motion on.
+- macOS `make run` unchanged in behavior and IA.
+- `swift test --package-path apple` green; the outline tests are untouched.
+- Screenshots in the PR for each canvas and appearance.
+
+---
+
 ## Definition of done for the whole plan
 
 - One CI job on `macos-26`, green: `swift test --package-path apple` and
@@ -772,3 +936,7 @@ Same walk on macOS via `make run`.
   `chapters_version` upgraded to 2 on scan).
 - `docs/storage.md`, `docs/architecture.md`, `AGENTS.md`, and `README.md`
   describe the two-app, Swift-core system and the outline fields.
+- The iOS app reads as iOS 26/27 software (Phase 6): edge-to-edge content
+  under a glass control layer, semantic tab/sidebar navigation with
+  dedicated search, size-class layout with no orientation checks, and
+  system controls wherever possible.

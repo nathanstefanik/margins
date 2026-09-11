@@ -10,6 +10,10 @@ struct BookDetailView: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
     @Environment(AppModel.self) private var app
+    /// Constrained height (landscape phone, Split View) shrinks the cover
+    /// so the outline keeps the space. Layout follows available space, not
+    /// device orientation.
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     @Binding var readerActive: Bool
 
@@ -92,8 +96,8 @@ struct BookDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 16) {
                     CoverView(coverPath: meta.coverPath, title: meta.title)
-                        .frame(width: 110, height: 165)
-                        .clipShape(.rect(cornerRadius: 8))
+                        .frame(width: coverSize.width, height: coverSize.height)
+                        .clipShape(.rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
                         .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(meta.title)
@@ -147,6 +151,12 @@ struct BookDetailView: View {
 
     private var continueLabel: String {
         position != nil ? "Continue reading" : "Start reading"
+    }
+
+    /// The cover is large on an expansive canvas and yields on a constrained
+    /// height, so the outline is not pushed off the screen.
+    private var coverSize: CGSize {
+        verticalSizeClass == .compact ? CGSize(width: 78, height: 117) : CGSize(width: 110, height: 165)
     }
 
     private func presentReaderIfPending() {
@@ -407,7 +417,7 @@ private struct NotesTab: View {
                 }
             }
             if notes.chapters.isEmpty && !showEmptyChapters {
-                Text("No notes yet — write one while reading (Phase 6), or from a chapter in Contents.")
+                Text("No notes yet — write one while reading, or from a chapter in Contents.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

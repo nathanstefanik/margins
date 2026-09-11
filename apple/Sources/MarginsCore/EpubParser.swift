@@ -3,7 +3,7 @@ import ZIPFoundation
 
 // Reads an EPUB's metadata, spine, table of contents, cover, and structure.
 //
-// Two parsing styles, following the Rust original. The OPF metadata and
+// Two parsing styles, following the legacy original. The OPF metadata and
 // spine, the NCX, and the EPUB3 nav document are real XML and go through
 // `XMLParser`. Everything else — the container's OPF pointer, the EPUB2
 // cover pointer, `epub:type` probes, and the `<title>`/`<h1>` probes inside
@@ -166,7 +166,7 @@ public enum EpubParser {
     }
 
     /// Reads `<dc:title>`, `<dc:creator>`, and `<dc:language>` from inside
-    /// `<metadata>`. Matching is on the qualified name, as the Rust reader
+    /// `<metadata>`. Matching is on the qualified name, as the legacy reader
     /// did, so an unprefixed `<title>` in the same block also counts.
     private final class MetadataDelegate: NSObject, XMLParserDelegate {
         var metadata = Metadata()
@@ -1096,7 +1096,7 @@ public enum EpubParser {
     }
 
     /// The text between the earliest opening tag among `names` and the next
-    /// closing tag among them — the leftmost-shortest match the Rust
+    /// closing tag among them — the leftmost-shortest match the legacy
     /// regexes made.
     private static func firstElementBody(in document: String, names: [String]) -> Substring? {
         var best: Range<String.Index>?
@@ -1137,7 +1137,7 @@ public enum EpubParser {
         while let open = markup.range(of: "<", range: cursor..<markup.endIndex) {
             stripped += markup[cursor..<open.lowerBound]
             guard let close = markup.range(of: ">", range: open.upperBound..<markup.endIndex) else {
-                // An unterminated tag is text, as the Rust regex left it.
+                // An unterminated tag is text, as the legacy regex left it.
                 cursor = open.lowerBound
                 break
             }
@@ -1307,7 +1307,7 @@ public enum EpubParser {
         let parser = XMLParser(data: Data(xml.utf8))
         parser.delegate = delegate
         // Namespaces stay off so element names arrive qualified, the way the
-        // Rust reader saw them; `localName` strips a prefix where the
+        // legacy reader saw them; `localName` strips a prefix where the
         // original compared local names.
         parser.shouldProcessNamespaces = false
         parser.shouldResolveExternalEntities = false
