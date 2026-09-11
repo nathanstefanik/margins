@@ -3,11 +3,14 @@ import MarginsModel
 
 struct DetailArea: View {
     @Environment(LibraryModel.self) private var model
+    @Environment(ClubModel.self) private var clubs
     @Environment(ReaderModel.self) private var reader
 
     var body: some View {
         if reader.isOpen {
             ReaderView()
+        } else if clubs.selectedClub != nil {
+            ClubDetailView()
         } else if model.detailMode == .notes, let notes = model.compiledNotes {
             NotesPageView(notes: notes)
         } else if let book = model.selectedBook {

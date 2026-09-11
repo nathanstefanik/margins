@@ -4,16 +4,21 @@ import MarginsModel
 
 struct SidebarView: View {
     @Environment(LibraryModel.self) private var model
+    @Environment(ClubModel.self) private var clubs
     @State private var showingRemovalDialog = false
     @State private var bookPendingRemoval: BookSummary?
 
     var body: some View {
         @Bindable var model = model
+        @Bindable var clubs = clubs
         VStack(spacing: 0) {
             List(selection: $model.selectedBookID) {
                 ForEach(model.books) { book in
                     BookRowView(book: book)
                         .tag(book.id)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            Task { await clubs.selectClub(id: nil) }
+                        })
                         .onTapGesture(count: 2) {
                             Task { await model.openBookResuming(id: book.id) }
                         }
@@ -39,6 +44,7 @@ struct SidebarView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
             }
+            clubSection(selection: $clubs.selectedClubID)
             Divider()
             libraryRootBar
         }
@@ -57,6 +63,66 @@ struct SidebarView: View {
         }
         .onChange(of: model.selectedBookID) {
             Task { await model.loadSelectedBook() }
+        }
+        .onChange(of: clubs.selectedClubID) {
+            if clubs.selectedClubID != nil {
+                model.selectedBookID = nil
+            }
+        }
+    }
+
+    /// Book clubs live under the library list, with their own selection:
+    /// selecting a club clears the book selection and vice versa, so the
+    /// detail area always has one unambiguous subject.
+    @ViewBuilder
+    private func clubSection(selection: Binding<String?>) -> some View {
+        Divider()
+        HStack(spacing: 6) {
+            Text("Book Clubs")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Menu {
+                Button("New Book Club…") {
+                    clubs.createSheetPresented = true
+                }
+                Button("Join Book Club…") {
+                    clubs.joinSheetPresented = true
+                }
+                .disabled(!clubs.supportsSharing)
+            } label: {
+                Image(systemName: "plus")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("Add Book Club")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+
+        if clubs.clubs.isEmpty {
+            Text("Create or join a club to read together.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+        } else {
+            List(selection: selection) {
+                ForEach(clubs.clubs) { club in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(club.name)
+                            .lineLimit(1)
+                        Text(club.bookTitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .tag(club.id)
+                }
+            }
+            .listStyle(.sidebar)
+            .frame(height: min(CGFloat(clubs.clubs.count) * 48 + 8, 190))
         }
     }
 

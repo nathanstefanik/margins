@@ -231,7 +231,7 @@ and change processing with the fake engine.
 
 ---
 
-## Phase 4 — macOS UI
+## Phase 4 — macOS UI (implemented)
 
 **Files:** `MarginsModel/ClubModel.swift`; `Margins/ClubsView.swift`,
 `ClubDetailView.swift`, `ClubNotesView.swift`, `JoinClubSheet.swift`; edits to
