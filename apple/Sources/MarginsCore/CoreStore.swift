@@ -263,6 +263,13 @@ public actor CoreStore {
         try clubs.updateClub(club)
     }
 
+    /// Stores a club record received from another device (join or sync).
+    /// Unlike `updateClub`, this is an upsert: a joiner has no local record
+    /// yet, and a sync must be able to adopt a roster it did not write.
+    public func saveClub(_ club: Club) throws {
+        try clubs.writeClub(club)
+    }
+
     public func deleteClub(id: String) throws {
         try clubs.deleteClub(id: id)
     }
@@ -279,6 +286,12 @@ public actor CoreStore {
 
     public func clubMemberSnapshots(clubId: String) throws -> [ClubMemberNotes] {
         try clubs.memberSnapshots(clubId: clubId)
+    }
+
+    /// Drops one member's local snapshot (admin removal, or a member whose
+    /// snapshot was deleted remotely).
+    public func removeClubMemberSnapshot(clubId: String, memberId: String) throws {
+        try clubs.removeMemberSnapshot(clubId: clubId, memberId: memberId)
     }
 
     /// Rebuilds a member's snapshot from this device's notes for the club's
@@ -342,6 +355,20 @@ public actor CoreStore {
 
     public func setClubSpoilerProtection(_ enabled: Bool) throws {
         try config.setClubSpoilerProtection(enabled)
+    }
+
+    /// The local identity for club membership: a stable member id (generated
+    /// once) plus the saved display name.
+    public func clubIdentity() throws -> ClubIdentity {
+        ClubIdentity(
+            memberId: try config.ensureClubMemberId(),
+            displayName: config.clubDisplayName
+        )
+    }
+
+    /// Remembers the name to show other members.
+    public func setClubDisplayName(_ name: String) throws {
+        try config.setClubDisplayName(name)
     }
 
     /// The viewer's current spine index for the club's book, or `nil` when

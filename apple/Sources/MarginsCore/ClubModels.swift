@@ -12,6 +12,18 @@ import Foundation
 
 // MARK: - Roster
 
+/// The local user's club identity: the stable member id plus the name shown
+/// to other members.
+public struct ClubIdentity: Sendable, Equatable, Hashable {
+    public var memberId: String
+    public var displayName: String?
+
+    public init(memberId: String, displayName: String? = nil) {
+        self.memberId = memberId
+        self.displayName = displayName
+    }
+}
+
 public enum ClubRole: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
     case admin
     case member

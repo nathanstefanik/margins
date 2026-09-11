@@ -213,7 +213,7 @@ through `CoreStore`, code rotation; `docs/storage.md` documents the layout.
 
 ---
 
-## Phase 3 — CloudKit transport
+## Phase 3 — CloudKit transport (implemented)
 
 **Files:** `MarginsModel/ClubSync.swift`, entitlements for both apps, tests
 behind a `ClubSyncEngine` protocol with an in-memory fake.

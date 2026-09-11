@@ -182,4 +182,20 @@ struct AppConfigClubTests {
 
         #expect(try AppConfig(dataDir: dataDir).clubSpoilerProtection)
     }
+
+    @Test("the club member id is generated once and persists with the name")
+    func clubIdentityPersists() throws {
+        let dataDir = try temporaryDirectory().appendingPathComponent("data")
+
+        var config = try AppConfig(dataDir: dataDir)
+        #expect(config.clubMemberId == nil)
+        let first = try config.ensureClubMemberId()
+        #expect(first.count == 10)
+        #expect(try config.ensureClubMemberId() == first)
+
+        try config.setClubDisplayName("Alice")
+        let reloaded = try AppConfig(dataDir: dataDir)
+        #expect(reloaded.clubMemberId == first)
+        #expect(reloaded.clubDisplayName == "Alice")
+    }
 }
