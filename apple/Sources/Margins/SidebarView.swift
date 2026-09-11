@@ -68,6 +68,13 @@ struct SidebarView: View {
             if clubs.selectedClubID != nil {
                 model.selectedBookID = nil
             }
+            // The club list writes `selectedClubID` directly; populating
+            // `selectedClub` and its notes is `selectClub`'s job. Create
+            // and join flows already call it, so only load when the
+            // selection moved without a matching club loaded.
+            if let id = clubs.selectedClubID, clubs.selectedClub?.id != id {
+                Task { await clubs.selectClub(id: id) }
+            }
         }
     }
 
