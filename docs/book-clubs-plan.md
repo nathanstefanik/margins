@@ -126,7 +126,7 @@ the iCloud Drive library folder, so it lives in the app data directory.
 
 ---
 
-## Phase 1 — Core club domain (this change)
+## Phase 1 — Core club domain (implemented)
 
 Pure Swift, no I/O, no UI. Implements the entire read/merge model so later
 phases only add storage and transport.
@@ -192,7 +192,7 @@ phases only add storage and transport.
 
 ---
 
-## Phase 2 — Local club store + `CoreStore` surface
+## Phase 2 — Local club store + `CoreStore` surface (implemented)
 
 **Files:** `MarginsCore/ClubStore.swift` (or `Clubs.swift`), `CoreStore`
 methods, `docs/storage.md` section, tests.

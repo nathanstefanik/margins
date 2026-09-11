@@ -9,6 +9,7 @@ import Foundation
 public actor CoreStore {
     private var config: AppConfig
     private let library: Library
+    private let clubs: ClubStore
 
     /// The library root as `readEpubBytesSync` sees it. That call must not
     /// hop through the actor (the reader's scheme handler invokes it
@@ -37,6 +38,7 @@ public actor CoreStore {
         let config = try AppConfig(dataDir: dataDir)
         self.config = config
         self.library = try Library(root: config.libraryRoot)
+        self.clubs = ClubStore(root: config.dataDir.appendingPathComponent("clubs"))
         readerRoot.current = config.libraryRoot
     }
 
@@ -228,6 +230,129 @@ public actor CoreStore {
 
     public func searchNotes(query: String) throws -> [NoteSearchHit] {
         library.searchNotes(query: query)
+    }
+
+    // MARK: Clubs
+
+    /// Creates a private club reading `bookId`, with the creator as admin.
+    /// The book must be in the library.
+    public func createClub(
+        bookId: String, name: String, adminId: String, adminName: String
+    ) throws -> Club {
+        let book = try library.getBook(id: bookId)
+        return try clubs.createClub(
+            name: name,
+            bookId: book.id,
+            bookTitle: book.title,
+            bookAuthor: book.author,
+            adminId: adminId,
+            adminName: adminName
+        )
+    }
+
+    public func listClubs() throws -> [Club] {
+        try clubs.listClubs()
+    }
+
+    public func getClub(id: String) throws -> Club {
+        try clubs.getClub(id: id)
+    }
+
+    /// Persists roster/name changes to an existing club.
+    public func updateClub(_ club: Club) throws {
+        try clubs.updateClub(club)
+    }
+
+    public func deleteClub(id: String) throws {
+        try clubs.deleteClub(id: id)
+    }
+
+    /// Replaces the club's invite code and returns the new one.
+    public func rotateClubInviteCode(clubId: String) throws -> String {
+        try clubs.rotateInviteCode(clubId: clubId).inviteCode
+    }
+
+    /// Stores one member's snapshot over any previous one.
+    public func saveClubMemberSnapshot(clubId: String, snapshot: ClubMemberNotes) throws {
+        try clubs.writeMemberSnapshot(snapshot, clubId: clubId)
+    }
+
+    public func clubMemberSnapshots(clubId: String) throws -> [ClubMemberNotes] {
+        try clubs.memberSnapshots(clubId: clubId)
+    }
+
+    /// Rebuilds a member's snapshot from this device's notes for the club's
+    /// book. The snapshot is derived; persist it with
+    /// `saveClubMemberSnapshot` (or use `refreshClubMemberSnapshot`).
+    public func buildClubMemberSnapshot(
+        clubId: String, memberId: String, displayName: String
+    ) throws -> ClubMemberNotes {
+        let club = try clubs.getClub(id: clubId)
+        let compiled = try Compile.bookNotes(bookDir: library.bookDir(club.bookId))
+        return ClubCompile.snapshot(compiled, memberId: memberId, displayName: displayName)
+    }
+
+    /// Rebuilds and stores the member's snapshot in one step.
+    @discardableResult
+    public func refreshClubMemberSnapshot(
+        clubId: String, memberId: String, displayName: String
+    ) throws -> ClubMemberNotes {
+        let snapshot = try buildClubMemberSnapshot(
+            clubId: clubId, memberId: memberId, displayName: displayName
+        )
+        try clubs.writeMemberSnapshot(snapshot, clubId: clubId)
+        return snapshot
+    }
+
+    /// The merged club view for `viewerId`, with spoiler gating applied for
+    /// the viewer's current chapter in the club's book. `spoilerEnabled`
+    /// overrides the saved setting (used by a temporary "reveal" control);
+    /// `nil` reads the setting.
+    public func clubNotes(
+        clubId: String, viewerId: String, spoilerEnabled: Bool? = nil
+    ) throws -> ClubNotes {
+        let club = try clubs.getClub(id: clubId)
+        let snapshots = try clubs.memberSnapshots(clubId: clubId)
+        return ClubCompile.compile(
+            club: club,
+            snapshots: snapshots,
+            viewerId: viewerId,
+            viewerChapterIndex: currentChapterIndex(bookId: club.bookId),
+            spoilerPolicy: SpoilerPolicy(
+                isEnabled: spoilerEnabled ?? config.clubSpoilerProtection
+            )
+        )
+    }
+
+    /// Renders the merged club view as markdown (the export payload).
+    public func renderClubNotesMarkdown(
+        clubId: String, viewerId: String, spoilerEnabled: Bool? = nil,
+        options: ClubExportOptions? = nil
+    ) throws -> String {
+        let notes = try clubNotes(
+            clubId: clubId, viewerId: viewerId, spoilerEnabled: spoilerEnabled
+        )
+        return ClubCompile.renderMarkdown(notes, options: options ?? .default)
+    }
+
+    /// The saved club spoiler-protection setting (default `true`).
+    public func clubSpoilerProtection() throws -> Bool {
+        config.clubSpoilerProtection
+    }
+
+    public func setClubSpoilerProtection(_ enabled: Bool) throws {
+        try config.setClubSpoilerProtection(enabled)
+    }
+
+    /// The viewer's current spine index for the club's book, or `nil` when
+    /// the book was never opened — which spoiler protection treats as
+    /// "nothing read yet".
+    private func currentChapterIndex(bookId: String) -> Int? {
+        guard let position = library.readPosition(bookID: bookId),
+              let meta = try? library.getBook(id: bookId),
+              let chapter = meta.chapters.first(where: { $0.key == position.chapterKey })
+        else { return nil }
+        return chapter.index
     }
 
     /// The spine's chapter record for a key, or an error for unknown keys.
