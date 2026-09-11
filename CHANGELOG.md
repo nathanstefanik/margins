@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-11
+
+### Added
+
+- Reader themes: the reading surface switches between the cream "Light"
+  paper and a warm "Dark" theme from the macOS typography popover and the
+  iOS reader settings; light remains the default, and the chrome,
+  Contents, and Notes sheets follow the system appearance
+- Sandboxed Mac App Store package (`make mas-pkg`) with a security-scoped
+  library root bookmark, for TestFlight/App Store distribution
+
+### Fixed
+
+- iOS: the Clubs tab's "New Book Club" and "Join with a Code" buttons —
+  both the empty-state actions and the toolbar menu — now open their sheets
+- Reader: Contents/Marks/chapter-note sheets no longer flash light before
+  settling into the system appearance
+
 ## [0.2.0] - 2026-09-11
 
 ### Added
@@ -68,6 +86,7 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.1
 [0.2.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.0
 [0.1.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.1.0
