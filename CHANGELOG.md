@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-11
+
+### Fixed
+
+- Book clubs: joining a shared club no longer fails with "SharedDB does
+  not support Zone Wide queries" — participant reads are scoped to the
+  share's record zone, discovered from the accepted share
+- Book clubs: the club's root record is saved before its share, so
+  CloudKit creates the schema types one at a time instead of failing a
+  first-time atomic batch
+
 ## [0.2.2] - 2026-09-11
 
 ### Fixed
@@ -94,7 +105,8 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.3
 [0.2.2]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.2
 [0.2.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.1
 [0.2.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.0
