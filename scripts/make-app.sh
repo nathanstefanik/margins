@@ -39,6 +39,10 @@ fi
 for bundle in "$build_dir/Margins_Margins.bundle" "$build_dir/Margins_MarginsModel.bundle"; do
   if [ -d "$bundle" ]; then
     cp -R "$bundle" "$app/Contents/Resources/"
+    # SwiftPM stamps resource bundles with a CFBundleExecutable that does
+    # not exist on disk; the App Store validator rejects that.
+    /usr/libexec/PlistBuddy -c "Delete :CFBundleExecutable" \
+      "$app/Contents/Resources/$(basename "$bundle")/Contents/Info.plist" 2>/dev/null || true
   else
     echo "warning: expected SwiftPM resource bundle not found at $bundle" >&2
   fi
@@ -49,6 +53,8 @@ if [ -z "$version" ]; then
   echo "could not read version from apple/VERSION" >&2
   exit 1
 fi
+
+build_number=${MARGINS_BUILD_NUMBER:-1}
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -68,9 +74,11 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key>
     <string>$version</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$build_number</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.books</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>

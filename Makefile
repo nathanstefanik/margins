@@ -1,4 +1,4 @@
-.PHONY: test build app app-universal run ios-build ios-archive ios-bump bump vendor-reader
+.PHONY: test build app app-universal run ios-build ios-archive ios-bump mas-pkg bump vendor-reader
 
 test:            ; swift test --package-path apple
 build:           ; swift build --package-path apple
@@ -11,5 +11,6 @@ ios-archive:     ; xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margi
                      -configuration Release -destination 'generic/platform=iOS' \
                      -archivePath build/Margins.xcarchive -allowProvisioningUpdates archive
 ios-bump:        ; ./scripts/bump-build.sh
+mas-pkg:         ; ./scripts/make-mas-pkg.sh
 bump:            ; ./scripts/bump-version.sh $(VERSION)
 vendor-reader:   ; ./scripts/vendor-reader.sh
