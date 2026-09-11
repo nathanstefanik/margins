@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-11
+
+### Fixed
+
+- Book clubs: when CloudKit cannot create the club's share, the app now
+  rolls back the half-created local club and shows a plain "sharing is
+  unavailable" message instead of the raw CloudKit transport error
+
 ## [0.2.1] - 2026-09-11
 
 ### Added
@@ -86,7 +94,8 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.2
 [0.2.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.1
 [0.2.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.0
 [0.1.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.1.0
