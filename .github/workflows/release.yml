@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Verify tag matches package version
         run: |
@@ -39,34 +39,18 @@ jobs:
           hdiutil create -volname Margins -srcfolder build/Margins.app \
             -ov -format UDZO "Margins-v${version}.dmg"
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-dmg
-          path: Margins-v*.dmg
-          if-no-files-found: error
-
-  release:
-    name: Attach artifacts to GitHub Release
-    needs: [macos]
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
       - name: Generate SHA256SUMS.txt
         run: |
-          cd dist
-          sha256sum -- * > /tmp/SHA256SUMS.txt
-          mv /tmp/SHA256SUMS.txt SHA256SUMS.txt
+          shasum -a 256 Margins-v*.dmg > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+      # Published from the build job on purpose: passing the DMG through
+      # actions/upload-artifact burned the account's artifact storage quota
+      # even though this repo kept no artifacts. No artifacts, no quota.
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
         with:
-          files: dist/*
+          files: |
+            Margins-${{ github.ref_name }}.dmg
+            SHA256SUMS.txt
           generate_release_notes: true
