@@ -9,8 +9,6 @@ struct ClubsScene: View {
     @Environment(ClubModel.self) private var clubs
     @Environment(LibraryModel.self) private var library
 
-    @State private var showingCreate = false
-    @State private var showingJoin = false
     @State private var path: [String] = []
 
     var body: some View {
@@ -22,12 +20,12 @@ struct ClubsScene: View {
                     ToolbarItem(placement: .primaryAction) {
                         Menu {
                             Button {
-                                showingCreate = true
+                                clubs.createSheetPresented = true
                             } label: {
                                 Label("New Book Club", systemImage: "plus")
                             }
                             Button {
-                                showingJoin = true
+                                clubs.joinSheetPresented = true
                             } label: {
                                 Label("Join with Code", systemImage: "person.badge.key")
                             }
@@ -73,10 +71,10 @@ struct ClubsScene: View {
             } description: {
                 Text("Start a private club for one book and share the invite code with up to a few friends.")
             } actions: {
-                Button("New Book Club") { showingCreate = true }
+                Button("New Book Club") { clubs.createSheetPresented = true }
                     .buttonStyle(.borderedProminent)
                 if clubs.supportsSharing {
-                    Button("Join with a Code") { showingJoin = true }
+                    Button("Join with a Code") { clubs.joinSheetPresented = true }
                 } else {
                     Label("Sharing needs iCloud", systemImage: "icloud.slash")
                         .font(.footnote)
