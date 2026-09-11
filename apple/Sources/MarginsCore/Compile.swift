@@ -195,7 +195,8 @@ public enum Compile {
         return out
     }
 
-    private static func sanitizeFilenameComponent(_ text: String) -> String {
+    /// Shared with the club export naming (`ClubCompile.suggestedExportFilename`).
+    static func sanitizeFilenameComponent(_ text: String) -> String {
         let spaced = text.map { "/:\\<>\"|?*\0".contains($0) ? " " : String($0) }.joined()
         return spaced.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
