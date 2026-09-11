@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS: clicking a book club in the sidebar now opens it; selection
+  previously highlighted the club without loading its detail or notes
+- macOS: an already-open reader now follows search hits and sidebar opens
+  to the new book or chapter instead of leaving the old page up while the
+  title, notes, and position saves moved on
+- iOS: the end-of-chapter "Write note" prompt now writes the note to the
+  chapter it names; the editor had targeted the next chapter
+- Book clubs: when CloudKit is missing the sharing types from its deployed
+  schema, the app now says the schema needs deploying instead of "try
+  again later", which could never succeed
+
 ## [0.2.4] - 2026-09-11
 
 ### Fixed

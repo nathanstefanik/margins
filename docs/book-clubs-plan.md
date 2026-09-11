@@ -322,13 +322,35 @@ tab or section), `BookDetailView` ("Start a Book Club…"), app settings.
 - **Public invite lookup.** The `ClubInvite` public record exposes club name
   and book title to anyone who guesses a live code. Codes expire and rotate;
   document it in the privacy notes.
-- **CloudKit schema.** `Club` and `Snapshot` records carry a `clubId` field
-  that must be queryable in the development schema; the invite record is
-  keyed by its code, so no query is needed there. Sharing also needs the
-  system `cloudkit.share` type in production, which only exists if a share
-  was created against development before the schema was deployed: run a
-  debug build, create one club, then deploy the schema changes. The engine
-  saves the share with its root record so that create succeeds.
+- **CloudKit schema.** Deployed sharing needs the custom `Club`,
+  `Snapshot`, and `ClubInvite` types (`Club`/`Snapshot` carry a `clubId`
+  field that must be queryable; the invite is keyed by its code) plus the
+  system `cloudkit.share` type. Verify before every release:
+  1. CloudKit Console (icloud.developer.apple.com/dashboard) → container
+     `iCloud.io.github.nathanstefanik.margins` → **Schema** → switch the
+     environment picker to **Development**. The record-type list must
+     contain `cloudkit.share`; shipping builds talk to production and
+     cannot create missing types, so dev materializes it first.
+  2. If it is missing: run a **Debug** build from Xcode against development
+     (not TestFlight) and create one club. The engine saves the share with
+     its root record, which creates `cloudkit.share`.
+  3. Switch the picker to **Production** and click **Deploy Schema
+     Changes**; confirm `cloudkit.share` now appears there too.
+  4. Then test sharing from TestFlight.
+
+  Optional CLI check (the token is a CloudKit **management** token from
+  the Console's Tokens page; `cktool save-token` prompts for it so it is
+  never written to the repo):
+
+      xcrun cktool save-token --type management
+      xcrun cktool export-schema --team-id S4CXT358VG \
+        --container-id iCloud.io.github.nathanstefanik.margins \
+        --environment development --output-file dev.ckdb
+      grep -c cloudkit.share dev.ckdb   # must be at least 1
+      xcrun cktool export-schema --team-id S4CXT358VG \
+        --container-id iCloud.io.github.nathanstefanik.margins \
+        --environment production --output-file prod.ckdb
+      grep -c cloudkit.share prod.ckdb  # must be at least 1
 - **Whole-record sync.** v1 fetches all snapshots per sync instead of
   tracking `CKServerChangeToken`s; a club is a few members and one book's
   notes, far below the point where that matters.
