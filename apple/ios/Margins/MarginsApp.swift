@@ -10,6 +10,7 @@ struct MarginsApp: App {
             LibraryScene()
                 .environment(app.library)
                 .environment(app.reader)
+                .environment(app.clubs)
                 .environment(app)
                 .task { await app.activate() }
                 .onOpenURL { url in

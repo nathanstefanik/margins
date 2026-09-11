@@ -110,10 +110,15 @@ public struct ClubSync: Sendable {
     /// CloudKit when an iCloud account is usable, otherwise the local-only
     /// engine so clubs still work on an unsigned build. This is what both
     /// apps construct.
+    ///
+    /// Constructing a `CKContainer` without the CloudKit entitlement traps,
+    /// so the account check gates on the ubiquity token first.
     public static func automatic(store: CoreStore) async -> ClubSync {
-        let cloud = ClubSync.live(store: store)
-        if (try? await cloud.currentMemberId()) != nil {
-            return cloud
+        if FileManager.default.ubiquityIdentityToken != nil {
+            let cloud = ClubSync.live(store: store)
+            if (try? await cloud.currentMemberId()) != nil {
+                return cloud
+            }
         }
         let identity = (try? await store.clubIdentity())
             ?? ClubIdentity(memberId: "local")

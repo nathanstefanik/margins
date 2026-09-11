@@ -252,7 +252,7 @@ library.
 
 ---
 
-## Phase 5 — iOS UI
+## Phase 5 — iOS UI (implemented)
 
 **Files:** `ios/Margins/Clubs/…` scenes; edits to `LibraryScene` (add a Clubs
 tab or section), `BookDetailView` ("Start a Book Club…"), app settings.

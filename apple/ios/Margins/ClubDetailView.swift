@@ -1,0 +1,308 @@
+import SwiftUI
+import MarginsCore
+import MarginsModel
+
+/// One club on iOS: identity, roster, invite code, and the merged document.
+/// System list content; actions live in rows and on the toolbar.
+struct ClubDetailView: View {
+    let clubId: String
+
+    @Environment(ClubModel.self) private var clubs
+
+    @State private var exportURL: URL?
+    @State private var showingDeleteConfirmation = false
+    @State private var memberPendingRemoval: ClubMember?
+
+    var body: some View {
+        @Bindable var clubs = clubs
+        Group {
+            if let club = clubs.selectedClub, club.id == clubId {
+                List {
+                    Section { header(club) }
+                    membersSection(club)
+                    notesSections
+                }
+                .listStyle(.insetGrouped)
+                .refreshable { await clubs.loadNotes() }
+            } else {
+                ProgressView()
+                    .task { await clubs.selectClub(id: clubId) }
+            }
+        }
+        .navigationTitle(clubs.selectedClub?.name ?? "Club")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        Task { await clubs.publishOwnSnapshot() }
+                    } label: {
+                        Label("Sync My Notes", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    Button {
+                        Task { await export() }
+                    } label: {
+                        Label("Export Markdown", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(clubs.notes?.chapters.isEmpty ?? true)
+                    if clubs.isAdmin(of: clubs.selectedClub) {
+                        Divider()
+                        Button(role: .destructive) {
+                            showingDeleteConfirmation = true
+                        } label: {
+                            Label("Delete Club", systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Label("Club Actions", systemImage: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { exportURL != nil },
+                set: { if !$0 { exportURL = nil } }
+            )
+        ) {
+            if let exportURL {
+                ExportSheet(url: exportURL)
+            }
+        }
+        .confirmationDialog(
+            "Delete \"\(clubs.selectedClub?.name ?? "Club")\"?",
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Club", role: .destructive) {
+                Task { await clubs.deleteSelectedClub() }
+            }
+        } message: {
+            Text("This removes the club and its local snapshots. Your notes are not touched.")
+        }
+        .confirmationDialog(
+            "Remove Member?",
+            isPresented: Binding(
+                get: { memberPendingRemoval != nil },
+                set: { if !$0 { memberPendingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: memberPendingRemoval
+        ) { member in
+            Button("Remove \(member.displayName)", role: .destructive) {
+                Task { await clubs.removeMember(id: member.id) }
+            }
+        } message: { _ in
+            Text("They lose access and their shared snapshot is deleted.")
+        }
+        .alert(
+            "Book Clubs",
+            isPresented: Binding(
+                get: { clubs.errorMessage != nil },
+                set: { if !$0 { clubs.errorMessage = nil } }
+            )
+        ) {
+            Button("OK") {}
+        } message: {
+            Text(clubs.errorMessage ?? "")
+        }
+    }
+
+    // MARK: Header
+
+    private func header(_ club: Club) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(club.name)
+                    .font(.title2.weight(.semibold))
+                Text("\(club.bookTitle) — \(club.bookAuthor)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 12) {
+                Toggle(
+                    "Spoiler protection",
+                    isOn: Binding(
+                        get: { clubs.spoilerProtection },
+                        set: { value in Task { await clubs.setSpoilerProtection(value) } }
+                    )
+                )
+                .font(.subheadline)
+            }
+            if clubs.supportsSharing, let code = clubs.selectedClub?.inviteCode {
+                HStack(spacing: 8) {
+                    Text("Invite code")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(code)
+                        .font(.system(.body, design: .monospaced).weight(.semibold))
+                        .textSelection(.enabled)
+                    Spacer()
+                    ShareLink(item: code) {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                            .labelStyle(.iconOnly)
+                    }
+                    if clubs.isAdmin(of: club) {
+                        Button {
+                            Task { await clubs.rotateInviteCode() }
+                        } label: {
+                            Label("New Code", systemImage: "arrow.clockwise")
+                                .labelStyle(.iconOnly)
+                        }
+                    }
+                }
+            } else if !clubs.supportsSharing {
+                Label("This iPhone only — sign in to iCloud to invite readers.", systemImage: "icloud.slash")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func membersSection(_ club: Club) -> some View {
+        Section("Members") {
+            ForEach(club.roster) { member in
+                HStack {
+                    Text(member.displayName)
+                    if member.isAdmin {
+                        Image(systemName: "crown.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if clubs.isCurrentMember(member) {
+                        Text("You")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    if clubs.isAdmin(of: club), !clubs.isCurrentMember(member),
+                       clubs.supportsSharing
+                    {
+                        Button(role: .destructive) {
+                            memberPendingRemoval = member
+                        } label: {
+                            Label("Remove", systemImage: "person.badge.minus")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Merged document
+
+    @ViewBuilder
+    private var notesSections: some View {
+        if let notes = clubs.notes {
+            if notes.chapters.isEmpty {
+                Section {
+                    Text("No club notes yet. Write notes while reading, then Sync My Notes.")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                ForEach(notes.chapters) { chapter in
+                    Section {
+                        if chapter.othersHidden {
+                            Label(hiddenText(chapter), systemImage: "eye.slash")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(chapter.passages) { passage in
+                            passageRow(passage)
+                        }
+                        ForEach(chapter.contributions) { contribution in
+                            contributionRow(contribution)
+                        }
+                    } header: {
+                        Text("\(chapter.chapterIndex + 1). \(chapter.chapterTitle)")
+                    }
+                }
+            }
+        }
+    }
+
+    private func passageRow(_ passage: ClubPassage) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !passage.quote.isEmpty {
+                Text(passage.quote)
+                    .font(.callout.italic())
+                    .padding(.leading, 10)
+                    .overlay(alignment: .leading) {
+                        Rectangle()
+                            .fill(Color.accentColor.opacity(0.6))
+                            .frame(width: 3)
+                    }
+            }
+            ForEach(passage.marks) { entry in
+                HStack(alignment: .top, spacing: 6) {
+                    Text("\(entry.displayName):")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(entry.isSelf ? Color.accentColor : .secondary)
+                    Text(entry.mark.body.isEmpty ? "highlight" : entry.mark.body)
+                        .foregroundStyle(entry.mark.body.isEmpty ? .secondary : .primary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func contributionRow(_ contribution: ClubContribution) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(contribution.displayName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(contribution.isSelf ? Color.accentColor : .secondary)
+            Text(contribution.body)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func hiddenText(_ chapter: ClubChapter) -> String {
+        let who = chapter.hiddenMemberCount == 1
+            ? "1 other member's" : "\(chapter.hiddenMemberCount) other members'"
+        return "\(who) notes are hidden until you finish this chapter."
+    }
+
+    private func export() async {
+        guard let payload = await clubs.exportMarkdown() else { return }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(payload.filename)
+        do {
+            try payload.markdown.write(to: url, atomically: true, encoding: .utf8)
+            exportURL = url
+        } catch {
+            clubs.errorMessage = String(describing: error)
+        }
+    }
+}
+
+/// The share sheet for an exported markdown file.
+private struct ExportSheet: View {
+    let url: URL
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 42))
+                    .foregroundStyle(.secondary)
+                Text(url.lastPathComponent)
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+                ShareLink(item: url) {
+                    Label("Share Markdown", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(24)
+            .navigationTitle("Export Club Notes")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}

@@ -1,0 +1,131 @@
+import SwiftUI
+import UIKit
+import MarginsCore
+import MarginsModel
+
+/// New club: name it, pick the one book it reads, set the name others see.
+struct CreateClubSheet: View {
+    @Environment(ClubModel.self) private var clubs
+    @Environment(LibraryModel.self) private var library
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var name = ""
+    @State private var displayName = ""
+    @State private var bookID: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Club") {
+                    TextField("Club Name", text: $name)
+                    TextField("Your Name", text: $displayName)
+                }
+                Section("Book") {
+                    Picker("Book", selection: $bookID) {
+                        ForEach(library.books) { book in
+                            Text("\(book.title) — \(book.author)")
+                                .tag(String?.some(book.id))
+                        }
+                    }
+                }
+                if !clubs.supportsSharing {
+                    Section {
+                        Label(
+                            "Sharing needs iCloud; the club stays on this iPhone.",
+                            systemImage: "icloud.slash"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("New Book Club")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") { create() }
+                        .disabled(!canCreate)
+                }
+            }
+        }
+        .onAppear {
+            bookID = library.selectedBookID ?? library.books.first?.id
+            displayName = clubs.identity.displayName ?? UIDevice.current.name
+        }
+    }
+
+    private var canCreate: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && bookID != nil
+    }
+
+    private func create() {
+        guard let bookID else { return }
+        let clubName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let memberName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            if await clubs.createClub(
+                bookId: bookID, name: clubName, displayName: memberName
+            ) != nil {
+                dismiss()
+            }
+        }
+    }
+}
+
+/// Join club: the four-character code, typed on a monospaced field.
+struct JoinClubSheet: View {
+    @Environment(ClubModel.self) private var clubs
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var code = ""
+    @State private var displayName = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Invite Code") {
+                    TextField("ABCD", text: $code)
+                        .font(.system(.title3, design: .monospaced))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                }
+                Section("Your Name") {
+                    TextField("Your Name", text: $displayName)
+                }
+            }
+            .navigationTitle("Join a Book Club")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Join") { join() }
+                        .disabled(!canJoin)
+                }
+            }
+        }
+        .onAppear {
+            displayName = clubs.identity.displayName ?? UIDevice.current.name
+        }
+    }
+
+    private var canJoin: Bool {
+        ClubCode.isValid(code)
+            && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func join() {
+        let memberName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task {
+            if await clubs.joinClub(code: code, displayName: memberName) != nil {
+                dismiss()
+            }
+        }
+    }
+}

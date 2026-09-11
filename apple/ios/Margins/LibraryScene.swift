@@ -10,6 +10,7 @@ import MarginsModel
 /// while contextual search belongs over the content it filters.
 enum AppTab: Hashable {
     case library
+    case clubs
     case search
 }
 
@@ -20,6 +21,7 @@ enum LibraryRoute: Hashable {
 
 struct LibraryScene: View {
     @Environment(LibraryModel.self) private var library
+    @Environment(ClubModel.self) private var clubs
     @Environment(AppModel.self) private var app
 
     @State private var selectedTab: AppTab = .library
@@ -38,6 +40,9 @@ struct LibraryScene: View {
         TabView(selection: $selectedTab) {
             Tab("Library", systemImage: "books.vertical", value: AppTab.library) {
                 libraryTab
+            }
+            Tab("Clubs", systemImage: "person.2", value: AppTab.clubs) {
+                ClubsScene()
             }
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
                 searchTab
@@ -307,6 +312,34 @@ struct LibraryScene: View {
                 bookPendingDeletion = nil
             }
         }
+        if ProcessInfo.processInfo.environment["MARGINS_CLUB_FIXTURE"] != nil {
+            await createClubFixture()
+        }
+    }
+
+    /// `MARGINS_CLUB_FIXTURE=create`: after the import fixture lands, write
+    /// one note, start a local club on that book, publish the snapshot, and
+    /// open the Clubs tab. Exercises the whole iOS club surface without
+    /// touch synthesis.
+    private func createClubFixture() async {
+        for _ in 0..<50 where library.books.isEmpty {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        guard clubs.clubs.isEmpty,
+              let summary = library.books.first,
+              let meta = await library.getBook(id: summary.id),
+              let chapter = meta.chapters.first
+        else { return }
+        await library.saveChapterNoteText(
+            bookId: meta.id, chapterKey: chapter.key,
+            body: "A first thought to share with the club."
+        )
+        if await clubs.createClub(
+            bookId: meta.id, name: "Thursday Readers", displayName: "Reader"
+        ) != nil {
+            _ = await clubs.publishOwnSnapshot()
+        }
+        selectedTab = .clubs
     }
 
     /// Launch with `MARGINS_IMPORT_FIXTURE=/path/to/book.epub` and an empty
