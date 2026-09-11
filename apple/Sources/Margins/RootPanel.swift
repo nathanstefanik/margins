@@ -13,6 +13,7 @@ enum RootPanel {
         panel.message = "Choose the directory that holds your library. Books and notes move with it."
         panel.prompt = "Use Directory"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        LibraryRootBookmark.remember(url)
         await model.setLibraryRoot(url.path)
     }
 }

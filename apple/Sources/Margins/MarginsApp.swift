@@ -8,6 +8,7 @@ struct MarginsApp: App {
     @State private var reader = ReaderModel()
 
     init() {
+        LibraryRootBookmark.restore()
         model.reader = reader
         reader.positionSaver = { [weak model] bookId, position in
             await model?.saveReadingPosition(bookId: bookId, position: position)
