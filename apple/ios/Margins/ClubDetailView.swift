@@ -92,7 +92,7 @@ struct ClubDetailView: View {
                 Task { await clubs.removeMember(id: member.id) }
             }
         } message: { _ in
-            Text("They lose access and their shared snapshot is deleted.")
+            Text("They are removed from the roster and their shared snapshot is deleted.")
         }
         .alert(
             "Book Clubs",

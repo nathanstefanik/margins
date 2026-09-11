@@ -137,4 +137,35 @@ struct ClubStoreBridgeTests {
         let reloaded = try CoreStore(dataDir: dataDir)
         #expect(!(try await reloaded.clubSpoilerProtection()))
     }
+
+    @Test("adopting a transport member id migrates local clubs and snapshots")
+    func adoptMemberIdMigratesClubs() async throws {
+        let store = try CoreStore(dataDir: try makeTempDataDir())
+        let fixture = try #require(try fixtureEpubs().first)
+        let book = try await store.importEpub(atPath: fixture)
+        let identity = try await store.clubIdentity()
+        let club = try await store.createClub(
+            bookId: book.id, name: "Solo", adminId: identity.memberId, adminName: "Alice"
+        )
+        try await store.saveClubMemberSnapshot(
+            clubId: club.id,
+            snapshot: ClubMemberNotes(
+                memberId: identity.memberId, displayName: "Alice", bookId: book.id,
+                bookTitle: book.title, bookAuthor: book.author,
+                chapterCount: book.chapters.count, updatedAt: Date(), chapters: []
+            )
+        )
+
+        try await store.adoptClubMemberId("_cloud-user")
+
+        #expect(try await store.clubIdentity().memberId == "_cloud-user")
+        #expect(try await store.getClub(id: club.id).members.map(\.id) == ["_cloud-user"])
+        let migrated = try await store.clubMemberSnapshots(clubId: club.id)
+        #expect(migrated.count == 1)
+        #expect(migrated.first?.memberId == "_cloud-user")
+
+        // Re-adopting the same id changes nothing.
+        try await store.adoptClubMemberId("_cloud-user")
+        #expect(try await store.clubMemberSnapshots(clubId: club.id).count == 1)
+    }
 }

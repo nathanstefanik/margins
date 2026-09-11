@@ -19,17 +19,19 @@ public struct ClubInvite: Sendable, Equatable {
     public var code: String
     public var clubId: String
     public var clubName: String
+    public var bookId: String
     public var bookTitle: String
     public var shareURL: URL
     public var expiresAt: Date
 
     public init(
-        code: String, clubId: String, clubName: String, bookTitle: String,
-        shareURL: URL, expiresAt: Date
+        code: String, clubId: String, clubName: String, bookId: String,
+        bookTitle: String, shareURL: URL, expiresAt: Date
     ) {
         self.code = code
         self.clubId = clubId
         self.clubName = clubName
+        self.bookId = bookId
         self.bookTitle = bookTitle
         self.shareURL = shareURL
         self.expiresAt = expiresAt
@@ -50,6 +52,8 @@ public enum ClubSyncError: Error, LocalizedError, Sendable, Equatable {
     case invalidCode
     case unknownCode
     case expiredCode
+    /// The club's book is not in the local library yet.
+    case bookMissing(String)
     case notSignedIn
     case transport(String)
 
@@ -58,6 +62,8 @@ public enum ClubSyncError: Error, LocalizedError, Sendable, Equatable {
         case .invalidCode: return "That invite code doesn't look right."
         case .unknownCode: return "No club uses that invite code."
         case .expiredCode: return "That invite code has expired."
+        case let .bookMissing(title):
+            return "Import \"\(title)\" into your library, then join the club."
         case .notSignedIn: return "Sign in to iCloud to use book clubs."
         case let .transport(message): return message
         }
@@ -112,20 +118,27 @@ public struct ClubSync: Sendable {
     /// apps construct.
     ///
     /// Constructing a `CKContainer` without the CloudKit entitlement traps,
-    /// so the account check gates on the ubiquity token first.
+    /// so the account check gates on the ubiquity token first. A signed-in
+    /// user whose network is down stays on CloudKit (operations surface the
+    /// error and can be retried) rather than silently turning the club
+    /// local for the session.
     public static func automatic(store: CoreStore) async -> ClubSync {
-        if FileManager.default.ubiquityIdentityToken != nil {
-            let cloud = ClubSync.live(store: store)
-            if (try? await cloud.currentMemberId()) != nil {
-                return cloud
-            }
+        guard FileManager.default.ubiquityIdentityToken != nil else {
+            let identity = (try? await store.clubIdentity())
+                ?? ClubIdentity(memberId: "local")
+            return ClubSync(
+                store: store,
+                engine: LocalClubSyncEngine(store: store, memberId: identity.memberId)
+            )
         }
-        let identity = (try? await store.clubIdentity())
-            ?? ClubIdentity(memberId: "local")
-        return ClubSync(
-            store: store,
-            engine: LocalClubSyncEngine(store: store, memberId: identity.memberId)
-        )
+        let cloud = ClubSync.live(store: store)
+        if let memberId = try? await cloud.currentMemberId() {
+            // The transport id is the club identity: persist it so offline
+            // launches and local clubs agree on who "you" are, migrating
+            // any clubs created under a generated local id.
+            try? await store.adoptClubMemberId(memberId)
+        }
+        return cloud
     }
 
     /// True when the transport can invite and sync with other people.
@@ -162,6 +175,11 @@ public struct ClubSync: Sendable {
             throw ClubSyncError.unknownCode
         }
         guard invite.expiresAt > Date() else { throw ClubSyncError.expiredCode }
+        // Check the book before accepting the share: a late failure would
+        // leave the share accepted and the club half-joined.
+        guard (try? await store.getBook(id: invite.bookId)) != nil else {
+            throw ClubSyncError.bookMissing(invite.bookTitle)
+        }
 
         var club = try await engine.acceptShare(url: invite.shareURL)
         if !club.members.contains(where: { $0.id == memberId }) {
@@ -255,6 +273,7 @@ public struct ClubSync: Sendable {
             code: club.inviteCode,
             clubId: club.id,
             clubName: club.name,
+            bookId: club.bookId,
             bookTitle: club.bookTitle,
             shareURL: shareURL,
             expiresAt: now.addingTimeInterval(Self.inviteLifetime)

@@ -299,6 +299,42 @@ struct ClubCompileTests {
         #expect(notes.chapters[0].passages.count == 2)
     }
 
+    @Test("disjoint CFI ranges keep identical quotes apart")
+    func disjointCFIsStaySeparate() {
+        // Both CFIs parse and point at different paragraphs: the quote
+        // fallback must not merge them just because the text matches.
+        let notes = ClubCompile.compile(
+            club: club([member("alice", "Alice", .admin), member("bob", "Bob")]),
+            snapshots: [
+                snapshot("alice", "Alice", [
+                    chapter("001", index: 0, marks: [
+                        mark(
+                            "aaaaaaaaaa",
+                            cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:5)",
+                            quote: "Yes",
+                            body: "A"
+                        )
+                    ])
+                ]),
+                snapshot("bob", "Bob", [
+                    chapter("001", index: 0, marks: [
+                        mark(
+                            "bbbbbbbbbb",
+                            cfi: "epubcfi(/6/14!/4/2/30,/1:0,/1:5)",
+                            quote: "Yes",
+                            body: "B"
+                        )
+                    ])
+                ]),
+            ],
+            viewerId: "alice",
+            viewerChapterIndex: 0,
+            spoilerPolicy: .off
+        )
+
+        #expect(notes.chapters[0].passages.count == 2)
+    }
+
     @Test("hidden marks are counted, never rendered")
     func hiddenMarksCounted() {
         let notes = ClubCompile.compile(

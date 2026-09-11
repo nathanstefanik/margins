@@ -39,12 +39,15 @@ public enum ClubMarks {
 
         for i in ordered.indices {
             for j in (i + 1)..<ordered.count {
-                if let a = ranges[i], let b = ranges[j], CFI.overlaps(a, b) {
-                    union(i, j)
-                    continue
-                }
-                if !quotes[i].isEmpty, quotes[i] == quotes[j] {
-                    union(i, j)
+                switch (ranges[i], ranges[j]) {
+                case let (a?, b?):
+                    // Both CFIs parsed: only real overlap clusters them.
+                    if CFI.overlaps(a, b) { union(i, j) }
+                case (nil, _), (_, nil):
+                    // A missing or unparsable CFI falls back to quote
+                    // matching; two parseable but disjoint ranges stay
+                    // separate even when their quotes normalize identically.
+                    if !quotes[i].isEmpty, quotes[i] == quotes[j] { union(i, j) }
                 }
             }
         }

@@ -301,6 +301,12 @@ tab or section), `BookDetailView` ("Start a Book Club…"), app settings.
   the join gate; an admin cannot approve before the joiner has access without
   a server. v1 accepts this (rotate/expire codes, remove members); revisit if
   that is not private enough.
+- **Link-share removal is not revocation.** CloudKit only allows modifying a
+  share's participant list when `publicPermission == .none`; a code-based
+  link share has no per-person list. Removing a member deletes their roster
+  entry and snapshot (locally and remotely), but the accepted share URL may
+  still give them access. Enforceable revocation needs explicit-participant
+  invites (email/phone lookup, admin approval) or share rotation.
 - **Edition drift.** Different EPUB editions hash to different `book_id`s.
   v1 requires every member to import the same EPUB; a work-level id or
   quote-based matching is a future feature.
@@ -340,8 +346,10 @@ tab or section), `BookDetailView` ("Start a Book Club…"), app settings.
   share URL until it expires (14 days) or is rotated. Only accepting the
   share grants access.
 - **Removal:** an admin removes a member locally and remotely: the roster
-  entry, the member's snapshot record, and their CloudKit share participant
-  are all deleted. Their local library is untouched.
+  entry and the member's snapshot record are deleted. For link shares,
+  CloudKit cannot revoke the already-accepted URL (see risks), so treat
+  removal as "no longer part of the club's data", not as access revocation.
+  The member's local library is untouched.
 - **Spoiler protection** is a local setting, stored in `config.json`; it is
   never shared with the club.
 

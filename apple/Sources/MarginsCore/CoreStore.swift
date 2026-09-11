@@ -371,6 +371,39 @@ public actor CoreStore {
         try config.setClubDisplayName(name)
     }
 
+    /// Adopts the transport member id (a CloudKit user record name) as the
+    /// local club identity. Clubs created under a different id are migrated
+    /// — roster entries and snapshot files and contents — so a local-only
+    /// club keeps being "you" after iCloud becomes available, and CloudKit
+    /// participant records match the roster afterwards.
+    public func adoptClubMemberId(_ memberId: String) throws {
+        let previous = config.clubMemberId
+        guard previous != memberId else { return }
+
+        if let previous {
+            for club in try clubs.listClubs() {
+                var updated = club
+                var rosterChanged = false
+                for index in updated.members.indices
+                where updated.members[index].id == previous {
+                    updated.members[index].id = memberId
+                    rosterChanged = true
+                }
+                if rosterChanged { try clubs.writeClub(updated) }
+
+                if let snapshot = try clubs.memberSnapshot(
+                    clubId: club.id, memberId: previous
+                ) {
+                    var migrated = snapshot
+                    migrated.memberId = memberId
+                    try clubs.writeMemberSnapshot(migrated, clubId: club.id)
+                    try clubs.removeMemberSnapshot(clubId: club.id, memberId: previous)
+                }
+            }
+        }
+        try config.setClubMemberId(memberId)
+    }
+
     /// The viewer's current spine index for the club's book, or `nil` when
     /// the book was never opened — which spoiler protection treats as
     /// "nothing read yet".

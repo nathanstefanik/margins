@@ -48,7 +48,7 @@ struct ClubDetailView: View {
                     Task { await clubs.removeMember(id: member.id) }
                 }
             } message: { member in
-                Text("They lose access to the club and their shared snapshot is deleted.")
+                Text("\(member.displayName) is removed from the roster and their shared snapshot is deleted.")
             }
         }
     }

@@ -59,9 +59,13 @@ public final class ClubModel {
 
     /// Wires the model to the app's core store. `engine` injects a transport
     /// for tests; `nil` picks CloudKit or the local-only engine.
+    ///
+    /// The member id comes from the transport, not the config: CloudKit
+    /// rosters must use the user record name for participant removal to
+    /// work. The config id is the fallback while a signed-in transport is
+    /// temporarily unreachable.
     public func activate(store: CoreStore, engine: (any ClubSyncEngine)? = nil) async {
         self.store = store
-        identity = (try? await store.clubIdentity()) ?? ClubIdentity(memberId: "local")
         spoilerProtection = (try? await store.clubSpoilerProtection()) ?? true
         let sync = if let engine {
             ClubSync(store: store, engine: engine)
@@ -70,6 +74,14 @@ public final class ClubModel {
         }
         self.sync = sync
         supportsSharing = sync.supportsSharing
+
+        let storedIdentity = try? await store.clubIdentity()
+        identity = ClubIdentity(
+            memberId: (try? await sync.currentMemberId())
+                ?? storedIdentity?.memberId
+                ?? "local",
+            displayName: storedIdentity?.displayName
+        )
         await refresh()
     }
 

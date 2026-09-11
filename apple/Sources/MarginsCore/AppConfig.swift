@@ -95,15 +95,23 @@ public struct AppConfig: Sendable {
     public mutating func ensureClubMemberId() throws -> String {
         if let clubMemberId { return clubMemberId }
         let id = CoreID.newID()
+        try setClubMemberId(id)
+        return id
+    }
+
+    /// Records the identity a club session is actually running as (a
+    /// transport member id), so offline launches keep the same id.
+    public mutating func setClubMemberId(_ id: String) throws {
+        guard stored.clubMemberId != id else { return }
+        let previous = stored.clubMemberId
         stored.clubMemberId = id
         do {
             try persist()
         } catch {
-            stored.clubMemberId = nil
+            stored.clubMemberId = previous
             throw error
         }
         clubMemberId = id
-        return id
     }
 
     /// Remembers the name to show other members.

@@ -179,6 +179,11 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
                   $0.userIdentity.userRecordID?.recordName == memberId
               })
         else { return }
+        // A link share (`publicPermission` other than `.none`) has no
+        // per-participant list to modify, so CloudKit cannot revoke one
+        // person's access; removing the roster entry and snapshot is the
+        // enforceable part (docs/book-clubs-plan.md).
+        guard share.publicPermission == .none else { return }
         share.removeParticipant(participant)
         _ = try await saveRecord(share, in: privateDB)
     }
@@ -192,6 +197,7 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         )
         record["clubId"] = invite.clubId as CKRecordValue
         record["clubName"] = invite.clubName as CKRecordValue
+        record["bookId"] = invite.bookId as CKRecordValue
         record["bookTitle"] = invite.bookTitle as CKRecordValue
         record["shareURL"] = invite.shareURL.absoluteString as CKRecordValue
         record["expiresAt"] = invite.expiresAt as NSDate
@@ -402,6 +408,7 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
     private func decodeInvite(_ record: CKRecord, code: String) throws -> ClubInvite {
         guard let clubId = record["clubId"] as? String,
               let clubName = record["clubName"] as? String,
+              let bookId = record["bookId"] as? String,
               let bookTitle = record["bookTitle"] as? String,
               let rawURL = record["shareURL"] as? String,
               let url = URL(string: rawURL),
@@ -411,7 +418,7 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         }
         return ClubInvite(
             code: code, clubId: clubId, clubName: clubName,
-            bookTitle: bookTitle, shareURL: url, expiresAt: expiresAt
+            bookId: bookId, bookTitle: bookTitle, shareURL: url, expiresAt: expiresAt
         )
     }
 

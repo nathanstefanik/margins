@@ -173,6 +173,7 @@ struct ClubSyncTests {
                 code: "ZZZZ",
                 clubId: fixture.club.id,
                 clubName: fixture.club.name,
+                bookId: fixture.bookA.id,
                 bookTitle: fixture.club.bookTitle,
                 shareURL: URL(string: "https://example.com/share/\(fixture.club.id)")!,
                 expiresAt: Date().addingTimeInterval(-60)
@@ -185,6 +186,37 @@ struct ClubSyncTests {
         } catch let error as ClubSyncError {
             #expect(error == .expiredCode)
         }
+    }
+
+    @Test("joining without the club's book fails before the share is accepted")
+    func joinRequiresBook() async throws {
+        let world = ClubSyncWorld()
+        let storeA = try CoreStore(dataDir: try makeTempDataDir())
+        let fixture = try #require(try fixtureEpubs().first)
+        let bookA = try await storeA.importEpub(atPath: fixture)
+        let alice = ClubSync(
+            store: storeA, engine: InMemoryClubSyncEngine(world: world, memberId: "alice")
+        )
+        let (club, _) = try await alice.createClub(
+            bookId: bookA.id, name: "Readers", memberId: "alice", displayName: "Alice"
+        )
+
+        // Bob has not imported the book: the join must fail before the
+        // share is accepted, leaving no half-joined club behind.
+        let storeB = try CoreStore(dataDir: try makeTempDataDir())
+        let bob = ClubSync(
+            store: storeB, engine: InMemoryClubSyncEngine(world: world, memberId: "bob")
+        )
+        do {
+            _ = try await bob.joinClub(
+                code: club.inviteCode, memberId: "bob", displayName: "Bob"
+            )
+            Issue.record("expected a book-missing error")
+        } catch let error as ClubSyncError {
+            #expect(error == .bookMissing(bookA.title))
+        }
+        #expect(try await storeB.listClubs().isEmpty)
+        #expect(try await world.club(club.id)?.members.count == 1)
     }
 
     @Test("rotation revokes the old code and indexes the new one")
