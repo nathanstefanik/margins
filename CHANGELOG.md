@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-11
+
+### Added
+
+- Native iOS app: `Library`/`Search` shell, structured outline, reader with
+  tap zones and hardware keys, note capture from text selection, highlights,
+  chapter marks, full-height chapter-note editor, "Open in Margins" from
+  Files/Mail, Dynamic Type, and VoiceOver labels
+- Private **book clubs** (one book per club): four-character invite code,
+  CloudKit sharing with an automatic local-only fallback, and a merged view
+  of every member's notes — overlapping highlights cluster under one quoted
+  passage, with spoiler protection on by default
+- Structured **chapter outline** on macOS and iOS: front/back matter in
+  collapsed groups, Part/Book headings, and body chapters numbered from one
+- Anchored **marks** in chapter notes (parse/serialize/CRUD in the core,
+  rendered in both apps, lossless round-trip)
+- iOS library root in the iCloud Documents container with a runtime local
+  fallback and `NSFileVersion` conflict surfacing
+- Device signing on a physical iPhone (gitignored local xcconfig) and
+  simulator-verified import → read → annotate → export flows
+
 ### Changed
 
 - Core rewritten in Swift; storage format unchanged. The macOS app, iOS
@@ -47,5 +68,6 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.0
 [0.1.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.1.0
