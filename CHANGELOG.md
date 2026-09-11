@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-09-11
+
 ### Fixed
 
 - Book clubs: a new club's share is now saved in the same CloudKit batch
@@ -113,7 +115,8 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.4
 [0.2.3]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.3
 [0.2.2]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.2
 [0.2.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.1
