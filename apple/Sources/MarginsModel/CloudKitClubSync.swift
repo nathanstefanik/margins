@@ -78,11 +78,16 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         let record = CKRecord(recordType: RecordType.club, recordID: recordID)
         record["clubId"] = club.id as CKRecordValue
         record["payload"] = try payload(of: club) as NSData
+        // Root first, share second. A first-time batch that asks CloudKit
+        // to create both the Club type and the system cloudkit.share type
+        // in one atomic transaction fails with a bare "Atomic failure", and
+        // two saves also surface the real per-record error when one fails.
+        _ = try await saveRecord(record, in: privateDB)
 
         let share = CKShare(rootRecord: record)
         share.publicPermission = .readWrite
         share[CKShare.SystemFieldKey.title] = "\(club.name) — Margins" as CKRecordValue
-        _ = try await modifyRecords(saving: [record, share], in: privateDB)
+        _ = try await saveRecord(share, in: privateDB)
 
         guard let saved = try? await existingShare(rootRecordID: recordID, in: privateDB),
               let url = saved.url
@@ -103,6 +108,9 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         let metadata = try await shareMetadata(for: url)
         _ = try await accept(metadata)
         let clubId = metadata.rootRecordID.recordName
+        // Remember the shared zone now: later shared-database reads must
+        // be scoped to it (a zone-wide query is not supported there).
+        zoneCache[clubId] = metadata.rootRecordID.zoneID
         guard let club = try await fetchClub(id: clubId) else {
             throw ClubSyncError.transport("The shared club could not be read.")
         }
@@ -116,14 +124,9 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
             zoneCache[id] = record.recordID.zoneID
             return try decode(Club.self, from: record)
         }
-        let query = CKQuery(
-            recordType: RecordType.club,
-            predicate: NSPredicate(format: "clubId == %@", id)
-        )
-        guard let record = try await records(matching: query, in: sharedDB).first else {
+        guard let record = try await sharedClubRecord(id: id) else {
             return nil
         }
-        zoneCache[id] = record.recordID.zoneID
         return try decode(Club.self, from: record)
     }
 
@@ -158,7 +161,9 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
             recordType: RecordType.snapshot,
             predicate: NSPredicate(format: "clubId == %@", clubId)
         )
-        return try await records(matching: query, in: database(for: zoneID)).map {
+        return try await records(
+            matching: query, in: database(for: zoneID), zoneID: zoneID
+        ).map {
             try decode(ClubMemberNotes.self, from: $0)
         }
     }
@@ -231,15 +236,36 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
             zoneCache[clubId] = record.recordID.zoneID
             return record.recordID.zoneID
         }
+        if let record = try await sharedClubRecord(id: clubId) {
+            return record.recordID.zoneID
+        }
+        throw ClubSyncError.transport("Club not found in CloudKit: \(clubId)")
+    }
+
+    /// Finds a club in the shared database. A participant's zone is only
+    /// known right after accepting the share (or after rediscovering it),
+    /// and the shared database rejects zone-wide queries, so read through
+    /// the cached zone when present and otherwise query each shared zone.
+    private func sharedClubRecord(id: String) async throws -> CKRecord? {
+        if let cached = zoneCache[id],
+           let record = try? await fetchRecord(
+               CKRecord.ID(recordName: id, zoneID: cached), in: sharedDB
+           ) {
+            return record
+        }
         let query = CKQuery(
             recordType: RecordType.club,
-            predicate: NSPredicate(format: "clubId == %@", clubId)
+            predicate: NSPredicate(format: "clubId == %@", id)
         )
-        guard let record = try await records(matching: query, in: sharedDB).first else {
-            throw ClubSyncError.transport("Club not found in CloudKit: \(clubId)")
+        for zone in try await sharedDB.allRecordZones() {
+            if let record = try await records(
+                matching: query, in: sharedDB, zoneID: zone.zoneID
+            ).first {
+                zoneCache[id] = zone.zoneID
+                return record
+            }
         }
-        zoneCache[clubId] = record.recordID.zoneID
-        return record.recordID.zoneID
+        return nil
     }
 
     private func database(for zone: CKRecordZone.ID) -> CKDatabase {
@@ -331,14 +357,35 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
                     continuation.resume(returning: saved)
                 } else {
                     continuation.resume(
-                        throwing: error
-                            ?? ClubSyncError.transport(
-                                "CloudKit returned no record: \(record.recordID.recordName)"
-                            )
+                        throwing: ClubSyncError.transport(
+                            Self.describe(error, saving: record.recordID.recordName)
+                        )
                     )
                 }
             }
         }
+    }
+
+    /// A per-record failure description. Batch failures carry the real
+    /// per-record reason in the partial errors; `localizedDescription`
+    /// alone hides them (a bare "Atomic failure").
+    private static func describe(_ error: (any Error)?, saving recordName: String) -> String {
+        guard let error else {
+            return "CloudKit returned no record: \(recordName)"
+        }
+        guard let ckError = error as? CKError,
+              let partials = ckError.partialErrorsByItemID,
+              !partials.isEmpty
+        else {
+            return error.localizedDescription
+        }
+        let details = partials
+            .map { key, value in
+                "\(key): \((value as? CKError)?.localizedDescription ?? value.localizedDescription)"
+            }
+            .sorted()
+            .joined(separator: "; ")
+        return "\(error.localizedDescription) [\(details)]"
     }
 
     private func deleteRecord(
@@ -356,21 +403,8 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         }
     }
 
-    private func modifyRecords(
-        saving records: [CKRecord], in database: CKDatabase
-    ) async throws -> [CKRecord] {
-        do {
-            let result = try await database.modifyRecords(
-                saving: records, deleting: [], savePolicy: .changedKeys, atomically: true
-            )
-            return try result.saveResults.values.map { try $0.get() }
-        } catch let error as CKError {
-            throw ClubSyncError.transport(error.localizedDescription)
-        }
-    }
-
     private func records(
-        matching query: CKQuery, in database: CKDatabase
+        matching query: CKQuery, in database: CKDatabase, zoneID: CKRecordZone.ID? = nil
     ) async throws -> [CKRecord] {
         var collected: [CKRecord] = []
         var cursor: CKQueryOperation.Cursor?
@@ -381,6 +415,9 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
             )
             if let cursor {
                 page = try await database.records(continuingMatchFrom: cursor)
+            } else if let zoneID {
+                // The shared database requires a zone-scoped query.
+                page = try await database.records(matching: query, inZoneWith: zoneID)
             } else {
                 page = try await database.records(matching: query)
             }
