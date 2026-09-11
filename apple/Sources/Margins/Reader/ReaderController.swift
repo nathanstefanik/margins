@@ -15,6 +15,9 @@ final class ReaderController: NSObject {
     private let model: LibraryModel
     private let reader: ReaderModel
     private var webView: WKWebView?
+    /// The book the page currently has loaded; a retarget to another book
+    /// reloads the scheme URL instead of displaying a foreign target.
+    private var loadedBookID: String?
 
     init(model: LibraryModel, reader: ReaderModel) {
         self.model = model
@@ -42,10 +45,12 @@ final class ReaderController: NSObject {
         self.webView = webView
 
         observePreferences()
+        observeNavigation()
         applyTheme()
 
         if let book = reader.book, reader.chapter != nil,
            let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget) {
+            loadedBookID = book.id
             webView.load(URLRequest(url: url))
         }
         return webView
@@ -129,6 +134,38 @@ final class ReaderController: NSObject {
                 self.applyTypography()
                 self.observePreferences()
             }
+        }
+    }
+
+    /// Retargets the page when the model is opened somewhere new (search
+    /// hit, sidebar, passage jump). `relocated`-driven chapter changes are
+    /// already on screen and do not bump the generation, so paging across
+    /// a chapter boundary never reloads the webview.
+    private func observeNavigation() {
+        withObservationTracking {
+            _ = reader.openGeneration
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.retarget()
+                self.observeNavigation()
+            }
+        }
+    }
+
+    private func retarget() {
+        guard let webView, let book = reader.book, reader.chapter != nil else { return }
+        if loadedBookID != book.id {
+            loadedBookID = book.id
+            if let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget) {
+                webView.load(URLRequest(url: url))
+            }
+            return
+        }
+        if let cfi = reader.resumeCfi, !cfi.isEmpty {
+            evaluate("readerDisplay(\(Self.javaScriptLiteral(cfi)))")
+        } else {
+            evaluate("readerDisplay(\(Self.javaScriptLiteral(reader.displayTarget)))")
         }
     }
 

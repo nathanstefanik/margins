@@ -179,6 +179,25 @@ struct ReaderModelTests {
         #expect(reader.progress == nil)
     }
 
+    @Test("open signals a retarget; relocated chapter drift does not")
+    func openGenerationTracksExternalNavigations() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        #expect(reader.openGeneration == 0)
+
+        reader.open(book: book, chapter: book.chapters[0])
+        #expect(reader.openGeneration == 1)
+
+        // The renderer moving across a section boundary is already on
+        // screen; it must not ask the webview to reload.
+        reader.relocated(page: 1, totalPages: 4, href: "two.xhtml", cfi: nil)
+        #expect(reader.chapter?.key == "ch2")
+        #expect(reader.openGeneration == 1)
+
+        reader.open(book: book, chapter: book.chapters[1])
+        #expect(reader.openGeneration == 2)
+    }
+
     @Test("book percent interpolates the chapter index and clamps")
     func bookPercentInterpolates() {
         let reader = ReaderModel()

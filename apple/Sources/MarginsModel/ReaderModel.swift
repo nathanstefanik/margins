@@ -28,6 +28,12 @@ public final class ReaderModel {
     public private(set) var chapter: ChapterMeta?
     public private(set) var progress: ReaderProgress?
 
+    /// Bumped by `open` when the reader is retargeted from outside the
+    /// renderer (search hit, sidebar open, passage jump). `relocated`-driven
+    /// chapter changes do not touch it: the page already followed those. The
+    /// macOS webview observes this to load or display the new target.
+    public private(set) var openGeneration = 0
+
     /// CFI the reader should open at, set when a book is opened with
     /// resume semantics (Enter / double-click / Read). Cleared by any
     /// explicit `open(book:chapter:)` jump and on close.
@@ -68,6 +74,7 @@ public final class ReaderModel {
         jumpFragmentOverride = fragment
         resumeCfi = nil
         progress = nil
+        openGeneration += 1
     }
 
     /// Where the renderer should display the current chapter: the overridden
