@@ -55,7 +55,7 @@ struct ReaderScene: View {
 
     var body: some View {
         ZStack {
-            DesignTokens.paper
+            DesignTokens.Paper.background(reader.preferences.theme)
                 .ignoresSafeArea()
             IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
                 .overlay(alignment: .top) { headerOverlay }
@@ -75,11 +75,10 @@ struct ReaderScene: View {
             }
         }
         .animation(reduceMotion ? nil : DesignTokens.Motion.chrome, value: chromeVisible)
-        // The paper is fixed cream regardless of the system theme; the
-        // chrome ink must follow the paper — in dark mode `.secondary`
-        // resolves to a light gray that vanishes on it (sheets presented
-        // from the reader follow too, which keeps them consistent).
-        .preferredColorScheme(.light)
+        // The reading surface owns its own palette (light by default, dark
+        // on request), applied to the page and to the floating chrome ink.
+        // The chrome itself follows the system appearance: sheets presented
+        // from the reader are native views and must not inherit the paper.
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
         .navigationTransition(.zoom(sourceID: reader.book?.id ?? "", in: zoomNamespace))
@@ -270,7 +269,7 @@ struct ReaderScene: View {
         ZStack {
             Text(reader.chapter?.title ?? reader.book?.title ?? "Reader")
                 .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .padding(.leading, chromeVisible ? 52 : 24)
@@ -301,7 +300,7 @@ struct ReaderScene: View {
     private var footerOverlay: some View {
         Text(pageText)
             .font(.footnote.monospacedDigit())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
             .lineLimit(1)
             .frame(height: 44)
             .allowsHitTesting(false)

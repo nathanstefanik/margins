@@ -1,6 +1,14 @@
 import Foundation
 import Observation
 
+/// The reading surface's palette. Independent of the system appearance:
+/// chrome and sheets follow the system while the page keeps this choice.
+/// Persisted as a chrome preference, like the typography below.
+public enum ReaderTheme: String, CaseIterable, Sendable {
+    case light
+    case dark
+}
+
 #if os(iOS)
 /// The reader's two faces: system serif (New York) and system sans
 /// (SF Pro). Both resolve on-device in the webview via generic families
@@ -12,10 +20,10 @@ public enum ReaderTypeface: String, CaseIterable, Sendable {
 }
 #endif
 
-/// Reader typography preferences.
+/// Reader typography and theme preferences.
 ///
-/// A chrome preference (window-level UI state), not library data, so it
-/// persists via `UserDefaults` and stays out of the synced library tree.
+/// Chrome preferences (window-level UI state), not library data, so they
+/// persist via `UserDefaults` and stay out of the synced library tree.
 ///
 /// Per platform:
 /// - macOS keeps the percentage API: font size is a percentage applied on
@@ -28,6 +36,63 @@ public enum ReaderTypeface: String, CaseIterable, Sendable {
 @MainActor
 @Observable
 public final class ReaderPreferences {
+    /// Cream paper is the reader's native look; the app chrome follows the
+    /// system appearance instead.
+    public static let defaultTheme = ReaderTheme.light
+
+    private static let themeKey = "reader.theme"
+
+    private let defaults: UserDefaults
+    private var _theme: ReaderTheme
+
+    /// - Parameter defaults: injection point for tests; pass a
+    ///   `UserDefaults(suiteName:)` to keep suites isolated.
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        _theme = ReaderTheme(rawValue: defaults.string(forKey: Self.themeKey) ?? "")
+            ?? Self.defaultTheme
+
+        #if os(iOS)
+        var storedStep = defaults.integer(forKey: Self.fontStepKey)
+        // Re-anchor a step saved on an older ladder so the reader's text
+        // size does not silently shrink when a smaller rung is added.
+        if storedStep > 0,
+           defaults.integer(forKey: Self.fontLadderVersionKey) < Self.fontLadderVersion {
+            storedStep += 1
+        }
+        _fontStep = (1...Self.fontStepsPx.count).contains(storedStep)
+            ? storedStep
+            : Self.defaultFontStep
+        defaults.set(Self.fontLadderVersion, forKey: Self.fontLadderVersionKey)
+        _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
+        #else
+        _fontSize = Self.clamp(
+            defaults.object(forKey: Self.fontSizeKey) as? Double ?? Self.defaultFontSize,
+            Self.minFontSize,
+            Self.maxFontSize
+        )
+        _lineHeight = Self.clamp(
+            defaults.object(forKey: Self.lineHeightKey) as? Double ?? Self.defaultLineHeight,
+            Self.lineHeightRange.lowerBound,
+            Self.lineHeightRange.upperBound
+        )
+        _lineWidth = Self.clamp(
+            defaults.object(forKey: Self.lineWidthKey) as? Double ?? Self.defaultLineWidth,
+            Self.lineWidthRange.lowerBound,
+            Self.lineWidthRange.upperBound
+        )
+        #endif
+    }
+
+    /// The reading surface's palette, light cream by default.
+    public var theme: ReaderTheme {
+        get { _theme }
+        set {
+            _theme = newValue
+            defaults.set(newValue.rawValue, forKey: Self.themeKey)
+        }
+    }
+
     #if os(iOS)
     /// The text ladder behind the smaller/larger controls, in px applied
     /// to the rendition. Deliberately short: six steps cover phone
@@ -50,27 +115,8 @@ public final class ReaderPreferences {
     /// 14px; v2 added 12px at the bottom, shifting every index up by one.
     private static let fontLadderVersion = 2
 
-    private let defaults: UserDefaults
     private var _fontStep: Int
     private var _typeface: ReaderTypeface
-
-    /// - Parameter defaults: injection point for tests; pass a
-    ///   `UserDefaults(suiteName:)` to keep suites isolated.
-    public init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        var storedStep = defaults.integer(forKey: Self.fontStepKey)
-        // Re-anchor a step saved on an older ladder so the reader's text
-        // size does not silently shrink when a smaller rung is added.
-        if storedStep > 0,
-           defaults.integer(forKey: Self.fontLadderVersionKey) < Self.fontLadderVersion {
-            storedStep += 1
-        }
-        _fontStep = (1...Self.fontStepsPx.count).contains(storedStep)
-            ? storedStep
-            : Self.defaultFontStep
-        defaults.set(Self.fontLadderVersion, forKey: Self.fontLadderVersionKey)
-        _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
-    }
 
     /// Current rung of the text ladder (1-based). The numbers are internal;
     /// the UI only steps up and down.
@@ -129,32 +175,10 @@ public final class ReaderPreferences {
     private static let lineHeightKey = "reader.lineHeight"
     private static let lineWidthKey = "reader.lineWidth"
 
-    private let defaults: UserDefaults
     // Backing storage for the clamped, persisting computed properties below.
     private var _fontSize: Double
     private var _lineHeight: Double
     private var _lineWidth: Double
-
-    /// - Parameter defaults: injection point for tests; pass a
-    ///   `UserDefaults(suiteName:)` to keep suites isolated.
-    public init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        _fontSize = Self.clamp(
-            defaults.object(forKey: Self.fontSizeKey) as? Double ?? Self.defaultFontSize,
-            Self.minFontSize,
-            Self.maxFontSize
-        )
-        _lineHeight = Self.clamp(
-            defaults.object(forKey: Self.lineHeightKey) as? Double ?? Self.defaultLineHeight,
-            Self.lineHeightRange.lowerBound,
-            Self.lineHeightRange.upperBound
-        )
-        _lineWidth = Self.clamp(
-            defaults.object(forKey: Self.lineWidthKey) as? Double ?? Self.defaultLineWidth,
-            Self.lineWidthRange.lowerBound,
-            Self.lineWidthRange.upperBound
-        )
-    }
 
     public var fontSize: Double {
         get { _fontSize }

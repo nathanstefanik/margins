@@ -15,6 +15,28 @@ struct ReaderPreferencesTests {
         return defaults
     }
 
+    @Test("theme defaults to light and round-trips through the injected store")
+    func themeRoundTripsThroughStore() {
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        let defaults = makeDefaults()
+
+        let first = ReaderPreferences(defaults: defaults)
+        #expect(first.theme == ReaderTheme.light)
+
+        first.theme = .dark
+        let second = ReaderPreferences(defaults: defaults)
+        #expect(second.theme == ReaderTheme.dark)
+    }
+
+    @Test("an unknown persisted theme falls back to light")
+    func unknownPersistedThemeFallsBack() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        defaults.set("sepia", forKey: "reader.theme")
+
+        #expect(ReaderPreferences(defaults: defaults).theme == ReaderTheme.light)
+    }
+
     @Test("preferences round-trip through the injected store")
     func roundTripsThroughStore() {
         defer { UserDefaults().removePersistentDomain(forName: suiteName) }

@@ -41,7 +41,8 @@ final class ReaderController: NSObject {
         webView.uiDelegate = self
         self.webView = webView
 
-        observeTypography()
+        observePreferences()
+        applyTheme()
 
         if let book = reader.book, reader.chapter != nil,
            let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget) {
@@ -89,7 +90,18 @@ final class ReaderController: NSObject {
         return nil
     }
 
-    // MARK: Typography
+    // MARK: Appearance
+
+    /// Applies the reading-surface theme: the webview's appearance (so
+    /// `prefers-color-scheme` inside section documents agrees with the
+    /// paper) plus the page palette. The chrome and panes follow the
+    /// system appearance, not this.
+    private func applyTheme() {
+        let theme = reader.preferences.theme
+        webView?.appearance = NSAppearance(named: theme == .dark ? .darkAqua : .aqua)
+        webView?.underPageBackgroundColor = NSColor(Paper.background(theme))
+        evaluate("readerSetTheme(\(Self.javaScriptLiteral(theme.rawValue)))")
+    }
 
     /// Applies the current preferences to the page; the page stores the spec
     /// even before the rendition exists and applies it on open, and the
@@ -101,19 +113,21 @@ final class ReaderController: NSObject {
         )
     }
 
-    /// Re-applies typography whenever any preference changes.
+    /// Re-applies appearance and typography whenever any preference changes.
     /// `withObservationTracking` is one-shot, so re-arm after each firing.
-    private func observeTypography() {
+    private func observePreferences() {
         let preferences = reader.preferences
         withObservationTracking {
+            _ = preferences.theme
             _ = preferences.fontSize
             _ = preferences.lineHeight
             _ = preferences.lineWidth
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.applyTheme()
                 self.applyTypography()
-                self.observeTypography()
+                self.observePreferences()
             }
         }
     }
@@ -130,6 +144,9 @@ final class ReaderController: NSObject {
         var queryItems = [
             URLQueryItem(name: "book", value: bookID),
             URLQueryItem(name: "chapter", value: chapterHref),
+            // Carried in the URL so reader.html can paint the right paper
+            // before readerSetTheme arrives (no cream flash in dark).
+            URLQueryItem(name: "theme", value: reader.preferences.theme.rawValue),
         ]
         if let cfi = reader.resumeCfi {
             queryItems.append(URLQueryItem(name: "cfi", value: cfi))
@@ -157,6 +174,7 @@ extension ReaderController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // reader.js defines readerApplyTypography before its async open, so
         // this stores the current preferences for when the rendition appears.
+        applyTheme()
         applyTypography()
     }
 }

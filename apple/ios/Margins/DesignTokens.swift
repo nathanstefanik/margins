@@ -1,4 +1,5 @@
 import SwiftUI
+import MarginsModel
 
 /// The iOS app's shared design constants. Everything visual that is not a
 /// system style lives here so the app stays coherent and easy to tune:
@@ -24,7 +25,22 @@ enum DesignTokens {
         static let prompt = Animation.spring(response: 0.35, dampingFraction: 0.82)
     }
 
-    /// The reader's paper, independent of the system appearance. Kept here
-    /// so the page and the chrome that follows it agree on the palette.
-    static let paper = Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
+    /// The reader's paper, mirroring the palettes in `reader.html` /
+    /// `reader.js`. The reading surface is the single place with its own
+    /// palette; chrome and sheets follow the system appearance.
+    enum Paper {
+        static let lightBackground = Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
+        static let lightSecondaryInk = Color(red: 110 / 255, green: 104 / 255, blue: 94 / 255)
+
+        static let darkBackground = Color(red: 27 / 255, green: 26 / 255, blue: 24 / 255)
+        static let darkSecondaryInk = Color(red: 168 / 255, green: 161 / 255, blue: 150 / 255)
+
+        static func background(_ theme: ReaderTheme) -> Color {
+            theme == .dark ? darkBackground : lightBackground
+        }
+
+        static func secondaryInk(_ theme: ReaderTheme) -> Color {
+            theme == .dark ? darkSecondaryInk : lightSecondaryInk
+        }
+    }
 }

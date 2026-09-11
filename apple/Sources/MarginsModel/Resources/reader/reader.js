@@ -29,6 +29,15 @@ const READER_FONT_FACES = {
   serif: "ui-serif, Georgia, serif",
   sans: "-apple-system, 'Helvetica Neue', sans-serif",
 };
+// Reading-surface palettes, mirrored by the native chrome (Paper.swift /
+// DesignTokens.swift) and reader.html's pre-paint styles. Keep in sync.
+const READER_THEMES = {
+  light: { background: "#f4f1ea", ink: "#111111", scheme: "light" },
+  dark: { background: "#1b1a18", ink: "#e6e2da", scheme: "dark" },
+};
+// The current surface theme; the URL carries the initial choice so the
+// class set in reader.html matches until Swift calls readerSetTheme.
+let readerTheme = readerParams.get("theme") === "dark" ? "dark" : "light";
 // True once the first display finished; relayouts are only queued after that.
 let readerOpened = false;
 let readerRelayoutTimer = null;
@@ -209,47 +218,76 @@ function readerQueueRelayout() {
   }, 120);
 }
 
+// Theme (called from Swift): swap the surface palette at runtime. The
+// outer page and every section document take the themed background and
+// ink; readerStyleContents forces publisher ink onto the palette.
+function readerApplyTheme(theme) {
+  readerTheme = Object.prototype.hasOwnProperty.call(READER_THEMES, theme) ? theme : "light";
+  const palette = READER_THEMES[readerTheme];
+  document.documentElement.classList.toggle("reader-dark", readerTheme === "dark");
+  document.documentElement.style.colorScheme = palette.scheme;
+  if (readerRendition) {
+    readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
+  }
+}
+
 function readerStyleContents(contents) {
-  if (!readerTypography || !contents || !contents.document) {
+  if (!contents || !contents.document) {
     return;
   }
-  // Root size on html; body and the common flow containers forced to
-  // inherit it, so publisher rules like `p { font-size: 14px }` cannot
-  // pin glyphs and ignore the preference.
+  const palette = READER_THEMES[readerTheme];
+  // Every text container follows the surface ink: publisher rules like
+  // `p { color: #000 }` would otherwise paint near-invisible text on the
+  // dark paper. Code/pre keep their own colors.
+  const flowText =
+    "body, p, li, div, span, h1, h2, h3, h4, h5, h6, blockquote, figcaption, td, th, dd, dt";
   const rules = {
     html: {
-      "font-size": `${readerTypography.fontSize}${readerTypography.unit} !important`,
+      "background-color": `${palette.background} !important`,
+      "color": `${palette.ink} !important`,
+      "color-scheme": palette.scheme,
     },
     // Kills tap delay / double-tap zoom inside the reading surface.
     "html, body": {
       "touch-action": "manipulation",
     },
-    "body, p, li, div": {
-      "font-size": "inherit !important",
+    [flowText]: {
+      "color": "inherit !important",
+      "background-color": "transparent !important",
     },
-    body: {
+  };
+  if (readerTypography) {
+    // Root size on html; body and the common flow containers forced to
+    // inherit it, so publisher rules like `p { font-size: 14px }` cannot
+    // pin glyphs and ignore the preference.
+    rules.html["font-size"] = `${readerTypography.fontSize}${readerTypography.unit} !important`;
+    rules.body = {
       "line-height": `${readerTypography.lineHeight} !important`,
-    },
+    };
+    rules["body, p, li, div"] = {
+      "font-size": "inherit !important",
+    };
     // Publisher sheets commonly justify body text; ragged-right reads
     // better and avoids the uneven word spacing justification creates.
     // Headings and other display elements keep their own alignment.
-    "body, p, li, dd, dt, blockquote, td, th, figcaption": {
+    rules["body, p, li, dd, dt, blockquote, td, th, figcaption"] = {
       "text-align": "left !important",
-    },
-  };
+    };
+  }
   // With a face chosen, html carries the family and everything that
   // usually pins one inherits it; code/pre keep their monospace.
   if (readerFontFace) {
     rules.html["font-family"] = `${READER_FONT_FACES[readerFontFace]} !important`;
-    rules[
-      "body, p, li, div, h1, h2, h3, h4, h5, h6, blockquote, figcaption, td, th, dd, dt"
-    ] = {
+    rules[flowText] = Object.assign(rules[flowText], {
       "font-family": "inherit !important",
-    };
+    });
   }
   contents.addStylesheetRules(rules);
   console.log(
-    `readerStyleContents: ${readerTypography.fontSize}${readerTypography.unit}` +
+    `readerStyleContents: theme=${readerTheme}` +
+      (readerTypography
+        ? ` ${readerTypography.fontSize}${readerTypography.unit}`
+        : "") +
       ` face=${readerFontFace || "publisher"} rules=${Object.keys(rules).length}`,
   );
 }
@@ -557,6 +595,7 @@ window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
 window.readerApplyTypography = readerApplyTypography;
 window.readerSetFontFace = readerSetFontFace;
+window.readerSetTheme = readerApplyTheme;
 window.readerRelayout = readerQueueRelayout;
 // Capture support (see readerResolveSpineTarget note): highlight a mark's
 // CFI range (epub.js dedupes by range), collapse the active selection, and

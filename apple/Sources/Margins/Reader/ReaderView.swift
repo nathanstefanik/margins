@@ -13,6 +13,7 @@ struct ReaderView: View {
                     .frame(minWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
                 ReaderFooter(reader: reader)
             }
+            .background(Paper.background(reader.preferences.theme))
             .frame(maxWidth: .infinity)
             if reader.notesVisible {
                 NotesPane()

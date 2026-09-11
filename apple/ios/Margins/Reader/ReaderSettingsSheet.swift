@@ -9,11 +9,11 @@ enum ReaderDestination {
     case chapterNote
 }
 
-/// The hamburger menu: text size as a small-A / large-A pair — the ladder
-/// behind it is internal, no numbers — a Serif/Sans typeface switch (the
-/// system's New York / SF Pro, nothing bundled), plus Contents, Marks,
-/// and the chapter note, which lost their bars when the chrome went
-/// quiet. No line height, no measure.
+/// The hamburger menu: the reading-surface theme (cream paper or dark), text
+/// size as a small-A / large-A pair — the ladder behind it is internal, no
+/// numbers — a Serif/Sans typeface switch (the system's New York / SF Pro,
+/// nothing bundled), plus Contents, Marks, and the chapter note, which lost
+/// their bars when the chrome went quiet. No line height, no measure.
 struct ReaderSettingsSheet: View {
     @Bindable var preferences: ReaderPreferences
     let onSelect: (ReaderDestination) -> Void
@@ -21,6 +21,14 @@ struct ReaderSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Appearance") {
+                    Picker("Theme", selection: $preferences.theme) {
+                        Text("Light").tag(ReaderTheme.light)
+                        Text("Dark").tag(ReaderTheme.dark)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityLabel("Reading theme")
+                }
                 Section("Text size") {
                     HStack {
                         Button {

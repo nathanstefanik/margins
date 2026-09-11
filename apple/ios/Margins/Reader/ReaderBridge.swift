@@ -214,7 +214,8 @@ final class ReaderBridge: NSObject {
         webView.addGestureRecognizer(pan)
         self.webView = webView
 
-        observeTypography()
+        observePreferences()
+        applyTheme()
 
         if let book = reader.book, reader.chapter != nil,
            let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget) {
@@ -301,7 +302,18 @@ final class ReaderBridge: NSObject {
         currentCfi ?? latestSelection?.cfiRange
     }
 
-    // MARK: Typography
+    // MARK: Appearance
+
+    /// Applies the reading-surface theme: the webview's traits (so
+    /// `prefers-color-scheme` inside section documents agrees with the
+    /// paper) plus the page palette. The native chrome and sheets follow
+    /// the system appearance, not this.
+    private func applyTheme() {
+        let theme = reader.preferences.theme
+        webView?.overrideUserInterfaceStyle = theme == .dark ? .dark : .light
+        webView?.underPageBackgroundColor = UIColor(DesignTokens.Paper.background(theme))
+        evaluate("readerSetTheme(\(Self.javaScriptLiteral(theme.rawValue)))")
+    }
 
     private func applyTypography() {
         let preferences = reader.preferences
@@ -314,16 +326,18 @@ final class ReaderBridge: NSObject {
         evaluate("readerSetFontFace(\(Self.javaScriptLiteral(preferences.typeface.rawValue)))")
     }
 
-    private func observeTypography() {
+    private func observePreferences() {
         let preferences = reader.preferences
         withObservationTracking {
+            _ = preferences.theme
             _ = preferences.fontStep
             _ = preferences.typeface
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.applyTheme()
                 self.applyTypography()
-                self.observeTypography()
+                self.observePreferences()
             }
         }
     }
@@ -336,6 +350,9 @@ final class ReaderBridge: NSObject {
         var queryItems = [
             URLQueryItem(name: "book", value: bookID),
             URLQueryItem(name: "chapter", value: chapterHref),
+            // Carried in the URL so reader.html can paint the right paper
+            // before readerSetTheme arrives (no cream flash in dark).
+            URLQueryItem(name: "theme", value: reader.preferences.theme.rawValue),
         ]
         if let cfi = reader.resumeCfi {
             queryItems.append(URLQueryItem(name: "cfi", value: cfi))
@@ -363,6 +380,7 @@ extension ReaderBridge: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // reader.js defines readerApplyTypography before its async open, so
         // this stores the current preferences for when the rendition appears.
+        applyTheme()
         applyTypography()
         // Hardware-key page turns ride on the web view being first
         // responder (see `KeyHandlingWebView`).

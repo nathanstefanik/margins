@@ -20,10 +20,10 @@ struct ReaderFooter: View {
             }
         }
         .font(.caption)
-        .foregroundStyle(Paper.secondaryInk)
+        .foregroundStyle(Paper.secondaryInk(reader.preferences.theme))
         .padding(.horizontal, 16)
         .padding(.vertical, 5)
-        .background(Paper.background)
+        .background(Paper.background(reader.preferences.theme))
         .textSelection(.disabled)
         .accessibilityElement(children: .combine)
     }

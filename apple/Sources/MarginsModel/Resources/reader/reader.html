@@ -14,6 +14,12 @@
     background: #f4f1ea;
     color: #111;
   }
+  /* Dark reading theme. The class is set before first paint by the inline
+     script below and toggled at runtime by readerSetTheme in reader.js. */
+  html.reader-dark, html.reader-dark body {
+    background: #1b1a18;
+    color: #e6e2da;
+  }
   #viewer {
     height: 100%;
     box-sizing: border-box;
@@ -29,6 +35,16 @@
     font-size: 12px;
   }
 </style>
+<!-- Applied before the body renders so a dark session never flashes cream;
+     readerSetTheme (reader.js) owns the runtime switch. -->
+<script>
+  (function () {
+    if (new URLSearchParams(window.location.search).get("theme") === "dark") {
+      document.documentElement.classList.add("reader-dark");
+      document.documentElement.style.colorScheme = "dark";
+    }
+  })();
+</script>
 <script src="jszip.min.js"></script>
 <script src="epub.min.js"></script>
 </head>
