@@ -30,18 +30,25 @@ public enum ReaderTypeface: String, CaseIterable, Sendable {
 public final class ReaderPreferences {
     #if os(iOS)
     /// The text ladder behind the smaller/larger controls, in px applied
-    /// to the rendition. Deliberately short: five steps cover phone
-    /// reading without a slider.
-    public static let fontStepsPx: [Double] = [14.0, 16.0, 18.0, 21.0, 24.0]
-    /// The middle step — readable body text at a phone measure.
-    public static let defaultFontStep = 3
+    /// to the rendition. Deliberately short: six steps cover phone
+    /// reading without a slider, with 12px for dense small-print passages.
+    public static let fontStepsPx: [Double] = [12.0, 14.0, 16.0, 18.0, 21.0, 24.0]
+    /// The 18px rung — readable body text at a phone measure. Bumped from
+    /// 3 to 4 when 12px was added at the bottom of the ladder, so the
+    /// default reading size is unchanged.
+    public static let defaultFontStep = 4
     /// Fixed line height for the iOS reader (not configurable).
     public static let iosLineHeight = 1.65
     /// Serif by default: the printed-spread reading face.
     public static let defaultTypeface = ReaderTypeface.serif
 
     private static let fontStepKey = "reader.fontStep"
+    private static let fontLadderVersionKey = "reader.fontStep.ladderVersion"
     private static let typefaceKey = "reader.typeface"
+
+    /// Bumped whenever `fontStepsPx` gains or loses a rung. v1 began at
+    /// 14px; v2 added 12px at the bottom, shifting every index up by one.
+    private static let fontLadderVersion = 2
 
     private let defaults: UserDefaults
     private var _fontStep: Int
@@ -51,10 +58,17 @@ public final class ReaderPreferences {
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        let storedStep = defaults.integer(forKey: Self.fontStepKey)
+        var storedStep = defaults.integer(forKey: Self.fontStepKey)
+        // Re-anchor a step saved on an older ladder so the reader's text
+        // size does not silently shrink when a smaller rung is added.
+        if storedStep > 0,
+           defaults.integer(forKey: Self.fontLadderVersionKey) < Self.fontLadderVersion {
+            storedStep += 1
+        }
         _fontStep = (1...Self.fontStepsPx.count).contains(storedStep)
             ? storedStep
             : Self.defaultFontStep
+        defaults.set(Self.fontLadderVersion, forKey: Self.fontLadderVersionKey)
         _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
     }
 
