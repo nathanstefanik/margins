@@ -67,6 +67,7 @@ make build       # build the Swift package
 make ios-build   # build the iOS app for the simulator (no signing)
 make ios-archive # Release iOS archive at build/Margins.xcarchive (needs ASC app record + Signing.local.xcconfig)
 make ios-bump    # bump CURRENT_PROJECT_VERSION (run before every TestFlight upload)
+make mas-pkg     # sandboxed, distribution-signed Mac App Store pkg (needs MAS identities + profile)
 make app         # assemble build/Margins.app (ad-hoc signed)
 make run         # app + open it
 make app-universal  # universal (arm64 + x86_64) build/Margins.app; needs full Xcode

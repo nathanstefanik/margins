@@ -65,6 +65,27 @@ then in Xcode's Organizer: *Distribute App → App Store Connect → Upload*.
 `ITSAppUsesNonExemptEncryption` is already `false` in `Info.plist`, so no
 encryption-compliance answer is needed per build.
 
+**macOS App Store/TestFlight release**: the Mac platform of the same App
+Store Connect record takes a sandboxed, distribution-signed installer
+package. Signing assets (Apple Distribution + Mac Installer Distribution
+certificates and a `MAC_APP_STORE` profile for the bundle ID) live outside
+the repo; point the packaging script at them:
+
+```bash
+MAC_APP_IDENTITY="Apple Distribution: NAME (TEAMID)" \
+MAC_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: NAME (TEAMID)" \
+MARGINS_PROFILE=/path/to/Margins.provisionprofile \
+MARGINS_KEYCHAIN=/path/to/mas.keychain-db \
+make mas-pkg   # build/Margins-vX.Y.Z-mas.pkg
+```
+
+Then upload with
+`xcrun altool --upload-app -f build/Margins-vX.Y.Z-mas.pkg -t osx --apiKey KEYID --apiIssuer ISSUER`.
+The App Store build is sandboxed: its library defaults to the app container,
+and a custom root picked with the folder picker is remembered with a
+security-scoped bookmark (`LibraryRootBookmark`); the DMG build is
+unaffected.
+
 **iOS device signing** (never committed): copy
 `apple/ios/Signing.local.xcconfig.example` to `Signing.local.xcconfig` and
 fill in your Team ID — the project loads it via an optional include. In

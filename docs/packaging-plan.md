@@ -43,6 +43,39 @@ artifacts at stable URLs. Current state:
 
 ---
 
+## Phase 0.5 — Mac App Store / TestFlight for Mac — DONE
+
+The macOS app is on the `MAC_OS` platform of the same App Store Connect
+record as iOS, which requires an App Sandbox build:
+
+- `apple/macos/Margins.entitlements`: App Sandbox, user-selected files
+  read/write, app-scoped bookmarks, network client, and the shared
+  iCloud/CloudKit container.
+- `Sources/Margins/LibraryRootBookmark.swift` + `MarginsApp`/`RootPanel`:
+  a picked library root is stored as a security-scoped bookmark in
+  `UserDefaults` and re-opened at launch, so sandboxed builds keep a
+  custom root across relaunches.
+- `make mas-pkg` (`scripts/make-mas-pkg.sh`): builds the universal app,
+  re-signs it with an Apple Distribution identity, embeds the
+  `MAC_APP_STORE` profile, injects the team/application identifiers and
+  the Production CloudKit environment, then signs the installer pkg with
+  a Mac Installer Distribution identity.
+- Signing assets are never committed: an Apple Distribution certificate,
+  a Mac Installer Distribution certificate, and a `MAC_APP_STORE`
+  profile for `io.github.nathanstefanik.margins`, held in a local
+  keychain. The bootstrap created them through the App Store Connect API;
+  recreating them is repeatable.
+- Upload per release:
+  `xcrun altool --upload-app -f build/Margins-vX.Y.Z-mas.pkg -t osx
+  --apiKey KEYID --apiIssuer ISSUER`.
+
+Trade-off: the App Store build starts with its library in the app
+container, separate from the DMG build's
+`~/Library/Application Support/margins`. That is inherent to sandboxing;
+the two channels do not share a library.
+
+---
+
 ## Phase 1 — macOS: Developer ID signing + notarization (deferred)
 
 - [ ] Enroll in the Apple Developer Program ($99/yr); create a
