@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Book clubs: a new club's share is now saved in the same CloudKit batch
+  as its root record. Saving the share alone is rejected with "An added
+  share is being saved without its rootRecord", so development never
+  created the system `cloudkit.share` type and production club creation
+  failed with "Cannot create new type cloudkit.share in production schema"
+
 ## [0.2.3] - 2026-09-11
 
 ### Fixed

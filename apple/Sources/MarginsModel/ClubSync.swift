@@ -1,5 +1,6 @@
 import Foundation
 import MarginsCore
+import os
 
 // CloudKit transport for private book clubs (docs/book-clubs-plan.md phase 3).
 //
@@ -105,6 +106,10 @@ public struct ClubSync: Sendable {
     /// How long an unpublished code stays resolvable.
     public static let inviteLifetime: TimeInterval = 14 * 24 * 60 * 60
 
+    private static let log = Logger(
+        subsystem: "io.github.nathanstefanik.margins", category: "clubs"
+    )
+
     public let store: CoreStore
     private let engine: any ClubSyncEngine
 
@@ -168,7 +173,12 @@ public struct ClubSync: Sendable {
         } catch {
             // A club without a share is one nobody can join: roll the local
             // record back rather than leaving an orphan behind, and keep
-            // raw CloudKit text out of the UI.
+            // raw CloudKit text out of the UI. The real failure is logged:
+            // "Cannot create new type cloudkit.share in production schema"
+            // needs a schema deployment, not a retry.
+            Self.log.error(
+                "club share creation failed: \(String(describing: error), privacy: .public)"
+            )
             try? await store.deleteClub(id: club.id)
             throw ClubSyncError.sharingUnavailable
         }

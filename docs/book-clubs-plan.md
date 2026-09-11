@@ -324,7 +324,11 @@ tab or section), `BookDetailView` ("Start a Book Club…"), app settings.
   document it in the privacy notes.
 - **CloudKit schema.** `Club` and `Snapshot` records carry a `clubId` field
   that must be queryable in the development schema; the invite record is
-  keyed by its code, so no query is needed there.
+  keyed by its code, so no query is needed there. Sharing also needs the
+  system `cloudkit.share` type in production, which only exists if a share
+  was created against development before the schema was deployed: run a
+  debug build, create one club, then deploy the schema changes. The engine
+  saves the share with its root record so that create succeeds.
 - **Whole-record sync.** v1 fetches all snapshots per sync instead of
   tracking `CKServerChangeToken`s; a club is a few members and one book's
   notes, far below the point where that matters.

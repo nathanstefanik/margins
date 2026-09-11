@@ -78,23 +78,35 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         let record = CKRecord(recordType: RecordType.club, recordID: recordID)
         record["clubId"] = club.id as CKRecordValue
         record["payload"] = try payload(of: club) as NSData
-        // Root first, share second. A first-time batch that asks CloudKit
-        // to create both the Club type and the system cloudkit.share type
-        // in one atomic transaction fails with a bare "Atomic failure", and
-        // two saves also surface the real per-record error when one fails.
-        _ = try await saveRecord(record, in: privateDB)
+        // Root alone first: a single batch that asks CloudKit to create
+        // both the Club type and the system cloudkit.share type fails with
+        // a bare "Atomic failure" in the development environment. Saving
+        // the root here lets development create the Club type, so the
+        // Club + share batch below only has one new type left.
+        let rootRecord = try await saveRecord(record, in: privateDB)
 
-        let share = CKShare(rootRecord: record)
+        let share = CKShare(rootRecord: rootRecord)
         share.publicPermission = .readWrite
         share[CKShare.SystemFieldKey.title] = "\(club.name) — Margins" as CKRecordValue
-        _ = try await saveRecord(share, in: privateDB)
+        // A new share must be saved together with its root record in the
+        // same modify batch (CKShare.init(rootRecord:)). A share-only save
+        // is rejected with "An added share is being saved without its
+        // rootRecord", which also means development never creates the
+        // cloudkit.share system type for production to deploy.
+        let savedShare = try await saveShare(
+            rootRecord: rootRecord, share: share, in: privateDB
+        )
 
+        zoneCache[club.id] = zoneID
+        if let url = savedShare.url {
+            return ClubShare(clubId: club.id, url: url)
+        }
+        // Reading the share back covers a save result without its URL.
         guard let saved = try? await existingShare(rootRecordID: recordID, in: privateDB),
               let url = saved.url
         else {
             throw ClubSyncError.transport("CloudKit did not return a share URL.")
         }
-        zoneCache[club.id] = zoneID
         return ClubShare(clubId: club.id, url: url)
     }
 
@@ -363,6 +375,34 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
                     )
                 }
             }
+        }
+    }
+
+    /// Saves a new share in the same atomic batch as its root record, which
+    /// is what CloudKit requires for share creation. The share comes back
+    /// from the save results; the in-memory object is not updated.
+    private func saveShare(
+        rootRecord: CKRecord, share: CKShare, in database: CKDatabase
+    ) async throws -> CKShare {
+        do {
+            let result = try await database.modifyRecords(
+                saving: [rootRecord, share], deleting: [],
+                savePolicy: .changedKeys, atomically: true
+            )
+            for value in result.saveResults.values {
+                if case let .success(saved) = value, let savedShare = saved as? CKShare {
+                    return savedShare
+                }
+            }
+            throw ClubSyncError.transport(
+                "CloudKit returned no share: \(share.recordID.recordName)"
+            )
+        } catch let error as ClubSyncError {
+            throw error
+        } catch {
+            throw ClubSyncError.transport(
+                Self.describe(error, saving: share.recordID.recordName)
+            )
         }
     }
 
