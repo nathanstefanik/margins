@@ -59,6 +59,10 @@ public enum ClubSyncError: Error, LocalizedError, Sendable, Equatable {
     /// The transport could not create the club's share — a CloudKit
     /// configuration or service failure, not something the reader can fix.
     case sharingUnavailable
+    /// The deployed CloudKit schema does not know about sharing (the system
+    /// `cloudkit.share` type is missing). Retrying cannot help; the schema
+    /// has to be deployed to production.
+    case sharingSchemaMissing
     case transport(String)
 
     public var errorDescription: String? {
@@ -71,6 +75,8 @@ public enum ClubSyncError: Error, LocalizedError, Sendable, Equatable {
         case .notSignedIn: return "Sign in to iCloud to use book clubs."
         case .sharingUnavailable:
             return "Book club sharing is unavailable right now. Try again later."
+        case .sharingSchemaMissing:
+            return "Book club sharing isn't set up in this app's iCloud database yet. The CloudKit sharing types still need to be deployed."
         case let .transport(message): return message
         }
     }
@@ -172,18 +178,36 @@ public struct ClubSync: Sendable {
             share = try await engine.createShare(for: club)
         } catch {
             // A club without a share is one nobody can join: roll the local
-            // record back rather than leaving an orphan behind, and keep
-            // raw CloudKit text out of the UI. The real failure is logged:
-            // "Cannot create new type cloudkit.share in production schema"
-            // needs a schema deployment, not a retry.
+            // record back rather than leaving an orphan behind. Retrying is
+            // useless when the deployed schema has no sharing types, so
+            // that failure gets its own message; the rest stay generic and
+            // the raw CloudKit text goes to the log.
             Self.log.error(
                 "club share creation failed: \(String(describing: error), privacy: .public)"
             )
             try? await store.deleteClub(id: club.id)
+            if Self.isMissingShareSchema(error) {
+                throw ClubSyncError.sharingSchemaMissing
+            }
             throw ClubSyncError.sharingUnavailable
         }
         try await engine.publishInvite(invite(for: club, shareURL: share.url))
         return (club, share.url)
+    }
+
+    /// CloudKit rejects records whose types (custom or the system
+    /// `cloudkit.share`) are absent from the deployed environment. The
+    /// message text is the only structured signal the transport wraps.
+    private static func isMissingShareSchema(_ error: any Error) -> Bool {
+        let message = switch error {
+        case let ClubSyncError.transport(text): text
+        default: String(describing: error)
+        }
+        let lowered = message.lowercased()
+        return lowered.contains("production schema")
+            || lowered.contains("development schema")
+            || lowered.contains("cannot create new type")
+            || lowered.contains("did not find record type")
     }
 
     /// Joins by invite code: resolves the code, accepts the share, merges

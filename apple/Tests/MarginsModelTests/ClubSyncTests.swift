@@ -36,6 +36,9 @@ struct InMemoryClubSyncEngine: ClubSyncEngine {
     /// Simulates a transport that cannot create shares (CloudKit
     /// production schema missing, service down).
     var failsShare = false
+    var shareFailure: ClubSyncError = .transport(
+        "Cannot create new type cloudkit.share in production schema"
+    )
 
     var supportsSharing: Bool { true }
 
@@ -43,9 +46,7 @@ struct InMemoryClubSyncEngine: ClubSyncEngine {
 
     func createShare(for club: Club) async throws -> ClubShare {
         if failsShare {
-            throw ClubSyncError.transport(
-                "Cannot create new type cloudkit.share in production schema"
-            )
+            throw shareFailure
         }
         let url = await world.shareURL(clubId: club.id)
             ?? URL(string: "https://example.com/share/\(club.id)")!
@@ -245,8 +246,39 @@ struct ClubSyncTests {
             )
             Issue.record("expected a sharing-unavailable error")
         } catch let error as ClubSyncError {
+            #expect(error == .sharingSchemaMissing)
+            #expect(
+                error.errorDescription
+                    == "Book club sharing isn't set up in this app's iCloud database yet. The CloudKit sharing types still need to be deployed."
+            )
+        }
+        #expect(try await store.listClubs().isEmpty)
+    }
+
+    @Test("a transient share failure keeps the generic retry message")
+    func transientShareFailureSimplifies() async throws {
+        let store = try CoreStore(dataDir: try makeTempDataDir())
+        let fixture = try #require(try fixtureEpubs().first)
+        let book = try await store.importEpub(atPath: fixture)
+        let sync = ClubSync(
+            store: store,
+            engine: InMemoryClubSyncEngine(
+                world: ClubSyncWorld(), memberId: "alice", failsShare: true,
+                shareFailure: .transport("The network connection was lost.")
+            )
+        )
+
+        do {
+            _ = try await sync.createClub(
+                bookId: book.id, name: "Doomed", memberId: "alice", displayName: "Alice"
+            )
+            Issue.record("expected a sharing-unavailable error")
+        } catch let error as ClubSyncError {
             #expect(error == .sharingUnavailable)
-            #expect(error.errorDescription == "Book club sharing is unavailable right now. Try again later.")
+            #expect(
+                error.errorDescription
+                    == "Book club sharing is unavailable right now. Try again later."
+            )
         }
         #expect(try await store.listClubs().isEmpty)
     }
