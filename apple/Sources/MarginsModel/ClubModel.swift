@@ -49,7 +49,7 @@ public final class ClubModel {
             do {
                 store = try CoreStore(dataDir: dataDir)
             } catch {
-                errorMessage = String(describing: error)
+                errorMessage = error.localizedDescription
                 return
             }
         }
@@ -99,7 +99,7 @@ public final class ClubModel {
                 notes = nil
             }
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -125,7 +125,7 @@ public final class ClubModel {
                 clubId: id, viewerId: identity.memberId, spoilerEnabled: spoilerEnabled
             )
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -149,7 +149,7 @@ public final class ClubModel {
             await selectClub(id: result.club.id)
             return result.club
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
             return nil
         }
     }
@@ -169,7 +169,7 @@ public final class ClubModel {
             await selectClub(id: club.id)
             return club
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
             return nil
         }
     }
@@ -188,7 +188,7 @@ public final class ClubModel {
             await loadNotes()
             return true
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
             return false
         }
     }
@@ -201,7 +201,7 @@ public final class ClubModel {
             await refresh()
             return code
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
             return nil
         }
     }
@@ -212,7 +212,7 @@ public final class ClubModel {
             _ = try await sync.removeMember(clubId: id, memberId: memberId)
             await refresh()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -225,7 +225,7 @@ public final class ClubModel {
             notes = nil
             await refresh()
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -236,7 +236,7 @@ public final class ClubModel {
             spoilerProtection = enabled
             await loadNotes(spoilerEnabled: enabled)
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -253,7 +253,7 @@ public final class ClubModel {
             )
             return (markdown, notes.suggestedFilename)
         } catch {
-            errorMessage = String(describing: error)
+            errorMessage = error.localizedDescription
             return nil
         }
     }

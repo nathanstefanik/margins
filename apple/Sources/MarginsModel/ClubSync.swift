@@ -55,6 +55,9 @@ public enum ClubSyncError: Error, LocalizedError, Sendable, Equatable {
     /// The club's book is not in the local library yet.
     case bookMissing(String)
     case notSignedIn
+    /// The transport could not create the club's share — a CloudKit
+    /// configuration or service failure, not something the reader can fix.
+    case sharingUnavailable
     case transport(String)
 
     public var errorDescription: String? {
@@ -65,6 +68,8 @@ public enum ClubSyncError: Error, LocalizedError, Sendable, Equatable {
         case let .bookMissing(title):
             return "Import \"\(title)\" into your library, then join the club."
         case .notSignedIn: return "Sign in to iCloud to use book clubs."
+        case .sharingUnavailable:
+            return "Book club sharing is unavailable right now. Try again later."
         case let .transport(message): return message
         }
     }
@@ -157,7 +162,16 @@ public struct ClubSync: Sendable {
         let club = try await store.createClub(
             bookId: bookId, name: name, adminId: memberId, adminName: displayName
         )
-        let share = try await engine.createShare(for: club)
+        let share: ClubShare
+        do {
+            share = try await engine.createShare(for: club)
+        } catch {
+            // A club without a share is one nobody can join: roll the local
+            // record back rather than leaving an orphan behind, and keep
+            // raw CloudKit text out of the UI.
+            try? await store.deleteClub(id: club.id)
+            throw ClubSyncError.sharingUnavailable
+        }
         try await engine.publishInvite(invite(for: club, shareURL: share.url))
         return (club, share.url)
     }

@@ -33,12 +33,20 @@ actor ClubSyncWorld {
 struct InMemoryClubSyncEngine: ClubSyncEngine {
     let world: ClubSyncWorld
     let memberId: String
+    /// Simulates a transport that cannot create shares (CloudKit
+    /// production schema missing, service down).
+    var failsShare = false
 
     var supportsSharing: Bool { true }
 
     func currentMemberId() async throws -> String { memberId }
 
     func createShare(for club: Club) async throws -> ClubShare {
+        if failsShare {
+            throw ClubSyncError.transport(
+                "Cannot create new type cloudkit.share in production schema"
+            )
+        }
         let url = await world.shareURL(clubId: club.id)
             ?? URL(string: "https://example.com/share/\(club.id)")!
         await world.setShareURL(url, clubId: club.id)
@@ -217,6 +225,30 @@ struct ClubSyncTests {
         }
         #expect(try await storeB.listClubs().isEmpty)
         #expect(try await world.club(club.id)?.members.count == 1)
+    }
+
+    @Test("a failed share rolls the local club back and simplifies the error")
+    func failedShareRollsBack() async throws {
+        let store = try CoreStore(dataDir: try makeTempDataDir())
+        let fixture = try #require(try fixtureEpubs().first)
+        let book = try await store.importEpub(atPath: fixture)
+        let sync = ClubSync(
+            store: store,
+            engine: InMemoryClubSyncEngine(
+                world: ClubSyncWorld(), memberId: "alice", failsShare: true
+            )
+        )
+
+        do {
+            _ = try await sync.createClub(
+                bookId: book.id, name: "Doomed", memberId: "alice", displayName: "Alice"
+            )
+            Issue.record("expected a sharing-unavailable error")
+        } catch let error as ClubSyncError {
+            #expect(error == .sharingUnavailable)
+            #expect(error.errorDescription == "Book club sharing is unavailable right now. Try again later.")
+        }
+        #expect(try await store.listClubs().isEmpty)
     }
 
     @Test("rotation revokes the old code and indexes the new one")
