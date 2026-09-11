@@ -33,6 +33,14 @@ mode throughout):
 - `Compile.swift` — compiles a book's notes into one spine-ordered document
   (the per-book notes page) and renders it as markdown for the `.md`
   export / copy-all; exports are derived artifacts (see `docs/storage.md`).
+- `ClubModels.swift` + `ClubStore.swift` — the private-book-club domain
+  (one book per club, roster with roles, per-member note snapshots) and the
+  local `{data_dir}/clubs/{club_id}/` storage for it.
+- `ClubCompile.swift` + `CFI.swift` — merges members' snapshots into one
+  document: CFI-overlap clustering (one quote, every member's note under it),
+  spoiler gating by the viewer's chapter, and the club markdown export.
+- `ClubCode.swift` + `CoreID.swift` — four-character Crockford invite codes
+  and the shared time-ordered id idiom marks and clubs use.
 - `Search.swift` — lazily built, mtime-revalidated in-memory index over the
   notes.
 - `FileStore.swift` — coordinated document I/O: every read/write of
@@ -87,7 +95,10 @@ A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
   `ReaderKeymap` (vim-style key state machine), `LibraryLocation` (iOS
   library root: iCloud container resolution with runtime fallback,
   placeholder materialization for reader assets and covers, coordinated
-  staging of picked files, conflict detection). Unit-tested via
+  staging of picked files, conflict detection), and the club layer:
+  `ClubModel` (club list, selection, merged document), `ClubSync` +
+  `CloudKitClubSync` (share transport), and `LocalClubSyncEngine` (the
+  no-iCloud fallback used by unsigned builds). Unit-tested via
   `MarginsModelTests`.
 - `Margins` — macOS SwiftUI app: library browser, reader (WKWebView +
   epub.js), notes pane, search overlay, keyboard/trackpad routing.
@@ -117,7 +128,8 @@ imports its own copy into the library. The signing team lives in
 `apple/ios/Signing.local.xcconfig` (gitignored; see
 `Signing.local.xcconfig.example`) — never committed.
 Entitlements declare the iCloud Documents container
-(`iCloud.io.github.nathanstefanik.margins`); the Info.plist exposes the
+(`iCloud.io.github.nathanstefanik.margins`) and the CloudKit service the
+book-club transport uses; the Info.plist exposes the
 container as a document scope (the `NSUbiquitousContainer*` keys nested
 under `NSUbiquitousContainers` → the container id, plus
 `UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`). Signing team
@@ -131,18 +143,19 @@ control layer floating above it. Glass belongs to controls and navigation
 only — never to cards, list rows, or content, and never nested in glass.
 
 One information architecture adapts to the available space instead of a
-per-device layout: `LibraryScene` is a `TabView` with a **Library** tab
-and a dedicated **Search** tab, styled `.sidebarAdaptable` so it is a
-floating tab bar on a compact canvas and a sidebar on a regular one. The
-Library tab is a `NavigationStack` (`LibraryRoute`) pushing book detail
-and then the reader; the reader fires a matched-geometry zoom out of the
-tapped cover (`.matchedTransitionSource` / `.navigationTransition(.zoom)`).
-Global notes search owns the Search tab (scope: the whole library); the
-contextual search for a book's contents would live inline over that
-content. Layout keys off size classes (`verticalSizeClass` shrinks the
-book-detail cover on a constrained height), never `interfaceOrientation`,
-so it survives Split View, landscape, and iPhone Mirroring. Shared sizing
-and rounding live in `DesignTokens.swift`.
+per-device layout: `LibraryScene` is a `TabView` with a **Library** tab, a
+**Clubs** tab (`ClubsScene` → `ClubDetailView`), and a dedicated **Search**
+tab, styled `.sidebarAdaptable` so it is a floating tab bar on a compact
+canvas and a sidebar on a regular one. The Library tab is a
+`NavigationStack` (`LibraryRoute`) pushing book detail and then the reader;
+the reader fires a matched-geometry zoom out of the tapped cover
+(`.matchedTransitionSource` / `.navigationTransition(.zoom)`). Global notes
+search owns the Search tab (scope: the whole library); the contextual search
+for a book's contents would live inline over that content. Layout keys off
+size classes (`verticalSizeClass` shrinks the book-detail cover on a
+constrained height), never `interfaceOrientation`, so it survives Split
+View, landscape, and iPhone Mirroring. Shared sizing and rounding live in
+`DesignTokens.swift`.
 
 ### Reader rendering
 
@@ -223,6 +236,17 @@ switches the detail area between the book card and the page. "Export
 Notes…" (button or File menu) renders with `renderNotesMarkdown` and
 writes the file after an `NSSavePanel`; note bodies render as plain `Text`
 (never as markdown/HTML).
+
+**Book clubs** live in the sidebar under the book list (`SidebarView`
+renders `ClubModel.clubs`; selecting one takes over the detail area).
+`ClubDetailView` shows the roster, invite code (copy/rotate), spoiler
+toggle, export/copy, and the merged document: clustered passages, long-form
+notes, and spoiler placeholders. Create/join sheets are bound to
+`ClubModel.createSheetPresented` / `joinSheetPresented`, so the Clubs menu
+in `MarginsCommands` opens the same sheets. `ClubSync.automatic` picks
+CloudKit when an iCloud account is available and the local-only engine
+otherwise, so the unsigned `make app` build keeps working with
+single-member clubs; the Settings → Clubs tab reports which mode is active.
 
 ## Building and running (macOS)
 

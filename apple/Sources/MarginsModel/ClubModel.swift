@@ -229,13 +229,15 @@ public final class ClubModel {
     }
 
     /// Rendered club markdown plus the suggested file name, for the save
-    /// panel.
-    public func exportMarkdown() async -> (markdown: String, filename: String)? {
+    /// panel. `options` of `.meetingBrief` drops long-form notes.
+    public func exportMarkdown(
+        options: ClubExportOptions = .default
+    ) async -> (markdown: String, filename: String)? {
         guard let sync, let id = selectedClubID, let notes else { return nil }
         do {
             let markdown = try await sync.store.renderClubNotesMarkdown(
                 clubId: id, viewerId: identity.memberId,
-                spoilerEnabled: spoilerProtection
+                spoilerEnabled: spoilerProtection, options: options
             )
             return (markdown, notes.suggestedFilename)
         } catch {

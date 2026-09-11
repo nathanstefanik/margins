@@ -1,6 +1,6 @@
 # Development plan: private book clubs
 
-Status: in progress · Owner: TBD · Last updated: 2026-09-11
+Status: implemented · Owner: TBD · Last updated: 2026-09-11
 
 ## Goal
 
@@ -229,6 +229,13 @@ behind a `ClubSyncEngine` protocol with an in-memory fake.
 join, and see each other's merged notes; unit tests cover the record mapping
 and change processing with the fake engine.
 
+**Implementation note:** the transport is `CloudKitClubSyncEngine` behind
+`ClubSyncEngine`, with `InMemoryClubSyncEngine` in tests and
+`LocalClubSyncEngine` as the no-iCloud fallback. `ClubSync.automatic` picks
+between CloudKit and local at activation. Whole-record fetches replaced the
+planned change-token machinery (see risks); the live two-account check
+remains the unexercised exit criterion.
+
 ---
 
 ## Phase 4 — macOS UI (implemented)
@@ -267,13 +274,24 @@ tab or section), `BookDetailView` ("Start a Book Club…"), app settings.
 
 ---
 
-## Phase 6 — Docs, polish, release
+## Phase 6 — Docs, polish, release (implemented)
 
 - `docs/storage.md` club section, `docs/architecture.md` module map,
   README feature paragraph.
 - Export polish: meeting-brief options (passages only), copy-all.
 - Privacy notes: what leaves the device (derived snapshots only), where
   codes are visible, how removal works.
+
+**Implementation notes**
+
+- The shipped UI is `SidebarView` + `ClubDetailView` on macOS and
+  `ClubsScene` + `ClubDetailView` on iOS; the planned separate
+  `ClubsView`/`ClubNotesView`/`JoinClubSheet` file split collapsed into one
+  detail view per platform plus a shared sheet file.
+- Copy-all is a macOS button/menu item; iOS shares the markdown file through
+  the system share sheet.
+- `ClubExportOptions.meetingBrief` exists in the core but no UI surfaces it
+  yet.
 
 ---
 
@@ -289,11 +307,43 @@ tab or section), `BookDetailView` ("Start a Book Club…"), app settings.
 - **CFI overlap fidelity.** `CFI.swift` is intentionally partial: unknown
   constructs fail to `nil` and fall back to quote matching. That is
   acceptable for clustering; it is not a general CFI library.
-- **CloudKit + ad-hoc signing.** The macOS `make app` flow may need a
-  signed variant for CloudKit; iOS is the first iCloud test surface.
+- **CloudKit + ad-hoc signing.** Resolved with `ClubSync.automatic`: the
+  ubiquity token gates CloudKit (constructing `CKContainer` without the
+  entitlement traps), and the local-only engine keeps clubs working on
+  unsigned builds. Live multi-account sharing still needs two properly
+  signed devices and is the one exit criterion not exercised in this
+  change; unit tests cover the full flow behind `ClubSyncEngine`.
 - **Public invite lookup.** The `ClubInvite` public record exposes club name
   and book title to anyone who guesses a live code. Codes expire and rotate;
   document it in the privacy notes.
+- **CloudKit schema.** `Club` and `Snapshot` records carry a `clubId` field
+  that must be queryable in the development schema; the invite record is
+  keyed by its code, so no query is needed there.
+- **Whole-record sync.** v1 fetches all snapshots per sync instead of
+  tracking `CKServerChangeToken`s; a club is a few members and one book's
+  notes, far below the point where that matters.
+
+---
+
+## Privacy notes
+
+- **What leaves the device:** a `ClubMemberNotes` snapshot — the member's
+  long-form chapter notes and marks for the club's book — plus the club
+  roster (member display names, roles, join dates). Raw note files, reading
+  positions, other books' notes, and the library tree never leave.
+- **Where snapshots live remotely:** the owner's private CloudKit database
+  inside a per-club record zone, reached by participants through the
+  `CKShare`. The local cache lives in `{data_dir}/clubs/` and can be deleted
+  at any time; snapshots are regenerable from the library.
+- **Invite codes:** a code is a handle, not a secret. It resolves through a
+  public `ClubInvite` record that exposes the club name, book title, and
+  share URL until it expires (14 days) or is rotated. Only accepting the
+  share grants access.
+- **Removal:** an admin removes a member locally and remotely: the roster
+  entry, the member's snapshot record, and their CloudKit share participant
+  are all deleted. Their local library is untouched.
+- **Spoiler protection** is a local setting, stored in `config.json`; it is
+  never shared with the club.
 
 ## Commit slicing
 

@@ -104,6 +104,13 @@ struct ClubDetailView: View {
                 }
                 .disabled(clubs.notes?.chapters.isEmpty ?? true)
 
+                Button {
+                    Task { await ClubExportPanel.copy(model: clubs) }
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .disabled(clubs.notes?.chapters.isEmpty ?? true)
+
                 Toggle(
                     "Spoiler protection",
                     isOn: Binding(

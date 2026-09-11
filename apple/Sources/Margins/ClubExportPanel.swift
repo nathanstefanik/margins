@@ -25,4 +25,12 @@ enum ClubExportPanel {
             model.errorMessage = String(describing: error)
         }
     }
+
+    /// Copy-all without a save panel.
+    @MainActor
+    static func copy(model: ClubModel) async {
+        guard let payload = await model.exportMarkdown() else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(payload.markdown, forType: .string)
+    }
 }

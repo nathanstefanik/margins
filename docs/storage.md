@@ -320,6 +320,11 @@ synced folder therefore never replicates club membership between machines.
   `ClubCompile.snapshot` rebuilds it from the library tree.
 - Members never see another member's raw note files. Shared records and the
   UI carry snapshots and the merged view only.
+- Remote state lives in CloudKit (`docs/book-clubs-plan.md`): one private
+  record zone per club holds the `Club` roster record and one `Snapshot`
+  record per member behind a `CKShare`; a public `ClubInvite` record maps
+  the invite code to the share URL until it expires. Unsigned builds fall
+  back to `LocalClubSyncEngine`, where clubs stay on the device.
 - The spoiler-protection setting is global and lives in `config.json`
   (`club_spoiler_protection`, default `true`); it is never part of shared
   club state.

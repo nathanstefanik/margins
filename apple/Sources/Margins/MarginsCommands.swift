@@ -48,6 +48,10 @@ struct MarginsCommands: Commands {
                 Task { await ClubExportPanel.run(model: clubs) }
             }
             .disabled(clubs.selectedClub == nil)
+            Button("Copy Club Notes") {
+                Task { await ClubExportPanel.copy(model: clubs) }
+            }
+            .disabled(clubs.selectedClub == nil)
         }
         CommandMenu("Go") {
             Button("Next Chapter") {

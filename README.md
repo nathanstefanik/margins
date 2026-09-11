@@ -13,6 +13,11 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Compiled per-book **notes page** (`N`) with one-click markdown export,
   copy-all, and clear-all (with a confirmation prompt)
 - Full-text search across notes (`/` or `:search`)
+- Private **book clubs** (one book per club): a four-character invite code,
+  CloudKit sharing with an automatic local-only fallback, and a merged view
+  of every member's notes — overlapping highlights cluster under one quoted
+  passage, with spoiler protection on by default
+  ([docs/book-clubs-plan.md](docs/book-clubs-plan.md))
 - Choose the library directory with the in-app folder picker or **root** command
 
 ## Quick start
@@ -139,6 +144,12 @@ that produced it.
   app installs to a paired iPhone via
   `xcodebuild -allowProvisioningUpdates`, and the library resolves the real
   ubiquity container on device (Files-visible, Mac-pointable)
+- **Private book clubs** end to end: club/roster/invite-code core with
+  spoiler gating and CFI passage clustering; CloudKit share transport
+  (`CKShare`, public invite-code records, participant removal) with an
+  automatic local-only fallback for unsigned builds; club model + UI on
+  macOS (sidebar section, merged document, export/copy) and iOS (Clubs tab);
+  simulator-verified on iOS with a DEBUG club fixture
 
 **In progress**
 
