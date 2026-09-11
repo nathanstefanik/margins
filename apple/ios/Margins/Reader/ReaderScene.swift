@@ -382,7 +382,19 @@ struct ReaderScene: View {
                 }
                 .buttonStyle(.bordered)
                 Button("Write note") {
+                    let bookID = reader.book?.id ?? ""
+                    UserDefaults.standard.set(
+                        true,
+                        forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
+                    )
                     finishedChapter = nil
+                    // The reader has already followed the page turn into
+                    // the finished chapter's successor, and the editor
+                    // always edits `reader.chapter`: step back before
+                    // opening it, or the note lands on the next chapter.
+                    guard let book = reader.book else { return }
+                    reader.open(book: book, chapter: chapter)
+                    bridge?.jumpToChapter(reader.displayTarget)
                     editorPresented = true
                 }
                 .buttonStyle(.borderedProminent)
