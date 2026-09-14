@@ -10,8 +10,9 @@ struct BookmarksSheet: View {
     var onOpen: (Bookmark) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
-    @State private var renaming: Bookmark?
+    @State private var renameTarget: Bookmark?
     @State private var renameText = ""
+    @State private var renameOpen = false
 
     var body: some View {
         NavigationStack {
@@ -37,32 +38,36 @@ struct BookmarksSheet: View {
                     Button("Close") { dismiss() }
                 }
             }
-            .alert("Name", isPresented: Binding(
-                get: { renaming != nil },
-                set: { if !$0 { renaming = nil } }
-            )) {
+            .alert("Name", isPresented: $renameOpen) {
                 TextField("Name", text: $renameText)
-                Button("Save") { saveRename() }
-                Button("Cancel", role: .cancel) { renaming = nil }
+                Button("Save") {
+                    guard let bookmark = renameTarget, let book = reader.book else { return }
+                    let text = renameText
+                    Task {
+                        await library.updateBookmark(
+                            bookmark, bookId: book.id, label: text, reader: reader
+                        )
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
             }
         }
     }
 
     private func bookmarkRow(_ bookmark: Bookmark) -> some View {
-        Button {
-            onOpen(bookmark)
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(BookmarkDisplay.title(bookmark, chapters: reader.book?.chapters ?? []))
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                Text(BookmarkDisplay.subtitle(bookmark, chapters: reader.book?.chapters ?? []))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(.rect)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(BookmarkDisplay.title(bookmark, chapters: reader.book?.chapters ?? []))
+                .font(.callout)
+                .foregroundStyle(.primary)
+            Text(BookmarkDisplay.subtitle(bookmark, chapters: reader.book?.chapters ?? []))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(.rect)
+        .onTapGesture { onOpen(bookmark) }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens this bookmark in the reader")
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {
@@ -71,8 +76,9 @@ struct BookmarksSheet: View {
         }
         .contextMenu {
             Button("Rename") {
+                renameTarget = bookmark
                 renameText = bookmark.label
-                renaming = bookmark
+                renameOpen = true
             }
             Button("Update to Here") {
                 updateToHere(bookmark)
@@ -80,16 +86,6 @@ struct BookmarksSheet: View {
             Button("Delete", role: .destructive) {
                 delete(bookmark)
             }
-        }
-    }
-
-    private func saveRename() {
-        guard let bookmark = renaming, let book = reader.book else { return }
-        renaming = nil
-        Task {
-            await library.updateBookmark(
-                bookmark, bookId: book.id, label: renameText, reader: reader
-            )
         }
     }
 

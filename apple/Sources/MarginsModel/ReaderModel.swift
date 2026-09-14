@@ -69,12 +69,16 @@ public final class ReaderModel {
     /// chapter's own first TOC entry.
     public func open(book: BookMeta, chapter: ChapterMeta, fragment: String? = nil) {
         flushPositionSave()
+        let bookChanged = self.book?.id != book.id
         self.book = book
         self.chapter = chapter
         jumpFragmentOverride = fragment
         resumeCfi = nil
         progress = nil
         currentCfi = nil
+        if bookChanged {
+            bookmarks = []
+        }
         openGeneration += 1
     }
 
@@ -221,8 +225,19 @@ public final class ReaderModel {
     }
 
     /// Snapshot of the current page for dropping or restamping a pin.
+    /// Before the first `relocated` event there is no page fraction; the
+    /// chapter's place in the spine is enough to drop a pin.
     public func currentPosition() -> ReadingPosition? {
-        guard let chapter, let percent = bookPercent else { return nil }
+        guard let book, let chapter else { return nil }
+        let percent: Double
+        if let computed = bookPercent {
+            percent = computed
+        } else if let index = book.chapters.firstIndex(where: { $0.key == chapter.key }),
+                  !book.chapters.isEmpty {
+            percent = Double(index) / Double(book.chapters.count) * 100
+        } else {
+            return nil
+        }
         return ReadingPosition(
             chapterKey: chapter.key, epubCfi: currentCfi, percent: percent
         )

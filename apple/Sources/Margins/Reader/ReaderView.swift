@@ -26,6 +26,9 @@ struct ReaderView: View {
         .task(id: reader.book?.id) {
             await model.loadBookmarks(reader: reader)
         }
+        .onChange(of: reader.currentCfi) {
+            Task { await model.stampBookmarkPositions(reader: reader) }
+        }
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button("Library", systemImage: "sidebar.left", action: reader.close)

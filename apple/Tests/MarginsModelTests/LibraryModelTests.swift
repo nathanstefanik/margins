@@ -292,4 +292,84 @@ struct LibraryModelTests {
         #expect(counts.count == 1)
         #expect(counts[book.chapters[1].key] == nil)
     }
+
+    @Test("a pin dropped before relocated picks up the page CFI")
+    @MainActor
+    func bookmarkDroppedBeforeRelocateGetsCFI() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        let position = try #require(reader.currentPosition())
+        #expect(position.epubCfi == nil)
+        let pin = try #require(
+            await model.addBookmark(bookId: book.id, position: position, reader: reader)
+        )
+        #expect(pin.epubCfi == nil)
+        #expect(reader.pageIsBookmarked)
+
+        reader.relocated(
+            page: 1,
+            totalPages: 8,
+            href: book.chapters[0].href,
+            cfi: "epubcfi(/6/4!/4/2)"
+        )
+        #expect(!reader.pageIsBookmarked)
+
+        await model.stampBookmarkPositions(reader: reader)
+        #expect(reader.bookmarks.first?.epubCfi == "epubcfi(/6/4!/4/2)")
+        #expect(reader.pageIsBookmarked)
+        #expect(model.selectedBookBookmarks.first?.epubCfi == "epubcfi(/6/4!/4/2)")
+    }
+
+    @Test("a CFI-less pin written after relocated still picks up the page")
+    @MainActor
+    func lateCfilessPinPicksUpCurrentPage() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(
+            page: 2,
+            totalPages: 8,
+            href: book.chapters[0].href,
+            cfi: "epubcfi(/6/4!/4/2)"
+        )
+        let stale = ReadingPosition(
+            chapterKey: book.chapters[0].key, epubCfi: nil, percent: 0
+        )
+        _ = try #require(
+            await model.addBookmark(bookId: book.id, position: stale, reader: reader)
+        )
+        #expect(reader.bookmarks.first?.epubCfi == "epubcfi(/6/4!/4/2)")
+        #expect(reader.pageIsBookmarked)
+    }
+
+    @Test("clearing the selection drops pin glyphs immediately")
+    @MainActor
+    func clearingSelectionDropsBookmarkGlyphs() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        reader.open(book: book, chapter: book.chapters[0])
+        let position = try #require(reader.currentPosition())
+        _ = try #require(
+            await model.addBookmark(bookId: book.id, position: position, reader: reader)
+        )
+        #expect(model.selectedBookBookmarks.count == 1)
+
+        await model.selectBook(id: nil)
+        #expect(model.selectedBookBookmarks.isEmpty)
+    }
 }

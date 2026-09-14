@@ -39,6 +39,11 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.15), value: model.searchOpen)
         .animation(.easeOut(duration: 0.15), value: model.helpOpen)
         .animation(.easeOut(duration: 0.15), value: model.bookmarksOpen)
+        .onChange(of: reader.isOpen) {
+            if !reader.isOpen {
+                model.requestBookmarksDismissal()
+            }
+        }
         .sheet(isPresented: $clubs.createSheetPresented) {
             CreateClubSheet()
                 .environment(model)

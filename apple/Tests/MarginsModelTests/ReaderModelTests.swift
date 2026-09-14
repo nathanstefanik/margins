@@ -359,4 +359,64 @@ struct ReaderModelTests {
         #expect(ReaderModel.chapter(forHref: "deep/dir/two.xhtml", in: book)?.key == "ch2")
         #expect(ReaderModel.chapter(forHref: "missing.xhtml", in: book) == nil)
     }
+
+    @Test("switching books drops the previous book's pins immediately")
+    func switchingBooksClearsBookmarks() {
+        let reader = ReaderModel()
+        let bookA = makeBook()
+        var bookB = makeBook()
+        bookB.id = "book-2"
+        reader.open(book: bookA, chapter: bookA.chapters[0])
+        let pin = Bookmark(
+            id: "aaaaaaaaaa",
+            label: "parked",
+            chapterKey: "ch1",
+            epubCfi: "cfi-a",
+            percent: 10,
+            createdAt: Date(timeIntervalSince1970: 1_767_225_600),
+            updatedAt: Date(timeIntervalSince1970: 1_767_225_600)
+        )
+        reader.bookmarksUpdated([pin])
+        #expect(reader.bookmarks.count == 1)
+
+        reader.open(book: bookB, chapter: bookB.chapters[0])
+        #expect(reader.bookmarks.isEmpty)
+
+        reader.bookmarksUpdated([pin])
+        reader.open(book: bookB, chapter: bookB.chapters[1])
+        #expect(reader.bookmarks.count == 1)
+    }
+
+    @Test("a pin can be dropped after open before the first relocated event")
+    func currentPositionAvailableAfterOpen() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[1])
+        let position = reader.currentPosition()
+        #expect(position != nil)
+        #expect(position?.chapterKey == "ch2")
+        #expect(position?.epubCfi == nil)
+        #expect(position?.percent == 50)
+    }
+
+    @Test("a CFI-less pin stops matching the page once the renderer reports a CFI")
+    func cfilessPinDoesNotMatchAfterRelocate() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[1])
+        let pin = Bookmark(
+            id: "bbbbbbbbbb",
+            label: "",
+            chapterKey: "ch2",
+            epubCfi: nil,
+            percent: 50,
+            createdAt: Date(timeIntervalSince1970: 1_767_225_600),
+            updatedAt: Date(timeIntervalSince1970: 1_767_225_600)
+        )
+        reader.bookmarksUpdated([pin])
+        #expect(reader.pageIsBookmarked)
+
+        reader.relocated(page: 1, totalPages: 10, href: "two.xhtml", cfi: "epubcfi(/6/4)")
+        #expect(!reader.pageIsBookmarked)
+    }
 }

@@ -167,6 +167,9 @@ struct ReaderScene: View {
         .onChange(of: library.passageJumpGeneration) {
             applyPassageJumpIfNeeded()
         }
+        .onChange(of: reader.currentCfi) {
+            Task { await library.stampBookmarkPositions(reader: reader) }
+        }
         #if DEBUG
         .task {
             await runDebugFixture()

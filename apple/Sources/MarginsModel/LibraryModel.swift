@@ -81,13 +81,18 @@ public final class LibraryModel {
     /// Fetches the selected book's metadata from the bridge.
     public func loadSelectedBook() async {
         guard let store, let selectedBookID else { return }
+        let bookId = selectedBookID
         do {
-            selectedBook = try await store.getBook(id: selectedBookID)
-            selectedBookNotesIndex = try await store.notesIndex(bookId: selectedBookID)
-            selectedBookBookmarks = try await store.bookmarks(bookId: selectedBookID)
+            let book = try await store.getBook(id: bookId)
+            let notes = try await store.notesIndex(bookId: bookId)
+            let bookmarks = try await store.bookmarks(bookId: bookId)
+            guard self.selectedBookID == bookId else { return }
+            selectedBook = book
+            selectedBookNotesIndex = notes
+            selectedBookBookmarks = bookmarks
             // A compiled page for a previous selection must never survive
             // the selection changing underneath it.
-            if compiledNotes?.bookId != selectedBookID {
+            if compiledNotes?.bookId != bookId {
                 compiledNotes = nil
                 detailMode = .book
             }
@@ -98,6 +103,9 @@ public final class LibraryModel {
 
     /// Programmatically selects a book and loads its metadata.
     public func selectBook(id: String?) async {
+        if selectedBookID != id {
+            selectedBookBookmarks = []
+        }
         selectedBookID = id
         if id != nil {
             await loadSelectedBook()
@@ -694,9 +702,11 @@ public final class LibraryModel {
     /// list when that book is selected).
     public func loadBookmarks(reader: ReaderModel) async {
         guard let store, let book = reader.book else { return }
-        let list = (try? await store.bookmarks(bookId: book.id)) ?? []
+        let bookId = book.id
+        let list = (try? await store.bookmarks(bookId: bookId)) ?? []
+        guard reader.book?.id == bookId else { return }
         reader.bookmarksUpdated(list)
-        if selectedBookID == book.id {
+        if selectedBookID == bookId {
             selectedBookBookmarks = list
         }
     }
@@ -714,6 +724,9 @@ public final class LibraryModel {
                 bookId: bookId, label: label, position: position
             )
             await rememberBookmarks(bookId: bookId, reader: reader)
+            if let reader {
+                await stampBookmarkPositions(reader: reader)
+            }
             return bookmark
         } catch {
             errorMessage = String(describing: error)
@@ -739,6 +752,25 @@ public final class LibraryModel {
         } catch {
             errorMessage = String(describing: error)
             return nil
+        }
+    }
+
+    /// Pins dropped before the first `relocated` event have no CFI and a
+    /// chapter-index percent. Once the renderer reports a location, restamp
+    /// those pins onto the real page so the chrome and jumps match.
+    public func stampBookmarkPositions(reader: ReaderModel) async {
+        guard let book = reader.book,
+              let chapter = reader.chapter,
+              let position = reader.currentPosition(),
+              !(position.epubCfi?.isEmpty ?? true)
+        else { return }
+        let incomplete = reader.bookmarks.filter {
+            $0.chapterKey == chapter.key && ($0.epubCfi == nil || $0.epubCfi?.isEmpty == true)
+        }
+        for pin in incomplete {
+            _ = await updateBookmark(
+                pin, bookId: book.id, position: position, reader: reader
+            )
         }
     }
 

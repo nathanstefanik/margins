@@ -10,8 +10,9 @@ struct BookmarksOverlay: View {
     @Environment(LibraryModel.self) private var model
     @Environment(ReaderModel.self) private var reader
 
-    @State private var renaming: Bookmark?
+    @State private var renameTarget: Bookmark?
     @State private var renameText = ""
+    @State private var renameOpen = false
 
     var body: some View {
         ZStack {
@@ -64,13 +65,18 @@ struct BookmarksOverlay: View {
             .contentShape(.rect)
             .onTapGesture {}
         }
-        .alert("Name", isPresented: Binding(
-            get: { renaming != nil },
-            set: { if !$0 { renaming = nil } }
-        )) {
+        .alert("Name", isPresented: $renameOpen) {
             TextField("Name", text: $renameText)
-            Button("Save") { saveRename() }
-            Button("Cancel", role: .cancel) { renaming = nil }
+            Button("Save") {
+                guard let bookmark = renameTarget, let book = reader.book else { return }
+                let text = renameText
+                Task {
+                    await model.updateBookmark(
+                        bookmark, bookId: book.id, label: text, reader: reader
+                    )
+                }
+            }
+            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -92,8 +98,9 @@ struct BookmarksOverlay: View {
             }
             .buttonStyle(.plain)
             Button("Rename") {
+                renameTarget = bookmark
                 renameText = bookmark.label
-                renaming = bookmark
+                renameOpen = true
             }
             .buttonStyle(.borderless)
             Button("Update") {
@@ -118,16 +125,6 @@ struct BookmarksOverlay: View {
                 bookId: book.id,
                 chapterKey: bookmark.chapterKey,
                 cfi: bookmark.epubCfi
-            )
-        }
-    }
-
-    private func saveRename() {
-        guard let bookmark = renaming, let book = reader.book else { return }
-        renaming = nil
-        Task {
-            await model.updateBookmark(
-                bookmark, bookId: book.id, label: renameText, reader: reader
             )
         }
     }
