@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import MarginsCore
 import MarginsModel
 
@@ -19,7 +18,7 @@ struct CreateClubSheet: View {
             Form {
                 Section("Club") {
                     TextField("Club Name", text: $name)
-                    TextField("Your Name", text: $displayName)
+                    TextField("Name", text: $displayName)
                 }
                 Section("Book") {
                     Picker("Book", selection: $bookID) {
@@ -57,7 +56,6 @@ struct CreateClubSheet: View {
         .interactiveDismissDisabled(isSubmitting || clubs.isBusy)
         .onAppear {
             bookID = library.selectedBookID ?? library.books.first?.id
-            displayName = clubs.identity.displayName ?? UIDevice.current.name
         }
     }
 
@@ -104,8 +102,8 @@ struct JoinClubSheet: View {
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                 }
-                Section("Your Name") {
-                    TextField("Your Name", text: $displayName)
+                Section("Name") {
+                    TextField("Name", text: $displayName)
                 }
             }
             .navigationTitle("Join a Book Club")
@@ -123,9 +121,6 @@ struct JoinClubSheet: View {
             }
         }
         .interactiveDismissDisabled(isSubmitting || clubs.isBusy)
-        .onAppear {
-            displayName = clubs.identity.displayName ?? UIDevice.current.name
-        }
     }
 
     private var canJoin: Bool {
