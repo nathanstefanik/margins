@@ -112,6 +112,13 @@ public final class ClubModel {
             return
         }
         selectedClub = clubs.first { $0.id == id }
+        // A club missing from the local list was just deleted (or never
+        // belonged here). Do not `syncClub`, which would fetch the CloudKit
+        // record and write it back.
+        guard selectedClub != nil else {
+            notes = nil
+            return
+        }
         await loadNotes()
     }
 
@@ -216,16 +223,21 @@ public final class ClubModel {
         }
     }
 
-    public func deleteSelectedClub() async {
-        guard let store, let id = selectedClubID else { return }
+    @discardableResult
+    public func deleteSelectedClub() async -> Bool {
+        guard let sync, let id = selectedClubID else { return false }
+        isBusy = true
+        defer { isBusy = false }
         do {
-            try await store.deleteClub(id: id)
+            try await sync.deleteClub(id: id)
             selectedClubID = nil
             selectedClub = nil
             notes = nil
             await refresh()
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 

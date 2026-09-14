@@ -59,6 +59,10 @@ public actor LocalClubSyncEngine: ClubSyncEngine {
         try await store.removeClubMemberSnapshot(clubId: clubId, memberId: memberId)
     }
 
+    public func deleteClub(id: String) async throws {
+        invites = invites.filter { $0.value.clubId != id }
+    }
+
     public func removeParticipant(clubId: String, memberId: String) async throws {}
 
     public func publishInvite(_ invite: ClubInvite) async throws {

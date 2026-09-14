@@ -63,6 +63,9 @@ struct ClubDetailView: View {
                 Text("\(club.bookTitle) — \(club.bookAuthor)")
                     .font(.title3)
                     .foregroundStyle(.secondary)
+                Text(club.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
             }
 
             HStack(spacing: 10) {

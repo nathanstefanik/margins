@@ -98,6 +98,9 @@ struct ClubsScene: View {
                             )
                             .font(.caption)
                             .foregroundStyle(.tertiary)
+                            Text(club.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
                         }
                         .padding(.vertical, 2)
                     }

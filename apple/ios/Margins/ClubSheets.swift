@@ -12,6 +12,7 @@ struct CreateClubSheet: View {
     @State private var name = ""
     @State private var displayName = ""
     @State private var bookID: String?
+    @State private var isSubmitting = false
 
     var body: some View {
         NavigationStack {
@@ -41,9 +42,11 @@ struct CreateClubSheet: View {
             }
             .navigationTitle("New Book Club")
             .navigationBarTitleDisplayMode(.inline)
+            .disabled(isSubmitting || clubs.isBusy)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSubmitting || clubs.isBusy)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") { create() }
@@ -51,6 +54,7 @@ struct CreateClubSheet: View {
                 }
             }
         }
+        .interactiveDismissDisabled(isSubmitting || clubs.isBusy)
         .onAppear {
             bookID = library.selectedBookID ?? library.books.first?.id
             displayName = clubs.identity.displayName ?? UIDevice.current.name
@@ -58,13 +62,16 @@ struct CreateClubSheet: View {
     }
 
     private var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !isSubmitting
+            && !clubs.isBusy
+            && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && bookID != nil
     }
 
     private func create() {
-        guard let bookID else { return }
+        guard canCreate, let bookID else { return }
+        isSubmitting = true
         let clubName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let memberName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
@@ -72,6 +79,8 @@ struct CreateClubSheet: View {
                 bookId: bookID, name: clubName, displayName: memberName
             ) != nil {
                 dismiss()
+            } else {
+                isSubmitting = false
             }
         }
     }

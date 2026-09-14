@@ -8,6 +8,7 @@ struct ClubDetailView: View {
     let clubId: String
 
     @Environment(ClubModel.self) private var clubs
+    @Environment(\.dismiss) private var dismiss
 
     @State private var exportURL: URL?
     @State private var showingDeleteConfirmation = false
@@ -24,9 +25,12 @@ struct ClubDetailView: View {
                 }
                 .listStyle(.insetGrouped)
                 .refreshable { await clubs.loadNotes() }
-            } else {
+            } else if clubs.clubs.contains(where: { $0.id == clubId }) {
                 ProgressView()
                     .task { await clubs.selectClub(id: clubId) }
+            } else {
+                ProgressView()
+                    .task { dismiss() }
             }
         }
         .navigationTitle(clubs.selectedClub?.name ?? "Club")
@@ -39,6 +43,7 @@ struct ClubDetailView: View {
                     } label: {
                         Label("Sync My Notes", systemImage: "arrow.triangle.2.circlepath")
                     }
+                    .disabled(clubs.isBusy)
                     Button {
                         Task { await export() }
                     } label: {
@@ -74,7 +79,11 @@ struct ClubDetailView: View {
             titleVisibility: .visible
         ) {
             Button("Delete Club", role: .destructive) {
-                Task { await clubs.deleteSelectedClub() }
+                Task {
+                    if await clubs.deleteSelectedClub() {
+                        dismiss()
+                    }
+                }
             }
         } message: {
             Text("This removes the club and its local snapshots. Your notes are not touched.")
@@ -117,6 +126,9 @@ struct ClubDetailView: View {
                 Text("\(club.bookTitle) — \(club.bookAuthor)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Text(club.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
             HStack(spacing: 12) {
                 Toggle(
