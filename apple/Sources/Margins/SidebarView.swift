@@ -124,12 +124,15 @@ struct SidebarView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                        Text(club.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
                     }
                     .tag(club.id)
                 }
             }
             .listStyle(.sidebar)
-            .frame(height: min(CGFloat(clubs.clubs.count) * 48 + 8, 190))
+            .frame(height: min(CGFloat(clubs.clubs.count) * 62 + 8, 220))
         }
     }
 

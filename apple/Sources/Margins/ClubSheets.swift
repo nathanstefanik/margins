@@ -13,6 +13,7 @@ struct CreateClubSheet: View {
     @State private var name = ""
     @State private var displayName = ""
     @State private var selectedBookID: String?
+    @State private var isSubmitting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -51,6 +52,7 @@ struct CreateClubSheet: View {
         }
         .padding(20)
         .frame(width: 460)
+        .disabled(isSubmitting || clubs.isBusy)
         .onAppear {
             selectedBookID = library.selectedBookID ?? library.books.first?.id
             displayName = clubs.identity.displayName
@@ -60,13 +62,16 @@ struct CreateClubSheet: View {
     }
 
     private var canCreate: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !isSubmitting
+            && !clubs.isBusy
+            && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && selectedBookID != nil
     }
 
     private func create() {
-        guard let bookID = selectedBookID else { return }
+        guard canCreate, let bookID = selectedBookID else { return }
+        isSubmitting = true
         let clubName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let memberName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
@@ -74,6 +79,8 @@ struct CreateClubSheet: View {
                 bookId: bookID, name: clubName, displayName: memberName
             ) != nil {
                 dismiss()
+            } else {
+                isSubmitting = false
             }
         }
     }
@@ -86,6 +93,7 @@ struct JoinClubSheet: View {
 
     @State private var code = ""
     @State private var displayName = ""
+    @State private var isSubmitting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -106,6 +114,7 @@ struct JoinClubSheet: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .disabled(isSubmitting || clubs.isBusy)
                 Button("Join") { join() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canJoin)
@@ -113,6 +122,7 @@ struct JoinClubSheet: View {
         }
         .padding(20)
         .frame(width: 420)
+        .disabled(isSubmitting || clubs.isBusy)
         .onAppear {
             displayName = clubs.identity.displayName
                 ?? Host.current().localizedName
@@ -121,15 +131,21 @@ struct JoinClubSheet: View {
     }
 
     private var canJoin: Bool {
-        ClubCode.isValid(code)
+        !isSubmitting
+            && !clubs.isBusy
+            && ClubCode.isValid(code)
             && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func join() {
+        guard canJoin else { return }
+        isSubmitting = true
         let memberName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
             if await clubs.joinClub(code: code, displayName: memberName) != nil {
                 dismiss()
+            } else {
+                isSubmitting = false
             }
         }
     }

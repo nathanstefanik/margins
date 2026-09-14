@@ -58,8 +58,6 @@ struct ReaderScene: View {
             DesignTokens.Paper.background(reader.preferences.theme)
                 .ignoresSafeArea()
             IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
-                .overlay(alignment: .top) { headerOverlay }
-                .overlay(alignment: .bottom) { footerOverlay }
                 .accessibilityAction(named: Text("Show controls")) {
                     chromeVisible = true
                 }
@@ -73,6 +71,17 @@ struct ReaderScene: View {
             if flashVisible {
                 flashBadge
             }
+        }
+        // Overlays sit on the ZStack, not on the WKWebView representable:
+        // out-of-process web content can composite over sibling SwiftUI
+        // views attached to the web view itself.
+        .overlay(alignment: .top) {
+            headerOverlay
+                .safeAreaPadding(.top)
+        }
+        .overlay(alignment: .bottom) {
+            footerOverlay
+                .safeAreaPadding(.bottom)
         }
         .animation(reduceMotion ? nil : DesignTokens.Motion.chrome, value: chromeVisible)
         // The reading surface owns its own palette (light by default, dark
@@ -268,7 +277,7 @@ struct ReaderScene: View {
     private var headerOverlay: some View {
         ZStack {
             Text(reader.chapter?.title ?? reader.book?.title ?? "Reader")
-                .font(.footnote.weight(.medium))
+                .font(runningChromeFont.weight(.medium))
                 .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -296,15 +305,31 @@ struct ReaderScene: View {
 
     /// The running foot: this chapter's paginated page number, expanding
     /// to `12 of 40` while the chrome is up. Never hit-tested, so a
-    /// center tap over it still toggles the chrome.
+    /// center tap over it still toggles the chrome. Padded into the
+    /// home-indicator safe area because these overlays sit on the
+    /// full-bleed ZStack, not the inset webview.
     private var footerOverlay: some View {
         Text(pageText)
-            .font(.footnote.monospacedDigit())
+            .font(pageNumberFont)
             .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
             .lineLimit(1)
+            .frame(maxWidth: .infinity)
             .frame(height: 44)
             .allowsHitTesting(false)
             .transition(.opacity)
+    }
+
+    /// Chapter title and page number follow the reader's Serif/Sans choice
+    /// (New York / SF Pro), not the publisher face, at footnote size.
+    private var runningChromeFont: Font {
+        switch reader.preferences.typeface {
+        case .serif: .system(.footnote, design: .serif)
+        case .sans: .system(.footnote, design: .default)
+        }
+    }
+
+    private var pageNumberFont: Font {
+        runningChromeFont.monospacedDigit()
     }
 
     /// Chapter-local page counts (what epub.js reports); the app has no

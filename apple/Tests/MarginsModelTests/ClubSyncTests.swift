@@ -28,6 +28,12 @@ actor ClubSyncWorld {
     func put(_ invite: ClubInvite) { invites[invite.code] = invite }
     func invite(_ code: String) -> ClubInvite? { invites[code] }
     func deleteInvite(_ code: String) { invites[code] = nil }
+    func deleteClub(id: String) {
+        clubs[id] = nil
+        snapshotsByClub[id] = nil
+        shareURLs[id] = nil
+        invites = invites.filter { $0.value.clubId != id }
+    }
 }
 
 struct InMemoryClubSyncEngine: ClubSyncEngine {
@@ -79,6 +85,10 @@ struct InMemoryClubSyncEngine: ClubSyncEngine {
 
     func deleteSnapshot(clubId: String, memberId: String) async throws {
         await world.deleteSnapshot(clubId: clubId, memberId: memberId)
+    }
+
+    func deleteClub(id: String) async throws {
+        await world.deleteClub(id: id)
     }
 
     func removeParticipant(clubId: String, memberId: String) async throws {}

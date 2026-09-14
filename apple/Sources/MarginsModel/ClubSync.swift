@@ -99,6 +99,8 @@ public protocol ClubSyncEngine: Sendable {
     func publishSnapshot(_ snapshot: ClubMemberNotes, clubId: String) async throws
     func fetchSnapshots(clubId: String) async throws -> [ClubMemberNotes]
     func deleteSnapshot(clubId: String, memberId: String) async throws
+    /// Drops the club's CloudKit zone (or no-ops on the local engine).
+    func deleteClub(id: String) async throws
     /// Removes a participant from the club's share (owner only; a no-op for
     /// members that are not CloudKit participants).
     func removeParticipant(clubId: String, memberId: String) async throws
@@ -306,6 +308,33 @@ public struct ClubSync: Sendable {
         try await engine.removeParticipant(clubId: clubId, memberId: memberId)
         try await engine.publishClub(club)
         return club
+    }
+
+    /// Revokes the invite, drops the CloudKit zone, then deletes the local
+    /// club directory. A CloudKit failure is logged and the local copy is
+    /// still removed so the owner is not stuck with a club they cannot
+    /// delete; the invite is revoked first so the code stops resolving.
+    public func deleteClub(id: String) async throws {
+        let inviteCode = (try? await store.getClub(id: id))?.inviteCode
+        if let inviteCode {
+            try? await engine.revokeInvite(code: inviteCode)
+        }
+        do {
+            try await engine.deleteClub(id: id)
+        } catch {
+            Self.log.error(
+                "club cloud delete failed: \(String(describing: error), privacy: .public)"
+            )
+        }
+        try await store.deleteClub(id: id)
+    }
+
+    /// Drops the member from the roster and snapshot, then deletes the
+    /// local club copy. The CloudKit zone stays: only the owner can
+    /// delete the club for everyone.
+    public func leaveClub(id: String, memberId: String) async throws {
+        _ = try await removeMember(clubId: id, memberId: memberId)
+        try await store.deleteClub(id: id)
     }
 
     /// Resolves an invite code for display before joining.

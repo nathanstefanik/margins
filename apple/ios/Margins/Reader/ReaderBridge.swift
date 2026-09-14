@@ -410,8 +410,8 @@ extension ReaderBridge: WKScriptMessageHandler {
                 latestSelection = ReaderSelection(cfiRange: cfiRange, text: text)
             }
         case "relocated":
-            let page = (body["page"] as? NSNumber)?.intValue ?? 1
-            let totalPages = (body["totalPages"] as? NSNumber)?.intValue ?? 0
+            let page = Self.messageInt(body["page"], fallback: 1)
+            let totalPages = Self.messageInt(body["totalPages"], fallback: 0)
             print("[reader-js] relocated: page \(page)/\(totalPages) href=\(body["href"] ?? "nil")")
             currentCfi = body["cfi"] as? String
             reader.relocated(
@@ -429,6 +429,15 @@ extension ReaderBridge: WKScriptMessageHandler {
         default:
             break
         }
+    }
+
+    /// WKScriptMessage may deliver JS numbers as `NSNumber`, `Int`, or
+    /// `Double` depending on the bridge. Miss all three and page stays 1.
+    private static func messageInt(_ value: Any?, fallback: Int) -> Int {
+        if let number = value as? NSNumber { return number.intValue }
+        if let int = value as? Int { return int }
+        if let double = value as? Double { return Int(double) }
+        return fallback
     }
 }
 

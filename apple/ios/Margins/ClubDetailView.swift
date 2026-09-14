@@ -8,9 +8,11 @@ struct ClubDetailView: View {
     let clubId: String
 
     @Environment(ClubModel.self) private var clubs
+    @Environment(\.dismiss) private var dismiss
 
     @State private var exportURL: URL?
     @State private var showingDeleteConfirmation = false
+    @State private var showingLeaveConfirmation = false
     @State private var memberPendingRemoval: ClubMember?
 
     var body: some View {
@@ -24,9 +26,12 @@ struct ClubDetailView: View {
                 }
                 .listStyle(.insetGrouped)
                 .refreshable { await clubs.loadNotes() }
-            } else {
+            } else if clubs.clubs.contains(where: { $0.id == clubId }) {
                 ProgressView()
                     .task { await clubs.selectClub(id: clubId) }
+            } else {
+                ProgressView()
+                    .task { dismiss() }
             }
         }
         .navigationTitle(clubs.selectedClub?.name ?? "Club")
@@ -39,6 +44,7 @@ struct ClubDetailView: View {
                     } label: {
                         Label("Sync My Notes", systemImage: "arrow.triangle.2.circlepath")
                     }
+                    .disabled(clubs.isBusy)
                     Button {
                         Task { await export() }
                     } label: {
@@ -52,6 +58,15 @@ struct ClubDetailView: View {
                         } label: {
                             Label("Delete Club", systemImage: "trash")
                         }
+                        .disabled(clubs.isBusy)
+                    } else if clubs.selectedClub != nil {
+                        Divider()
+                        Button(role: .destructive) {
+                            showingLeaveConfirmation = true
+                        } label: {
+                            Label("Leave Club", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                        .disabled(clubs.isBusy)
                     }
                 } label: {
                     Label("Club Actions", systemImage: "ellipsis.circle")
@@ -74,10 +89,29 @@ struct ClubDetailView: View {
             titleVisibility: .visible
         ) {
             Button("Delete Club", role: .destructive) {
-                Task { await clubs.deleteSelectedClub() }
+                Task {
+                    if await clubs.deleteSelectedClub() {
+                        dismiss()
+                    }
+                }
             }
         } message: {
             Text("This removes the club and its local snapshots. Your notes are not touched.")
+        }
+        .confirmationDialog(
+            "Leave \"\(clubs.selectedClub?.name ?? "Club")\"?",
+            isPresented: $showingLeaveConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Leave Club", role: .destructive) {
+                Task {
+                    if await clubs.leaveSelectedClub() {
+                        dismiss()
+                    }
+                }
+            }
+        } message: {
+            Text("You lose access to the club's shared notes. Your own notes are not touched.")
         }
         .confirmationDialog(
             "Remove Member?",
@@ -117,6 +151,9 @@ struct ClubDetailView: View {
                 Text("\(club.bookTitle) — \(club.bookAuthor)")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Text(club.createdAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
             HStack(spacing: 12) {
                 Toggle(

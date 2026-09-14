@@ -8,6 +8,10 @@ import MarginsCore
 // - One custom zone per club, `club-{clubId}`, holding the `Club` root
 //   record and one `Snapshot` record per member. The share hangs off the
 //   club record, so accepting it grants the snapshots too.
+// - Snapshot record names are `snap-{memberId}`. CloudKit user record
+//   names start with `_`, which is reserved and rejected as a record ID
+//   (`invalid id string`); the prefix keeps the ID legal. `memberId` still
+//   lives on the record as a field.
 // - `ClubInvite` records live in the public database, keyed by invite code;
 //   they carry the share URL and expire. The code is a handle, not a
 //   security boundary — accepting the share is the gate.
@@ -157,7 +161,7 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
     public func publishSnapshot(_ snapshot: ClubMemberNotes, clubId: String) async throws {
         let zoneID = try await zoneID(forClubId: clubId)
         let (database, recordID) = databaseAndRecordID(
-            zone: zoneID, recordName: snapshot.memberId
+            zone: zoneID, recordName: Self.snapshotRecordName(snapshot.memberId)
         )
         let record = (try? await fetchRecord(recordID, in: database))
             ?? CKRecord(recordType: RecordType.snapshot, recordID: recordID)
@@ -182,8 +186,19 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
 
     public func deleteSnapshot(clubId: String, memberId: String) async throws {
         let zoneID = try await zoneID(forClubId: clubId)
-        let (database, recordID) = databaseAndRecordID(zone: zoneID, recordName: memberId)
+        let (database, recordID) = databaseAndRecordID(
+            zone: zoneID, recordName: Self.snapshotRecordName(memberId)
+        )
         try? await deleteRecord(recordID, in: database)
+    }
+
+    public func deleteClub(id: String) async throws {
+        zoneCache[id] = nil
+        // The owner created `club-{id}` in their private DB; deleting the
+        // zone drops the club record, every snapshot, and the share. A
+        // missing zone is already gone (local-only leftover, or a
+        // participant with no private copy).
+        try await deleteZone(ownerZoneID(id))
     }
 
     public func removeParticipant(clubId: String, memberId: String) async throws {
@@ -288,6 +303,12 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         zone: CKRecordZone.ID, recordName: String
     ) -> (CKDatabase, CKRecord.ID) {
         (database(for: zone), CKRecord.ID(recordName: recordName, zoneID: zone))
+    }
+
+    /// CloudKit record names cannot start with `_` (system-reserved). User
+    /// record names always do, so snapshots cannot be keyed by member id.
+    private static func snapshotRecordName(_ memberId: String) -> String {
+        "snap-\(memberId)"
     }
 
     private func ensureZone(_ zoneID: CKRecordZone.ID) async throws {
@@ -426,6 +447,23 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
             .sorted()
             .joined(separator: "; ")
         return "\(error.localizedDescription) [\(details)]"
+    }
+
+    private func deleteZone(_ zoneID: CKRecordZone.ID) async throws {
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, any Error>) in
+            privateDB.delete(withRecordZoneID: zoneID) { _, error in
+                if let ckError = error as? CKError,
+                   ckError.code == .zoneNotFound || ckError.code == .unknownItem
+                {
+                    continuation.resume(returning: ())
+                } else if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
     }
 
     private func deleteRecord(
