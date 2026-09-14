@@ -93,6 +93,7 @@ struct JoinClubSheet: View {
 
     @State private var code = ""
     @State private var displayName = ""
+    @State private var isSubmitting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -113,6 +114,7 @@ struct JoinClubSheet: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .disabled(isSubmitting || clubs.isBusy)
                 Button("Join") { join() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canJoin)
@@ -120,6 +122,7 @@ struct JoinClubSheet: View {
         }
         .padding(20)
         .frame(width: 420)
+        .disabled(isSubmitting || clubs.isBusy)
         .onAppear {
             displayName = clubs.identity.displayName
                 ?? Host.current().localizedName
@@ -128,15 +131,21 @@ struct JoinClubSheet: View {
     }
 
     private var canJoin: Bool {
-        ClubCode.isValid(code)
+        !isSubmitting
+            && !clubs.isBusy
+            && ClubCode.isValid(code)
             && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func join() {
+        guard canJoin else { return }
+        isSubmitting = true
         let memberName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
             if await clubs.joinClub(code: code, displayName: memberName) != nil {
                 dismiss()
+            } else {
+                isSubmitting = false
             }
         }
     }

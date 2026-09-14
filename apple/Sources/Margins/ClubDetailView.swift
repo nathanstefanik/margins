@@ -10,6 +10,7 @@ struct ClubDetailView: View {
     @Environment(ClubModel.self) private var clubs
 
     @State private var showingDeleteConfirmation = false
+    @State private var showingLeaveConfirmation = false
     @State private var memberPendingRemoval: ClubMember?
 
     var body: some View {
@@ -34,6 +35,17 @@ struct ClubDetailView: View {
                 }
             } message: {
                 Text("This removes the club and its local snapshots. Notes in your library are not touched.")
+            }
+            .confirmationDialog(
+                "Leave \"\(club.name)\"?",
+                isPresented: $showingLeaveConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Leave Club", role: .destructive) {
+                    Task { await clubs.leaveSelectedClub() }
+                }
+            } message: {
+                Text("You lose access to the club's shared notes. Notes in your library are not touched.")
             }
             .confirmationDialog(
                 "Remove Member?",
@@ -130,6 +142,12 @@ struct ClubDetailView: View {
                     Button("Delete Club", role: .destructive) {
                         showingDeleteConfirmation = true
                     }
+                    .disabled(clubs.isBusy)
+                } else {
+                    Button("Leave Club", role: .destructive) {
+                        showingLeaveConfirmation = true
+                    }
+                    .disabled(clubs.isBusy)
                 }
             }
             .controlSize(.regular)

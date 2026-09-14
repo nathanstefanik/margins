@@ -12,6 +12,7 @@ struct ClubDetailView: View {
 
     @State private var exportURL: URL?
     @State private var showingDeleteConfirmation = false
+    @State private var showingLeaveConfirmation = false
     @State private var memberPendingRemoval: ClubMember?
 
     var body: some View {
@@ -57,6 +58,15 @@ struct ClubDetailView: View {
                         } label: {
                             Label("Delete Club", systemImage: "trash")
                         }
+                        .disabled(clubs.isBusy)
+                    } else if clubs.selectedClub != nil {
+                        Divider()
+                        Button(role: .destructive) {
+                            showingLeaveConfirmation = true
+                        } label: {
+                            Label("Leave Club", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                        .disabled(clubs.isBusy)
                     }
                 } label: {
                     Label("Club Actions", systemImage: "ellipsis.circle")
@@ -87,6 +97,21 @@ struct ClubDetailView: View {
             }
         } message: {
             Text("This removes the club and its local snapshots. Your notes are not touched.")
+        }
+        .confirmationDialog(
+            "Leave \"\(clubs.selectedClub?.name ?? "Club")\"?",
+            isPresented: $showingLeaveConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Leave Club", role: .destructive) {
+                Task {
+                    if await clubs.leaveSelectedClub() {
+                        dismiss()
+                    }
+                }
+            }
+        } message: {
+            Text("You lose access to the club's shared notes. Your own notes are not touched.")
         }
         .confirmationDialog(
             "Remove Member?",

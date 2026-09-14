@@ -329,6 +329,14 @@ public struct ClubSync: Sendable {
         try await store.deleteClub(id: id)
     }
 
+    /// Drops the member from the roster and snapshot, then deletes the
+    /// local club copy. The CloudKit zone stays: only the owner can
+    /// delete the club for everyone.
+    public func leaveClub(id: String, memberId: String) async throws {
+        _ = try await removeMember(clubId: id, memberId: memberId)
+        try await store.deleteClub(id: id)
+    }
+
     /// Resolves an invite code for display before joining.
     public func lookupInvite(code: String) async throws -> ClubInvite? {
         guard let normalized = ClubCode.normalize(code) else {

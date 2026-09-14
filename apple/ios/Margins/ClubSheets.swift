@@ -93,6 +93,7 @@ struct JoinClubSheet: View {
 
     @State private var code = ""
     @State private var displayName = ""
+    @State private var isSubmitting = false
 
     var body: some View {
         NavigationStack {
@@ -109,9 +110,11 @@ struct JoinClubSheet: View {
             }
             .navigationTitle("Join a Book Club")
             .navigationBarTitleDisplayMode(.inline)
+            .disabled(isSubmitting || clubs.isBusy)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSubmitting || clubs.isBusy)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Join") { join() }
@@ -119,21 +122,28 @@ struct JoinClubSheet: View {
                 }
             }
         }
+        .interactiveDismissDisabled(isSubmitting || clubs.isBusy)
         .onAppear {
             displayName = clubs.identity.displayName ?? UIDevice.current.name
         }
     }
 
     private var canJoin: Bool {
-        ClubCode.isValid(code)
+        !isSubmitting
+            && !clubs.isBusy
+            && ClubCode.isValid(code)
             && !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func join() {
+        guard canJoin else { return }
+        isSubmitting = true
         let memberName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         Task {
             if await clubs.joinClub(code: code, displayName: memberName) != nil {
                 dismiss()
+            } else {
+                isSubmitting = false
             }
         }
     }

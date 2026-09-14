@@ -241,6 +241,26 @@ public final class ClubModel {
         }
     }
 
+    /// Leaves as a member: roster and snapshot go, local copy goes, the
+    /// owner's club remains. Admins delete instead.
+    @discardableResult
+    public func leaveSelectedClub() async -> Bool {
+        guard let sync, let id = selectedClubID else { return false }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            try await sync.leaveClub(id: id, memberId: identity.memberId)
+            selectedClubID = nil
+            selectedClub = nil
+            notes = nil
+            await refresh()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     public func setSpoilerProtection(_ enabled: Bool) async {
         guard let store else { return }
         do {
