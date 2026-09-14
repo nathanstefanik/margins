@@ -81,6 +81,18 @@ struct MarginsCommands: Commands {
                 reader.toggleNotes()
             }
             Divider()
+            Button("Bookmark This Page") {
+                guard let book = reader.book, let position = reader.currentPosition() else { return }
+                Task {
+                    await model.addBookmark(bookId: book.id, position: position, reader: reader)
+                }
+            }
+            .disabled(!reader.isOpen)
+            Button("Bookmarks") {
+                model.requestBookmarks()
+            }
+            .disabled(!reader.isOpen)
+            Divider()
             Button("Bigger Text") {
                 reader.preferences.stepFontSize(ReaderPreferences.fontSizeStep)
             }

@@ -116,6 +116,29 @@ public actor CoreStore {
         try library.writePosition(bookID: bookId, position: position)
     }
 
+    /// Named location pins for the book; empty when none have been dropped.
+    public func bookmarks(bookId: String) throws -> [Bookmark] {
+        library.readBookmarks(bookID: bookId)
+    }
+
+    @discardableResult
+    public func addBookmark(
+        bookId: String, label: String, position: ReadingPosition
+    ) throws -> Bookmark {
+        try library.addBookmark(bookID: bookId, label: label, position: position)
+    }
+
+    @discardableResult
+    public func updateBookmark(
+        bookId: String, id: String, label: String?, position: ReadingPosition?
+    ) throws -> Bookmark {
+        try library.updateBookmark(bookID: bookId, id: id, label: label, position: position)
+    }
+
+    public func deleteBookmark(bookId: String, id: String) throws {
+        try library.deleteBookmark(bookID: bookId, id: id)
+    }
+
     /// Synchronous, thread-safe EPUB byte access for the reader's scheme
     /// handler, which runs on WebKit-owned threads: the path comes from the
     /// lock-guarded root above, never from actor state.

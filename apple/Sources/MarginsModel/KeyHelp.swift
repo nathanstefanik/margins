@@ -52,6 +52,8 @@ extension ReaderKeymap {
                 KeyHelpEntry(keys: ["n"], description: "Next chapter"),
                 KeyHelpEntry(keys: ["p"], description: "Previous chapter"),
                 KeyHelpEntry(keys: ["i", "Enter"], description: "Open and focus notes"),
+                KeyHelpEntry(keys: ["b"], description: "Bookmark this page"),
+                KeyHelpEntry(keys: ["B"], description: "Bookmarks list"),
                 KeyHelpEntry(keys: ["Escape"], description: "Close notes pane; again → library"),
                 KeyHelpEntry(keys: ["l"], description: "Back to library"),
                 KeyHelpEntry(keys: ["/"], description: "Search notes"),

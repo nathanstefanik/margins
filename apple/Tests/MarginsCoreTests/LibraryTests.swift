@@ -258,6 +258,63 @@ struct LibraryTests {
         #expect(try harness.library.getBook(id: meta.id).progressPercent == nil)
     }
 
+    // MARK: Bookmarks
+
+    @Test("named bookmarks round-trip, clamp percent, and vanish with the last pin")
+    func bookmarksRoundTrip() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+        #expect(harness.library.readBookmarks(bookID: meta.id).isEmpty)
+
+        let first = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "  the interpolation  ",
+            position: ReadingPosition(
+                chapterKey: "002", epubCfi: "epubcfi(/6/4!/4/2)", percent: 61.2
+            )
+        )
+        #expect(first.label == "the interpolation")
+        #expect(first.epubCfi == "epubcfi(/6/4!/4/2)")
+
+        let second = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "",
+            position: ReadingPosition(chapterKey: "001", epubCfi: "", percent: 150)
+        )
+        #expect(second.label.isEmpty)
+        #expect(second.epubCfi == nil)
+        #expect(second.percent == 100)
+
+        let listed = harness.library.readBookmarks(bookID: meta.id)
+        #expect(listed.map(\.id) == [first.id, second.id])
+
+        let renamed = try harness.library.updateBookmark(
+            bookID: meta.id, id: first.id, label: "claim", position: nil
+        )
+        #expect(renamed.label == "claim")
+        #expect(renamed.epubCfi == first.epubCfi)
+
+        try harness.library.deleteBookmark(bookID: meta.id, id: first.id)
+        try harness.library.deleteBookmark(bookID: meta.id, id: second.id)
+        #expect(harness.library.readBookmarks(bookID: meta.id).isEmpty)
+        #expect(
+            !Files.exists(
+                harness.library.bookDir(meta.id).appendingPathComponent("bookmarks.json")
+            )
+        )
+    }
+
+    @Test("a corrupt bookmarks file reads as none")
+    func corruptBookmarksFallBack() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+        try Files.write(
+            "not json",
+            to: harness.library.bookDir(meta.id).appendingPathComponent("bookmarks.json")
+        )
+        #expect(harness.library.readBookmarks(bookID: meta.id).isEmpty)
+    }
+
     // MARK: Import lifecycle
 
     @Test("import, list, get, and remove round-trip")

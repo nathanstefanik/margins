@@ -30,8 +30,20 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
+        .overlay {
+            if model.bookmarksOpen {
+                BookmarksOverlay()
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
         .animation(.easeOut(duration: 0.15), value: model.searchOpen)
         .animation(.easeOut(duration: 0.15), value: model.helpOpen)
+        .animation(.easeOut(duration: 0.15), value: model.bookmarksOpen)
+        .onChange(of: reader.isOpen) {
+            if !reader.isOpen {
+                model.requestBookmarksDismissal()
+            }
+        }
         .sheet(isPresented: $clubs.createSheetPresented) {
             CreateClubSheet()
                 .environment(model)

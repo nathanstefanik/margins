@@ -24,14 +24,15 @@ chrome). Center tap toggles chrome. That tap also expands the footer from
 (what epub.js reports). The app has no whole-book page total, only a
 percent.
 
-**Revealed chrome.** A hamburger (`line.3.horizontal`) and the new-note
-button. Back lives here too (leading chevron) so leaving the reader is
-not buried in a sheet. Title and page number stay put.
+**Revealed chrome.** A hamburger (`line.3.horizontal`), a bookmark button
+(drop a pin at this page; filled when this page already has one), and the
+new-note button. Back lives here too (leading chevron) so leaving the
+reader is not buried in a sheet. Title and page number stay put.
 
 **Hamburger sheet.** Text size as a small-A / large-A pair — no numbers,
 no slider, no ladder labels shown; the steps below are internal. Also
-Contents, Marks, and chapter note — those controls lost their bars with
-the old chrome. No line height, no measure.
+Contents, Bookmarks, Marks, and chapter note — those controls lost their
+bars with the old chrome. No line height, no measure.
 
 **Paging.** Swipe still turns pages. Page-turn hides chrome again.
 
@@ -113,9 +114,9 @@ delay and double-tap zoom. Swipes are a native
 ## Files
 
 - `apple/ios/Margins/Reader/ReaderScene.swift` — rest/revealed chrome;
-  overlay header/footer; hamburger + note
+  overlay header/footer; hamburger, bookmark, note
 - `apple/ios/Margins/Reader/ReaderSettingsSheet.swift` — font A pair,
-  Serif/Sans switch, Contents, Marks, chapter note
+  Serif/Sans switch, Contents, Bookmarks, Marks, chapter note
 - `apple/ios/Margins/Reader/ReaderBridge.swift` — pass step/px/face;
   drop lineWidth on iOS
 - `apple/Sources/MarginsModel/ReaderPreferences.swift` — iOS `fontStep`

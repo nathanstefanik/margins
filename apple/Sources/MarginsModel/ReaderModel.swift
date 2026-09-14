@@ -69,11 +69,16 @@ public final class ReaderModel {
     /// chapter's own first TOC entry.
     public func open(book: BookMeta, chapter: ChapterMeta, fragment: String? = nil) {
         flushPositionSave()
+        let bookChanged = self.book?.id != book.id
         self.book = book
         self.chapter = chapter
         jumpFragmentOverride = fragment
         resumeCfi = nil
         progress = nil
+        currentCfi = nil
+        if bookChanged {
+            bookmarks = []
+        }
         openGeneration += 1
     }
 
@@ -109,6 +114,8 @@ public final class ReaderModel {
         noteUpdatedAt = nil
         notesError = nil
         noteSaveStatus = .idle
+        bookmarks = []
+        currentCfi = nil
     }
 
     /// Advances to the next chapter, if any; returns it.
@@ -152,6 +159,7 @@ public final class ReaderModel {
                 chapter = match
             }
         }
+        currentCfi = cfi
         schedulePositionSave(cfi: cfi)
     }
 
@@ -214,6 +222,31 @@ public final class ReaderModel {
             : 0
         let percent = (Double(position) + fraction) / Double(book.chapters.count) * 100
         return min(max(percent, 0), 100)
+    }
+
+    /// Snapshot of the current page for dropping or restamping a pin.
+    /// Before the first `relocated` event there is no page fraction; the
+    /// chapter's place in the spine is enough to drop a pin.
+    public func currentPosition() -> ReadingPosition? {
+        guard let book, let chapter else { return nil }
+        let percent: Double
+        if let computed = bookPercent {
+            percent = computed
+        } else if let index = book.chapters.firstIndex(where: { $0.key == chapter.key }),
+                  !book.chapters.isEmpty {
+            percent = Double(index) / Double(book.chapters.count) * 100
+        } else {
+            return nil
+        }
+        return ReadingPosition(
+            chapterKey: chapter.key, epubCfi: currentCfi, percent: percent
+        )
+    }
+
+    /// True when a pin already sits on this page.
+    public var pageIsBookmarked: Bool {
+        guard let chapter else { return false }
+        return bookmarks.contains { $0.isAt(chapterKey: chapter.key, cfi: currentCfi) }
     }
 
     // MARK: Reading position persistence
@@ -291,6 +324,11 @@ public final class ReaderModel {
     public private(set) var noteMarks: [Mark] = []
     public private(set) var notesError: String?
     public private(set) var noteSaveStatus: NoteSaveStatus = .idle
+    /// Named location pins for the open book. Loaded with the book; not
+    /// chapter-scoped (unlike `noteMarks`).
+    public private(set) var bookmarks: [Bookmark] = []
+    /// Last relocated CFI, used when dropping a pin at the current page.
+    public private(set) var currentCfi: String?
 
     /// Called (off the main actor) with book id, chapter key, and body once
     /// the editor content settled. Wired at app startup to the library.
@@ -391,6 +429,10 @@ public final class ReaderModel {
     /// body is untouched: prose and marks are disjoint in the note file.
     public func noteMarksUpdated(_ marks: [Mark]) {
         noteMarks = marks
+    }
+
+    public func bookmarksUpdated(_ bookmarks: [Bookmark]) {
+        self.bookmarks = Bookmark.sortedForDisplay(bookmarks)
     }
 
     /// Marks the current editor content as saved. `savedBody` is the text

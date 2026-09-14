@@ -5,6 +5,7 @@ import MarginsModel
 /// matching sheet once the menu has dismissed.
 enum ReaderDestination {
     case contents
+    case bookmarks
     case marks
     case chapterNote
 }
@@ -12,7 +13,7 @@ enum ReaderDestination {
 /// The hamburger menu: the reading-surface theme (cream paper or dark), text
 /// size as a small-A / large-A pair — the ladder behind it is internal, no
 /// numbers — a Serif/Sans typeface switch (the system's New York / SF Pro,
-/// nothing bundled), plus Contents, Marks, and the chapter note, which lost
+/// nothing bundled), plus Contents, Bookmarks, Marks, and the chapter note, which lost
 /// their bars when the chrome went quiet. No line height, no measure.
 struct ReaderSettingsSheet: View {
     @Bindable var preferences: ReaderPreferences
@@ -64,6 +65,9 @@ struct ReaderSettingsSheet: View {
                 Section {
                     Button { onSelect(.contents) } label: {
                         Label("Contents", systemImage: "list.bullet")
+                    }
+                    Button { onSelect(.bookmarks) } label: {
+                        Label("Bookmarks", systemImage: "bookmark")
                     }
                     Button { onSelect(.marks) } label: {
                         Label("Marks", systemImage: "highlighter")
