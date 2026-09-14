@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-// The library tree: import, catalog, reading positions, removal
+// The library tree: import, catalog, reading positions, bookmarks, removal
 // (docs/storage.md). A book directory is named by a content hash of its
 // EPUB, so importing the same file twice is idempotent, and it is assembled
 // in a hidden staging directory and renamed into place, so an interrupted
@@ -114,6 +114,94 @@ public final class Library {
         position.updatedAt = RFC3339.now()
         try FileStore.writeData(
             MarginsJSON.encode(position), to: dir.appendingPathComponent("position.json")
+        )
+    }
+
+    // MARK: Bookmarks
+
+    /// Named location pins for the book. A missing or corrupt file is an
+    /// empty list — same posture as a missing `position.json`.
+    public func readBookmarks(bookID: String) -> [Bookmark] {
+        let path = bookDir(bookID).appendingPathComponent("bookmarks.json")
+        guard let data = try? FileStore.readData(path) else { return [] }
+        guard let file = try? MarginsJSON.decode(BookmarkFile.self, from: data) else {
+            return []
+        }
+        return Bookmark.sortedForDisplay(file.bookmarks)
+    }
+
+    /// Drops a pin at `position`. Empty `label` is untitled. Percent is
+    /// clamped; the core stamps created/updated.
+    @discardableResult
+    public func addBookmark(
+        bookID: String, label: String, position: ReadingPosition
+    ) throws -> Bookmark {
+        var bookmarks = readBookmarks(bookID: bookID)
+        let taken = Set(bookmarks.map(\.id))
+        var id = CoreID.newID()
+        while taken.contains(id) { id = CoreID.newID() }
+        let now = RFC3339.now()
+        let bookmark = Bookmark(
+            id: id,
+            label: label.trimmingCharacters(in: .whitespacesAndNewlines),
+            chapterKey: position.chapterKey,
+            epubCfi: position.epubCfi.flatMap { $0.isEmpty ? nil : $0 },
+            percent: min(max(position.percent, 0), 100),
+            createdAt: now,
+            updatedAt: now
+        )
+        bookmarks.append(bookmark)
+        try writeBookmarks(bookID: bookID, bookmarks: bookmarks)
+        return bookmark
+    }
+
+    /// Renames and/or restamps an existing pin. `nil` fields stay as they are.
+    @discardableResult
+    public func updateBookmark(
+        bookID: String, id: String, label: String?, position: ReadingPosition?
+    ) throws -> Bookmark {
+        var bookmarks = readBookmarks(bookID: bookID)
+        guard let index = bookmarks.firstIndex(where: { $0.id == id }) else {
+            throw CoreError.library("bookmark not found: \(id)")
+        }
+        var bookmark = bookmarks[index]
+        if let label {
+            bookmark.label = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let position {
+            bookmark.chapterKey = position.chapterKey
+            bookmark.epubCfi = position.epubCfi.flatMap { $0.isEmpty ? nil : $0 }
+            bookmark.percent = min(max(position.percent, 0), 100)
+        }
+        bookmark.updatedAt = RFC3339.now()
+        bookmarks[index] = bookmark
+        try writeBookmarks(bookID: bookID, bookmarks: bookmarks)
+        return bookmark
+    }
+
+    public func deleteBookmark(bookID: String, id: String) throws {
+        var bookmarks = readBookmarks(bookID: bookID)
+        let before = bookmarks.count
+        bookmarks.removeAll { $0.id == id }
+        guard bookmarks.count != before else {
+            throw CoreError.library("bookmark not found: \(id)")
+        }
+        try writeBookmarks(bookID: bookID, bookmarks: bookmarks)
+    }
+
+    private func writeBookmarks(bookID: String, bookmarks: [Bookmark]) throws {
+        let dir = bookDir(bookID)
+        guard Files.isDirectory(dir) else {
+            throw CoreError.library("book not found: \(bookID)")
+        }
+        let path = dir.appendingPathComponent("bookmarks.json")
+        if bookmarks.isEmpty {
+            if FileStore.exists(path) { try FileStore.remove(path) }
+            return
+        }
+        try FileStore.writeData(
+            MarginsJSON.encode(BookmarkFile(bookmarks: Bookmark.sortedForDisplay(bookmarks))),
+            to: path
         )
     }
 

@@ -189,6 +189,12 @@ struct BookDetailView: View {
                         .padding(.vertical, 6)
                 }
                 Spacer(minLength: 0)
+                if model.selectedBookBookmarks.contains(where: { $0.chapterKey == row.chapter.key }) {
+                    Image(systemName: "bookmark.fill")
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                        .help("Has a bookmark")
+                }
             }
             .contentShape(.rect)
         }

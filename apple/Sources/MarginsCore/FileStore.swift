@@ -1,7 +1,7 @@
 import Foundation
 
 // Coordinated document I/O for the core's own files: `meta.json`,
-// `position.json`, `notes/**`, and `notes/_index.json`
+// `position.json`, `bookmarks.json`, `notes/**`, and `notes/_index.json`
 // (docs/apple-only-plan.md Phase 2 step 5).
 //
 // When the path lives inside the ubiquity container — the iOS library root

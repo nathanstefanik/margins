@@ -6,7 +6,7 @@ import MarginsModel
 /// paging, a horizontally-swiping page turn, hardware-key support, and
 /// book-like chrome. The resting screen is a printed spread — chapter
 /// title centered at the top of the paper, page number at the bottom —
-/// and a center tap reveals back, hamburger, and the new-note affordance
+/// and a center tap reveals back, hamburger, bookmark, and the new-note affordance
 /// as overlays that never reflow the page. Note capture lives here too:
 /// the edit menu offers Note/Highlight on selections, the chrome carries
 /// the note button, and a quiet end-of-chapter prompt offers the
@@ -26,6 +26,7 @@ struct ReaderScene: View {
     @State private var chromeVisible = false
     @State private var settingsPresented = false
     @State private var tocPresented = false
+    @State private var bookmarksPresented = false
     @State private var marksPresented = false
     @State private var editorPresented = false
     /// The hamburger menu's chosen destination, presented after the menu
@@ -63,6 +64,9 @@ struct ReaderScene: View {
                 }
                 .accessibilityAction(named: Text("New note")) {
                     newNote()
+                }
+                .accessibilityAction(named: Text("Bookmark this page")) {
+                    bookmarkPage()
                 }
             if let finished = finishedChapter {
                 notePrompt(for: finished)
@@ -111,6 +115,12 @@ struct ReaderScene: View {
             }
             .presentationDetents([.medium, .large])
         }
+        .sheet(isPresented: $bookmarksPresented) {
+            BookmarksSheet { bookmark in
+                bookmarksPresented = false
+                jumpToBookmark(bookmark)
+            }
+        }
         .sheet(isPresented: $marksPresented) {
             MarksSheet(onEditChapterNote: {
                 marksPresented = false
@@ -142,6 +152,9 @@ struct ReaderScene: View {
             await library.loadChapterNote(reader: reader)
             noteLoadedFor = reader.chapter?.key
             restoreHighlightsIfReady()
+        }
+        .task(id: reader.book?.id) {
+            await library.loadBookmarks(reader: reader)
         }
         .onChange(of: reader.progress, { oldValue, newValue in
             detectChapterFinish(to: newValue)
@@ -272,7 +285,7 @@ struct ReaderScene: View {
     }
 
     /// The running head: chapter title centered at the top of the paper,
-    /// with back / new note / hamburger fading in around it. The title is
+    /// with back / bookmark / new note / hamburger fading in around it. The title is
     /// not hit-testable — a tap on it belongs to the page thirds.
     private var headerOverlay: some View {
         ZStack {
@@ -282,13 +295,19 @@ struct ReaderScene: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .padding(.leading, chromeVisible ? 52 : 24)
-                .padding(.trailing, chromeVisible ? 96 : 24)
+                .padding(.trailing, chromeVisible ? 152 : 24)
                 .allowsHitTesting(false)
             if chromeVisible {
                 GlassEffectContainer(spacing: DesignTokens.Spacing.chrome) {
                     HStack(spacing: DesignTokens.Spacing.chrome) {
                         chromeButton("chevron.left", "Back to book") { dismiss() }
                         Spacer(minLength: 0)
+                        chromeButton(
+                            reader.pageIsBookmarked ? "bookmark.fill" : "bookmark",
+                            "Bookmark this page"
+                        ) {
+                            bookmarkPage()
+                        }
                         chromeButton("square.and.pencil", "New note at this page") {
                             newNote()
                         }
@@ -346,9 +365,17 @@ struct ReaderScene: View {
         capturePresented = true
     }
 
+    private func bookmarkPage() {
+        guard let book = reader.book, let position = reader.currentPosition() else { return }
+        Task {
+            await library.addBookmark(bookId: book.id, position: position, reader: reader)
+        }
+    }
+
     private func presentPendingDestination() {
         switch pendingDestination {
         case .contents: tocPresented = true
+        case .bookmarks: bookmarksPresented = true
         case .marks: marksPresented = true
         case .chapterNote: editorPresented = true
         case nil: break
@@ -476,6 +503,23 @@ struct ReaderScene: View {
         }
     }
 
+    private func jumpToBookmark(_ bookmark: Bookmark) {
+        guard let book = reader.book else { return }
+        chromeVisible = false
+        if bookmark.chapterKey == reader.chapter?.key,
+           let cfi = bookmark.epubCfi, !cfi.isEmpty {
+            bridge?.jumpToChapter(cfi)
+            return
+        }
+        Task {
+            await library.openPassage(
+                bookId: book.id,
+                chapterKey: bookmark.chapterKey,
+                cfi: bookmark.epubCfi
+            )
+        }
+    }
+
     /// Retarget an already-visible reader after `openPassage`. Same book:
     /// `rendition.display` of the CFI or chapter href. Different book:
     /// reload the scheme URL (it carries the book id and resume CFI).
@@ -592,10 +636,16 @@ private struct TOCSheet: View {
                     .lineLimit(2)
                 Spacer(minLength: 8)
                 if row.chapter.key == reader.chapter?.key {
-                    Image(systemName: "bookmark.fill")
+                    Image(systemName: "location.fill")
                         .font(.caption)
                         .foregroundStyle(.tint)
                         .accessibilityLabel("Current position")
+                }
+                if reader.bookmarks.contains(where: { $0.chapterKey == row.chapter.key }) {
+                    Image(systemName: "bookmark.fill")
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("Has bookmark")
                 }
             }
         }

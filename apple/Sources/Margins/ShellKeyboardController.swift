@@ -73,6 +73,10 @@ final class ShellKeyboardController {
             model.requestHelpDismissal()
             return nil
         }
+        if model.bookmarksOpen, event.keyCode == 53 {
+            model.requestBookmarksDismissal()
+            return nil
+        }
 
         // While a modal panel (e.g. the import open panel) runs, every key
         // belongs to it: typing must stay native and the keymap must not
@@ -114,7 +118,7 @@ final class ShellKeyboardController {
         }
 
         keymap.setMode(
-            model.searchOpen || model.helpOpen || modalPanelUp
+            model.searchOpen || model.helpOpen || model.bookmarksOpen || modalPanelUp
                 ? .modal
                 : (reader.isOpen ? .reader : .library)
         )
@@ -224,6 +228,18 @@ final class ShellKeyboardController {
             return true
         case .help:
             model.requestHelp()
+            return true
+        case .dropBookmark:
+            guard reader.isOpen, let book = reader.book,
+                  let position = reader.currentPosition()
+            else { return false }
+            Task {
+                await model.addBookmark(bookId: book.id, position: position, reader: reader)
+            }
+            return true
+        case .showBookmarks:
+            guard reader.isOpen else { return false }
+            model.requestBookmarks()
             return true
         }
     }

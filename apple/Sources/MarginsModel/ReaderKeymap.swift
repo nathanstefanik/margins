@@ -42,13 +42,16 @@ public enum ReaderAction: Equatable, Sendable {
     case openBookNotes
     case toggleNotesPageTab
     case backToBook
+    case dropBookmark
+    case showBookmarks
 }
 
 /// A small vim-style state machine mirroring `src/keymaps.ts`: `j`/`k`
 /// move through the book in the reader or move the library selection in the
 /// shell, arrows/space/PageUp/PageDown also page in the reader, `n`/`p`
 /// change chapter, `gg`/`G` jump top/bottom, `i` focuses notes, `/` opens
-/// search, `Esc`/`l` go back, `o` imports, `Enter` opens the selected book.
+/// search, `Esc`/`l` go back, `o` imports, `b` pins the page, `B` opens
+/// the bookmarks list, `Enter` opens the selected book.
 ///
 /// In the paginated flow `j`/`k`/arrows turn pages (the book has no vertical
 /// overflow to scroll); `reader.js` interprets the scroll actions as
@@ -144,6 +147,10 @@ public final class ReaderKeymap {
             return mode == .library ? [.toggleNotesPageTab] : []
         case "o":
             return [.importBook]
+        case "b":
+            return mode == .reader ? [.dropBookmark] : []
+        case "B":
+            return mode == .reader ? [.showBookmarks] : []
         case "Enter":
             // Library: open the selected book. Reader: enter the notes
             // focus (nvim-style `i`/Enter in, Esc out; repeated presses

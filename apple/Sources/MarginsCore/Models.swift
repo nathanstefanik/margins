@@ -526,6 +526,90 @@ public struct ReadingPosition: Codable, Sendable, Equatable, Hashable {
     }
 }
 
+/// A named location pin in a book, stored in `books/{book_id}/bookmarks.json`.
+/// Distinct from `ReadingPosition` (which auto-moves) and from marks (which
+/// are notes). Empty `label` is untitled; UIs show chapter + percent.
+public struct Bookmark: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public var id: String
+    public var label: String
+    public var chapterKey: String
+    public var epubCfi: String?
+    public var percent: Double
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: String,
+        label: String,
+        chapterKey: String,
+        epubCfi: String? = nil,
+        percent: Double,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.label = label
+        self.chapterKey = chapterKey
+        self.epubCfi = epubCfi
+        self.percent = percent
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, label
+        case chapterKey = "chapter_key"
+        case epubCfi = "epub_cfi"
+        case percent
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        label = try container.decodeIfPresent(String.self, forKey: .label) ?? ""
+        chapterKey = try container.decode(String.self, forKey: .chapterKey)
+        epubCfi = try container.decodeIfPresent(String.self, forKey: .epubCfi)
+        percent = try container.decode(Double.self, forKey: .percent)
+        createdAt = try container.decodeDate(forKey: .createdAt)
+        updatedAt = try container.decodeDate(forKey: .updatedAt)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(label, forKey: .label)
+        try container.encode(chapterKey, forKey: .chapterKey)
+        try container.encodeIfPresent(epubCfi, forKey: .epubCfi)
+        try container.encode(percent, forKey: .percent)
+        try container.encodeDate(createdAt, forKey: .createdAt)
+        try container.encodeDate(updatedAt, forKey: .updatedAt)
+    }
+
+    /// Reading order: percent, then chapter key, then creation time.
+    public static func sortedForDisplay(_ bookmarks: [Bookmark]) -> [Bookmark] {
+        bookmarks.sorted { a, b in
+            if a.percent != b.percent { return a.percent < b.percent }
+            if a.chapterKey != b.chapterKey { return a.chapterKey < b.chapterKey }
+            return a.createdAt < b.createdAt
+        }
+    }
+
+    /// True when this pin is the current page (same chapter and CFI).
+    public func isAt(chapterKey: String, cfi: String?) -> Bool {
+        guard self.chapterKey == chapterKey else { return false }
+        let stored = epubCfi.flatMap { $0.isEmpty ? nil : $0 }
+        let current = cfi.flatMap { $0.isEmpty ? nil : $0 }
+        return stored == current
+    }
+}
+
+/// On-disk wrapper for `bookmarks.json`.
+struct BookmarkFile: Codable, Sendable, Equatable {
+    var bookmarks: [Bookmark]
+}
+
 // MARK: - Notes
 
 /// Which chapter a note save targets, plus the CFI to record with it.

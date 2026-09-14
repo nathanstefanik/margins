@@ -23,6 +23,9 @@ struct ReaderView: View {
         }
         .animation(.easeOut(duration: 0.22), value: reader.notesVisible)
         .navigationTitle(reader.book?.title ?? "Reader")
+        .task(id: reader.book?.id) {
+            await model.loadBookmarks(reader: reader)
+        }
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button("Library", systemImage: "sidebar.left", action: reader.close)
@@ -31,6 +34,20 @@ struct ReaderView: View {
                 Button("Notes", systemImage: "square.and.pencil") {
                     reader.toggleNotes()
                 }
+            }
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    guard let book = reader.book, let position = reader.currentPosition() else { return }
+                    Task {
+                        await model.addBookmark(bookId: book.id, position: position, reader: reader)
+                    }
+                } label: {
+                    Label(
+                        "Bookmark This Page",
+                        systemImage: reader.pageIsBookmarked ? "bookmark.fill" : "bookmark"
+                    )
+                }
+                .help("Bookmark this page (b). Press B for the list.")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {

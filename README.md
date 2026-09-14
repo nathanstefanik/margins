@@ -110,6 +110,8 @@ macOS keybindings:
 | `N` | Compiled notes page for the selected book (book view; also ⇧⌘N) |
 | `t` | Toggle outline / contents views on the notes page |
 | `i` / `Enter` | Open and focus the notes pane (reader) |
+| `b` | Bookmark this page (reader) |
+| `B` | Bookmarks list (reader) |
 | `Esc` | Notes editor → reader; reader → close notes pane; notes page → book detail; pane closed → library |
 | `l` | Library (from the reader); back to book detail (notes page) |
 | `o` | Import EPUB (also ⌘O) |

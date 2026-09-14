@@ -22,7 +22,7 @@ mode throughout):
   `MARGINS_LIBRARY_ROOT` or platform defaults, remembered in `config.json`.
 - `Library.swift` — importing EPUBs into the library tree (content-hash ids,
   staging dir + commit-by-rename), the book catalog (`index.json`), reading
-  positions, cover backfills, removing books.
+  positions, named bookmarks, cover backfills, removing books.
 - `EpubParser.swift` — OPF/spine/metadata parsing (`XMLParser` for OPF, NCX,
   and EPUB3 nav; tolerant scanners for everything chapter documents do to
   markup).
@@ -44,14 +44,14 @@ mode throughout):
 - `Search.swift` — lazily built, mtime-revalidated in-memory index over the
   notes.
 - `FileStore.swift` — coordinated document I/O: every read/write of
-  `meta.json`, `position.json`, `notes/**`, and `_index.json` goes through
+  `meta.json`, `position.json`, `bookmarks.json`, `notes/**`, and `notes/_index.json` goes through
   it; inside the ubiquity container the operations are wrapped in
   `NSFileCoordinator`, elsewhere it is a plain passthrough.
 - `Models.swift` — shared record types (`Codable`, snake_case coding keys
   matching `docs/storage.md`; RFC3339 dates with fractional-second
   tolerance).
 - `CoreStore.swift` — the `actor` facade the apps drive (import, list,
-  notes, marks, positions, search); keeps the core's synchronous file I/O
+  notes, marks, positions, bookmarks, search); keeps the core's synchronous file I/O
   off the main actor. `readEpubBytesSync` stays `nonisolated` for the
   reader's WebKit threads.
 

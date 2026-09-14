@@ -17,6 +17,8 @@ public final class LibraryModel {
     /// The selected book's notes index (`notes/_index.json`), loaded with
     /// the book so the detail view can flag chapters that have notes.
     public private(set) var selectedBookNotesIndex: [NotesIndexEntry] = []
+    /// Named location pins for the selected book (`bookmarks.json`).
+    public private(set) var selectedBookBookmarks: [Bookmark] = []
     /// The last non-fatal failure, surfaced as a transient banner.
     /// Model methods set it; AppKit-level flows (save panel, clipboard)
     /// set it from the view layer so the banner stays the single sink.
@@ -67,6 +69,7 @@ public final class LibraryModel {
                 selectedBook = nil
                 selectedBookID = nil
                 selectedBookNotesIndex = []
+                selectedBookBookmarks = []
                 compiledNotes = nil
                 detailMode = .book
             }
@@ -81,6 +84,7 @@ public final class LibraryModel {
         do {
             selectedBook = try await store.getBook(id: selectedBookID)
             selectedBookNotesIndex = try await store.notesIndex(bookId: selectedBookID)
+            selectedBookBookmarks = try await store.bookmarks(bookId: selectedBookID)
             // A compiled page for a previous selection must never survive
             // the selection changing underneath it.
             if compiledNotes?.bookId != selectedBookID {
@@ -100,6 +104,7 @@ public final class LibraryModel {
         } else {
             selectedBook = nil
             selectedBookNotesIndex = []
+            selectedBookBookmarks = []
             compiledNotes = nil
             detailMode = .book
         }
@@ -114,6 +119,7 @@ public final class LibraryModel {
             selectedBookID = nil
             selectedBook = nil
             selectedBookNotesIndex = []
+            selectedBookBookmarks = []
             compiledNotes = nil
             detailMode = .book
             await refresh()
@@ -267,6 +273,7 @@ public final class LibraryModel {
         }
         reader.open(book: book, chapter: target)
         reader.resume(at: cfi)
+        await loadBookmarks(reader: reader)
     }
 
     /// Absolute path of `books/{id}/source.epub` under the current library
@@ -303,6 +310,7 @@ public final class LibraryModel {
         reader.resume(at: (cfi?.isEmpty ?? true) ? nil : cfi)
         pendingReaderPresent = true
         passageJumpGeneration += 1
+        await loadBookmarks(reader: reader)
     }
 
     /// True when a passage jump should also push the reader scene. Views
@@ -469,15 +477,32 @@ public final class LibraryModel {
     /// handler can see it.
     public var searchOpen = false {
         didSet {
-            if searchOpen { helpOpen = false }
+            if searchOpen {
+                helpOpen = false
+                bookmarksOpen = false
+            }
         }
     }
 
     /// Whether the keyboard-shortcuts cheat sheet is presented; mutually
-    /// exclusive with the search palette.
+    /// exclusive with the search palette and the bookmarks overlay.
     public var helpOpen = false {
         didSet {
-            if helpOpen { searchOpen = false }
+            if helpOpen {
+                searchOpen = false
+                bookmarksOpen = false
+            }
+        }
+    }
+
+    /// Whether the bookmarks overlay is presented (macOS). Mutually
+    /// exclusive with search and help; the shell monitor closes it on Esc.
+    public var bookmarksOpen = false {
+        didSet {
+            if bookmarksOpen {
+                searchOpen = false
+                helpOpen = false
+            }
         }
     }
 
@@ -499,6 +524,16 @@ public final class LibraryModel {
     /// Dismisses the cheat sheet (Esc, click outside).
     public func requestHelpDismissal() {
         helpOpen = false
+    }
+
+    /// Presents the bookmarks overlay (`B`).
+    public func requestBookmarks() {
+        bookmarksOpen = true
+    }
+
+    /// Dismisses the bookmarks overlay (Esc, click outside, opening a pin).
+    public func requestBookmarksDismissal() {
+        bookmarksOpen = false
     }
 
     /// Loads the note for the reader's current chapter into its state.
@@ -651,6 +686,83 @@ public final class LibraryModel {
         guard (await loadCompiledNotes(bookId: bookId)) != nil else { return }
         detailMode = mode
         notesPageTab = tab
+    }
+
+    // MARK: Bookmarks
+
+    /// Reloads the open book's pins into the reader (and the selected-book
+    /// list when that book is selected).
+    public func loadBookmarks(reader: ReaderModel) async {
+        guard let store, let book = reader.book else { return }
+        let list = (try? await store.bookmarks(bookId: book.id)) ?? []
+        reader.bookmarksUpdated(list)
+        if selectedBookID == book.id {
+            selectedBookBookmarks = list
+        }
+    }
+
+    @discardableResult
+    public func addBookmark(
+        bookId: String,
+        label: String = "",
+        position: ReadingPosition,
+        reader: ReaderModel? = nil
+    ) async -> Bookmark? {
+        guard let store else { return nil }
+        do {
+            let bookmark = try await store.addBookmark(
+                bookId: bookId, label: label, position: position
+            )
+            await rememberBookmarks(bookId: bookId, reader: reader)
+            return bookmark
+        } catch {
+            errorMessage = String(describing: error)
+            return nil
+        }
+    }
+
+    @discardableResult
+    public func updateBookmark(
+        _ bookmark: Bookmark,
+        bookId: String,
+        label: String? = nil,
+        position: ReadingPosition? = nil,
+        reader: ReaderModel? = nil
+    ) async -> Bookmark? {
+        guard let store else { return nil }
+        do {
+            let updated = try await store.updateBookmark(
+                bookId: bookId, id: bookmark.id, label: label, position: position
+            )
+            await rememberBookmarks(bookId: bookId, reader: reader)
+            return updated
+        } catch {
+            errorMessage = String(describing: error)
+            return nil
+        }
+    }
+
+    public func deleteBookmark(
+        _ bookmark: Bookmark, bookId: String, reader: ReaderModel? = nil
+    ) async {
+        guard let store else { return }
+        do {
+            try await store.deleteBookmark(bookId: bookId, id: bookmark.id)
+            await rememberBookmarks(bookId: bookId, reader: reader)
+        } catch {
+            errorMessage = String(describing: error)
+        }
+    }
+
+    private func rememberBookmarks(bookId: String, reader: ReaderModel?) async {
+        guard let store else { return }
+        let list = (try? await store.bookmarks(bookId: bookId)) ?? []
+        if selectedBookID == bookId {
+            selectedBookBookmarks = list
+        }
+        if let reader, reader.book?.id == bookId {
+            reader.bookmarksUpdated(list)
+        }
     }
 
     public func searchNotes(_ query: String) async -> [NoteSearchHit] {

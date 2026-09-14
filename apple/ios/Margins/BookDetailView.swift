@@ -3,8 +3,8 @@ import MarginsCore
 import MarginsModel
 
 /// The book detail: cover, metadata, progress, and **Continue reading**;
-/// a segmented Contents / Notes pair. Contents rows carry note markers and
-/// the current reading position; the Notes tab compiles every chapter note
+/// a segmented Contents / Notes pair. Contents rows carry note markers,
+/// bookmark pins, and the current reading position; the Notes tab compiles every chapter note
 /// (marks included) with stats, ShareLink export, and clear-all.
 struct BookDetailView: View {
     @Environment(LibraryModel.self) private var library
@@ -195,8 +195,8 @@ struct BookDetailView: View {
 
 /// The shared outline: front matter and back matter in collapsed groups,
 /// body headings and numbered chapters in reading order. Rows carry a notes
-/// marker (from the notes index) and a bookmark on the current reading
-/// position. Tapping opens the reader at the row's chapter and section.
+/// marker (from the notes index), a pin on chapters that have a bookmark,
+/// and a location glyph on the current reading position. Tapping opens the reader at the row's chapter and section.
 private struct ContentsList: View {
     let meta: BookMeta
     let position: ReadingPosition?
@@ -212,6 +212,10 @@ private struct ContentsList: View {
 
     private var notedKeys: Set<String> {
         Set(library.selectedBookNotesIndex.map(\.chapterKey))
+    }
+
+    private var bookmarkedKeys: Set<String> {
+        Set(library.selectedBookBookmarks.map(\.chapterKey))
     }
 
     var body: some View {
@@ -274,8 +278,14 @@ private struct ContentsList: View {
                         .foregroundStyle(.tint)
                         .accessibilityLabel("Has notes")
                 }
-                if position?.chapterKey == row.chapter.key {
+                if bookmarkedKeys.contains(row.chapter.key) {
                     Image(systemName: "bookmark.fill")
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("Has bookmark")
+                }
+                if position?.chapterKey == row.chapter.key {
+                    Image(systemName: "location.fill")
                         .font(.caption)
                         .foregroundStyle(.tint)
                         .accessibilityLabel("Current reading position")
@@ -321,7 +331,8 @@ private struct ContentsList: View {
 
     private func accessibilityLabel(_ row: OutlineRow) -> String {
         let notes = notedKeys.contains(row.chapter.key) ? ", has notes" : ""
-        return row.accessibilityLabel + notes
+        let pin = bookmarkedKeys.contains(row.chapter.key) ? ", has bookmark" : ""
+        return row.accessibilityLabel + notes + pin
     }
 }
 

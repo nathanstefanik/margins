@@ -29,6 +29,7 @@ both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
       source.epub            # imported copy
       cover.jpg              # extracted cover (extension follows the image type)
       position.json          # reading position (chapter, CFI, percent)
+      bookmarks.json         # named location pins (optional)
       README.md              # orientation
       notes/
         _index.json          # machine index of chapter notes
@@ -184,6 +185,36 @@ reading and written on chapter/book changes:
 - `percent` is the whole-book completion, clamped to 0–100
 - Opening a book normally resumes here; opening a specific chapter jumps explicitly
 - A missing or corrupt file is treated as "never opened" — the reader starts at chapter 1
+
+## Bookmarks
+
+`books/{book_id}/bookmarks.json` holds named location pins the reader drops
+on purpose. They do not move when the page turns. Resume still lives in
+`position.json`; marks stay notes inside chapter files. Bookmarks are
+private navigation — they are not compiled, searched, or shared with a club.
+
+```json
+{
+  "bookmarks": [
+    {
+      "id": "b01j8q3k2m",
+      "label": "the interpolation",
+      "chapter_key": "014",
+      "epub_cfi": "epubcfi(/6/28!/4/2/1:0)",
+      "percent": 61.2,
+      "created_at": "2026-09-13T20:00:00.000Z",
+      "updated_at": "2026-09-13T20:00:00.000Z"
+    }
+  ]
+}
+```
+
+- `id` is a 10-character Crockford id, same idiom as marks
+- `label` may be empty; UIs then show the chapter title and percent
+- `epub_cfi` locates the page within the chapter (omitted if unknown)
+- `percent` is whole-book completion, clamped to 0–100
+- Display order is percent, then `chapter_key`, then `created_at`
+- A missing or corrupt file is an empty list; deleting the last pin removes the file
 
 ## Chapter note format
 
