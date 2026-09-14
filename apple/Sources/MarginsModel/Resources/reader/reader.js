@@ -100,6 +100,9 @@ async function readerOpen() {
       readerAttachTapZone(view.contents.document);
       readerAttachLinks(view.contents.document, section.href);
     }
+    try {
+      readerReportRelocated(readerRendition.currentLocation());
+    } catch (error) {}
   });
   // Text selection (touch or mouse): remember it so Swift can offer
   // Note/Highlight and anchor a mark; the message handler on the native
@@ -115,6 +118,10 @@ async function readerOpen() {
       readerLastSelection = null;
     }
   });
+  // Page counts for the running footer: epub.js emits `relocated` with
+  // start.displayed.{page,total}. The reporter existed but was never
+  // attached, so the shell's progress stayed nil.
+  readerRendition.on("relocated", readerReportRelocated);
   // Preferences may have arrived before the book finished opening.
   readerApplyViewerWidth();
   console.log("readerOpen: rendition created, displaying");
@@ -137,6 +144,11 @@ async function readerOpen() {
   }
   readerOpened = true;
   console.log("readerOpen: displayed, rendition live");
+  // First paint can beat the relocated listener; report whatever mapping
+  // is already known so the footer is not blank until the next turn.
+  try {
+    readerReportRelocated(readerRendition.currentLocation());
+  } catch (error) {}
 }
 
 // Keeps images at their intrinsic aspect ratio: the paginated columns would
@@ -308,13 +320,9 @@ function readerSetFontFace(face) {
 // follow chapter changes made by paging across boundaries and save the
 // reading position.
 function readerReportRelocated(location) {
-  const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.reader;
-  if (!handler) {
-    return;
-  }
   const start = location && location.start;
   const displayed = (start && start.displayed) || {};
-  handler.postMessage({
+  readerPost({
     type: "relocated",
     href: start && start.href ? start.href : null,
     cfi: start && start.cfi ? start.cfi : null,

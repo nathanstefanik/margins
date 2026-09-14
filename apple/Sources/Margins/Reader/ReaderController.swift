@@ -224,8 +224,12 @@ extension ReaderController: WKScriptMessageHandler {
         guard message.name == "reader", let body = message.body as? [String: Any] else { return }
         switch body["type"] as? String {
         case "relocated":
-            let page = (body["page"] as? NSNumber)?.intValue ?? 1
-            let totalPages = (body["totalPages"] as? NSNumber)?.intValue ?? 0
+            let page = (body["page"] as? NSNumber)?.intValue
+                ?? (body["page"] as? Int)
+                ?? 1
+            let totalPages = (body["totalPages"] as? NSNumber)?.intValue
+                ?? (body["totalPages"] as? Int)
+                ?? 0
             reader.relocated(
                 page: page,
                 totalPages: totalPages,
