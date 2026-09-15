@@ -180,13 +180,24 @@ padding, so text clears the native footer; long chapter titles truncate
 in the footer with a tooltip.
 
 Hardware status: the matrix above is reproducible WKWebView acceptance at
-the target machine's logical window sizes. The native app-level matrix
-(fullscreen/window chrome, notes pane, VoiceOver) is **pending**: the
-ad-hoc `make app` build on this machine traps at
-`CKContainer(identifier:)` before a window appears because the bundle has
-no CloudKit entitlement while the machine is signed into iCloud. That
-crash predates this work (it is in club sync startup) and is tracked here
-rather than marked complete.
+the target machine's logical window sizes, and the ad-hoc `make app`
+build was installed and exercised natively on the target machine:
+
+- Measured/verified in the installed app: library load from the iCloud
+  container, two-page spread at a wide window, the Page Layout picker in
+  the typography popover, the Two Pages fallback note at a narrow window,
+  recovery to two pages by widening without touching the preference, and
+  the footer reading "Pages 1–2 of 2".
+- Still to spot-check natively: notes pane open/closed during reflow,
+  fullscreen transitions, VoiceOver order, and long-running resume.
+
+The earlier crash-on-launch of the ad-hoc build was a real bug: on macOS
+`FileManager.default.ubiquityIdentityToken` is non-nil even for a bundle
+with no entitlements, so `ClubSync.automatic` never took its documented
+local-engine fallback and `CKContainer(identifier:)` trapped. `ClubSync`
+now checks the iCloud container entitlement (`SecTaskCopyValueForEntitlement`,
+macOS only) before choosing the transport, so unsigned and ad-hoc builds use
+the local engine while signed builds keep CloudKit.
 
 ## Spread-aware progress (Phase 5)
 
@@ -301,6 +312,6 @@ horizontal clipping.
 | Navigation during reflow wins; no blank/duplicate views | automated (passing) |
 | Preference round-trip on relaunch | automated (UserDefaults round-trip) |
 | Window-sized matrix, text sizes, line widths, themes | automated (`Reader layout matrix`, passing) |
-| Native window with notes/sidebar open and closed | **pending**: ad-hoc native build traps in CloudKit on this machine (see above) |
+| Native window with notes/sidebar open and closed | launch, layout, picker, and fallback verified on hardware; notes-pane and VoiceOver spot-checks remain |
 | Fullscreen, large text, theme extremes | automated at target logical sizes + snapshots |
 | iPhone/iPad, narrow/wide sizes | simulator screenshots; `make ios-build` passing |

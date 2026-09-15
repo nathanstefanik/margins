@@ -335,6 +335,19 @@ struct ClubSyncTests {
         #expect(try await fixture.bob.currentMemberId() == "bob")
     }
 
+    @Test("automatic picks the local engine in a process without iCloud entitlements")
+    func automaticFallsBackWithoutEntitlement() async throws {
+        // This test process is unsigned, the same state as the ad-hoc
+        // `make app` bundle. The ubiquity token is non-nil even there on
+        // macOS, so the fallback must key off the entitlement — without it,
+        // constructing CKContainer traps before a window ever appears.
+        #expect(!ClubSync.cloudKitIsUsable())
+
+        let store = try CoreStore(dataDir: try makeTempDataDir())
+        let sync = await ClubSync.automatic(store: store)
+        #expect(!sync.supportsSharing)
+    }
+
     @Test("the local engine gives an unsigned build working single-member clubs")
     func localEngine() async throws {
         let store = try CoreStore(dataDir: try makeTempDataDir())

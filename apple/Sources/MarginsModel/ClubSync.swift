@@ -1,6 +1,9 @@
 import Foundation
 import MarginsCore
 import os
+#if os(macOS)
+import Security
+#endif
 
 // CloudKit transport for private book clubs (docs/book-clubs-plan.md phase 3).
 //
@@ -131,17 +134,36 @@ public struct ClubSync: Sendable {
         ClubSync(store: store, engine: CloudKitClubSyncEngine())
     }
 
+    /// True when the running process carries the iCloud container
+    /// entitlement, i.e. when constructing a `CKContainer` is safe.
+    ///
+    /// The ubiquity token alone cannot answer this on macOS: it is non-nil
+    /// even for an ad-hoc signed bundle with no entitlements, and
+    /// `CKContainer(identifier:)` traps in that state. The entitlement is
+    /// the only reliable signal before the trap.
+    public static func cloudKitIsUsable() -> Bool {
+        #if os(macOS)
+        guard FileManager.default.ubiquityIdentityToken != nil,
+              let task = SecTaskCreateFromSelf(nil)
+        else { return false }
+        let value = SecTaskCopyValueForEntitlement(
+            task,
+            "com.apple.developer.icloud-container-identifiers" as CFString,
+            nil
+        )
+        return (value as? [String])?.isEmpty == false
+        #else
+        return FileManager.default.ubiquityIdentityToken != nil
+        #endif
+    }
+
     /// CloudKit when an iCloud account is usable, otherwise the local-only
     /// engine so clubs still work on an unsigned build. This is what both
-    /// apps construct.
-    ///
-    /// Constructing a `CKContainer` without the CloudKit entitlement traps,
-    /// so the account check gates on the ubiquity token first. A signed-in
-    /// user whose network is down stays on CloudKit (operations surface the
-    /// error and can be retried) rather than silently turning the club
-    /// local for the session.
+    /// apps construct. A signed-in user whose network is down stays on
+    /// CloudKit (operations surface the error and can be retried) rather
+    /// than silently turning the club local for the session.
     public static func automatic(store: CoreStore) async -> ClubSync {
-        guard FileManager.default.ubiquityIdentityToken != nil else {
+        guard cloudKitIsUsable() else {
             let identity = (try? await store.clubIdentity())
                 ?? ClubIdentity(memberId: "local")
             return ClubSync(
