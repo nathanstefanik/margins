@@ -84,33 +84,7 @@ final class ReaderLayoutHarness {
         configuration.userContentController.add(MessageRelay(harness: self), name: "reader")
     }
 
-    private var window: NSWindow?
-
-    /// WebKit suspends `requestAnimationFrame` (and throttles timers) while
-    /// the page is hidden, and epub.js drives its whole rendition queue
-    /// through rAF. The page therefore needs an on-screen window; this is
-    /// the closest a test process gets to the app's visible reader.
-    /// Returns false when the process has no window server session.
-    @discardableResult
-    func attachWindow() -> Bool {
-        guard window == nil else { return true }
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: webView.frame.size),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        window.isReleasedWhenClosed = false
-        window.contentView = webView
-        window.makeKeyAndOrderFront(nil)
-        window.orderFrontRegardless()
-        self.window = window
-        return true
-    }
-
     func dismantle() {
-        window?.orderOut(nil)
-        window = nil
         webView.loadHTMLString("", baseURL: nil)
     }
 
@@ -161,7 +135,6 @@ final class ReaderLayoutHarness {
     /// Sets the viewport without waiting; for drag-like burst tests.
     func setViewport(width: Double, height: Double) {
         webView.setFrameSize(NSSize(width: width, height: height))
-        window?.setContentSize(NSSize(width: width, height: height))
     }
 
     /// Waits until the page has no pending layout work, epub.js's queue has
