@@ -33,7 +33,11 @@ struct ReaderView: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button("Library", systemImage: "sidebar.left", action: reader.close)
+                // Distinct from the sidebar toggle, which owns
+                // "sidebar.left": this exits the reading view for the
+                // library (home).
+                Button("Library", systemImage: "house", action: reader.close)
+                    .help("Back to library (l)")
             }
             ToolbarItem(placement: .navigation) {
                 Button("Notes", systemImage: "square.and.pencil") {
