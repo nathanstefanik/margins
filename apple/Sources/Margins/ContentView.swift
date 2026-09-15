@@ -14,7 +14,11 @@ struct ContentView: View {
         } detail: {
             DetailArea()
         }
-        .frame(minWidth: 720, minHeight: 440)
+        // While the notes editor is open the detail area needs the reader's
+        // 400-point minimum plus the editor's 320-point minimum; the
+        // library sidebar takes the rest, so the window minimum grows with
+        // the pane instead of clipping it.
+        .frame(minWidth: reader.isOpen && reader.notesVisible ? 960 : 720, minHeight: 440)
         .overlay(alignment: .bottom) {
             errorBanner
         }

@@ -138,7 +138,10 @@ struct ReaderLayoutIntegrationTests {
         // padding on each side.
         let narrowRects = try await harness.visibleParagraphRects()
         let narrowMeasure = try #require(narrowRects.first?.width)
-        #expect(abs(narrowMeasure - (narrow.stageWidth - 40)) < 1)
+        // Text fragments run slightly inside the paragraph box; the page's
+        // measure must not overflow it, and text must fill most of it.
+        #expect(narrowMeasure <= narrow.stageWidth - 40 + 4)
+        #expect(narrowMeasure >= narrow.stageWidth - 40 - 60)
 
         try await harness.resize(to: CGSize(width: 1400, height: 800))
         let wide = try await harness.waitForDivisor(2)
@@ -148,7 +151,9 @@ struct ReaderLayoutIntegrationTests {
         let wideRects = try await harness.visibleParagraphRects()
         #expect(wideRects.count >= 2)
         let widest = try #require(wideRects.map(\.width).max())
-        #expect(abs(widest - (wide.stageWidth - 80) / 2) < 1)
+        let expectedMeasure = (wide.stageWidth - 80) / 2
+        #expect(widest <= expectedMeasure + 4)
+        #expect(widest >= expectedMeasure - 60)
         // Pages fill the whole viewer minus the outer insets.
         #expect(abs(wide.stageWidth - (wide.viewerWidth - 2 * wide.viewerPaddingLeft)) < 1)
         // Both columns sit inside the centered viewer's content box.
@@ -179,7 +184,8 @@ struct ReaderLayoutIntegrationTests {
         #expect(geometry.viewerWidth < geometry.innerWidth)
         let rects = try await harness.visibleParagraphRects()
         let measure = try #require(rects.first?.width)
-        #expect(abs(measure - (geometry.stageWidth - 40)) < 1)
+        #expect(measure <= geometry.stageWidth - 40 + 4)
+        #expect(measure >= geometry.stageWidth - 40 - 60)
     }
 
     @Test("Two Pages falls back to one when the measure cannot fit")

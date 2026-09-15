@@ -125,6 +125,69 @@ layout and RTL stay single at every width. iPhone 17 Pro simulator: the
 fixture renders as a full-width single column with the iOS CSS padding
 (22.4 px), identically to the Phase 1 baseline.
 
+## Acceptance matrix (Phase 6)
+
+Target machine: **15-inch MacBook Air M5 (Mac17,4)**, macOS 26.5.2,
+logical resolution 1920 × 1243 points at scale 2 (visible 1920 × 1205).
+Measured with the app's default typography (110 % / 1.6 / line width as
+noted). "Measure" is the text width of a full page. These viewports are
+the reading surface after native chrome and footer, so they stand in for
+window sizes: fullscreen ≈ 1920 × 1123, a normal window ≈ 1100 × 800,
+half-screen ≈ 720 × 800, and the reader with the notes pane open at a
+1100-point window ≈ 740 × 800.
+
+| Viewport | Text | Line width | Pages | Viewer | Stage | Measure |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1920 × 1123 | 110 % | 72 ch | 2 | 1644 | 1596 | 756 (70 ch) |
+| 1100 × 800 | 110 % | 72 ch | 1 | 826 | 778 | 724 (67 ch) |
+| 720 × 800 | 110 % | 72 ch | 1 | 720 | 672 | 624 (58 ch) |
+| 740 × 800 | 110 % | 72 ch | 1 | 740 | 692 | 624 |
+| 1100 × 800 | 200 % | 72 ch | 1 | 1100 | 1052 | 982 |
+| 1100 × 800 | 70 % | 72 ch | 2 | 1078 | 1030 | 460 |
+| 1100 × 800 | 110 % | 50 ch | 1 | 588 | 540 | 486 |
+| 1100 × 800 | 110 % | 110 ch | 1 | 1100 | 1052 | 1011 |
+| 1100 × 500 | 110 % | 72 ch | 1 | 826 | 778 | 723 |
+| 1920 × 1123 (dark) | 110 % | 72 ch | 2 | 1644 | 1596 | 756 |
+
+Observed calibration notes:
+
+- The measure runs a few characters under the selected line width
+  because epub.js's `Contents.columns()` spends `gap/2` horizontal body
+  padding on each page in addition to the column gap. At the two-page cap
+  the measure is 70 ch for a 72 ch setting; single-page is ~67 ch
+  (epub.js spends the full 40 px on one page). The setting is a maximum
+  the layout stays under, so no constant change is warranted from these
+  readings; the gutter and outer margins are symmetric and the pages stay
+  balanced (verified in the paired single/spread screenshots).
+- **Bug found and fixed in this phase:** the glyph width measured before
+  any section rendered (half an em of the outer document's fallback font,
+  8.8 px) was cached against the typography revision, so the reader kept
+  that estimate for the whole session and only re-measured after a
+  typography change. The book's actual Georgia digit is 10.8 px; the
+  cache key now includes a contents revision bumped when a section
+  renders. The matrix above is measured with the real glyph.
+- Fixed-layout and RTL fixtures stay single-page at every width, and the
+  iOS page keeps its full-width column (iPhone 17 Pro and iPad Pro 13-inch
+  M5 simulator screenshots, `make ios-build` passing).
+
+Native pane minimums: the reader webview keeps its 400-point minimum and
+the notes editor its 320-point minimum (growing to 460 on wide windows).
+While the notes pane is shown the window minimum rises to 960 points
+(reader + editor + the library sidebar) so nothing clips and no control
+hides; with the notes pane closed the window minimum stays 720. The
+macOS page uses 24 px top/bottom insets instead of the iOS overlay
+padding, so text clears the native footer; long chapter titles truncate
+in the footer with a tooltip.
+
+Hardware status: the matrix above is reproducible WKWebView acceptance at
+the target machine's logical window sizes. The native app-level matrix
+(fullscreen/window chrome, notes pane, VoiceOver) is **pending**: the
+ad-hoc `make app` build on this machine traps at
+`CKContainer(identifier:)` before a window appears because the bundle has
+no CloudKit entitlement while the machine is signed into iCloud. That
+crash predates this work (it is in club sync startup) and is tracked here
+rather than marked complete.
+
 ## Spread-aware progress (Phase 5)
 
 - Relocation messages now carry the engine's own `endPage`, `endHref`,
@@ -237,6 +300,7 @@ horizontal clipping.
 | Passage preserved through text-size, mode, and rapid width changes | automated (passing) |
 | Navigation during reflow wins; no blank/duplicate views | automated (passing) |
 | Preference round-trip on relaunch | automated (UserDefaults round-trip) |
-| Native window with notes/sidebar open and closed | Phase 6 (hardware available; native app build currently traps in CloudKit — see above) |
-| Fullscreen, large text, theme extremes | Phase 6 |
-| iPhone/iPad, narrow/wide sizes | Phase 6 |
+| Window-sized matrix, text sizes, line widths, themes | automated (`Reader layout matrix`, passing) |
+| Native window with notes/sidebar open and closed | **pending**: ad-hoc native build traps in CloudKit on this machine (see above) |
+| Fullscreen, large text, theme extremes | automated at target logical sizes + snapshots |
+| iPhone/iPad, narrow/wide sizes | simulator screenshots; `make ios-build` passing |

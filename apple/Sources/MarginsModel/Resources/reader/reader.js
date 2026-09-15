@@ -94,6 +94,10 @@ let readerLayoutFrame = null;
 // Bumped whenever typography or the typeface changes, so the glyph cache
 // invalidates without re-measuring on every relayout.
 let readerTypographyRevision = 0;
+// Bumped whenever a section renders: before the first render the glyph is
+// an estimate from the outer document, and the cache must not keep that
+// estimate once the book's real font is measurable.
+let readerContentsRevision = 0;
 
 // MARK: Reflow transactions
 //
@@ -173,6 +177,7 @@ async function readerOpen() {
     if (readerIsDesktop && view && view.contents && view.contents.document) {
       // The body font is only real once a section rendered: re-measure the
       // digit width and re-resolve, then again once webfonts settle.
+      readerContentsRevision += 1;
       readerQueueLayoutUpdate();
       const doc = view.contents.document;
       if (doc.fonts && doc.fonts.ready) {
@@ -510,7 +515,7 @@ function readerEffectiveLayoutMode() {
 // applied); the outer document is only a fallback, and a half-em estimate
 // covers the window before the first render.
 function readerBodyGlyphWidth() {
-  const key = `${readerTypographyRevision}|${readerFontFace || "publisher"}`;
+  const key = `${readerTypographyRevision}|${readerContentsRevision}|${readerFontFace || "publisher"}`;
   if (readerGlyphCache && readerGlyphCache.key === key && readerGlyphCache.widthPx > 0) {
     return readerGlyphCache.widthPx;
   }

@@ -594,19 +594,44 @@ final class ReaderLayoutHarness {
             if (!doc) { continue; }
             var paragraphs = doc.querySelectorAll('p[id]');
             for (var p = 0; p < paragraphs.length; p++) {
-              var rect = paragraphs[p].getBoundingClientRect();
-              var left = frameRect.left + rect.left;
-              var right = left + rect.width;
-              var top = frameRect.top + rect.top;
-              var bottom = top + rect.height;
-              if (right > clipLeft && left < clipRight && bottom > clipTop && top < clipBottom) {
+              // A paragraph split across a column boundary has a union
+              // element box spanning both columns; use the text fragment
+              // boxes so a paragraph reads as the part actually on this
+              // page.
+              var range = doc.createRange();
+              range.selectNodeContents(paragraphs[p]);
+              var boxes = Array.prototype.slice.call(range.getClientRects());
+              if (!boxes.length) {
+                var elementRect = paragraphs[p].getBoundingClientRect();
+                boxes = [{ left: elementRect.left, top: elementRect.top, width: elementRect.width, height: elementRect.height }];
+              }
+              var union = null;
+              for (var b = 0; b < boxes.length; b++) {
+                var box = boxes[b];
+                var left = frameRect.left + box.left;
+                var right = left + box.width;
+                var top = frameRect.top + box.top;
+                var bottom = top + box.height;
+                if (right <= clipLeft || left >= clipRight || bottom <= clipTop || top >= clipBottom) {
+                  continue;
+                }
+                union = union
+                  ? {
+                      left: Math.min(union.left, left),
+                      right: Math.max(union.right, right),
+                      top: Math.min(union.top, top),
+                      bottom: Math.max(union.bottom, bottom)
+                    }
+                  : { left: left, right: right, top: top, bottom: bottom };
+              }
+              if (union) {
                 rects.push({
                   id: paragraphs[p].id,
-                  left: left,
-                  right: right,
-                  width: rect.width,
-                  top: top,
-                  bottom: bottom
+                  left: union.left,
+                  right: union.right,
+                  width: union.right - union.left,
+                  top: union.top,
+                  bottom: union.bottom
                 });
               }
             }
