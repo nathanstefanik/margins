@@ -7,7 +7,24 @@ struct MarginsCommands: Commands {
     let clubs: ClubModel
     let reader: ReaderModel
 
+    /// The split view's column visibility, published by `ContentView`, so
+    /// Toggle Sidebar works with the window-wide shortcut ⌘B even while
+    /// the reader has focus.
+    @FocusedValue(\.sidebarVisibility) private var sidebarVisibility
+
     var body: some Commands {
+        // Replaces the system Toggle Sidebar item so the shortcut is ⌘B
+        // rather than the system default.
+        CommandGroup(replacing: .sidebar) {
+            Button("Toggle Sidebar") {
+                guard let sidebarVisibility else { return }
+                sidebarVisibility.wrappedValue = sidebarVisibility.wrappedValue == .detailOnly
+                    ? .all
+                    : .detailOnly
+            }
+            .keyboardShortcut("b", modifiers: .command)
+            .disabled(sidebarVisibility == nil)
+        }
         CommandGroup(replacing: .newItem) {
             Button("Import EPUB…") {
                 Task { await ImportPanel.run(model: model) }

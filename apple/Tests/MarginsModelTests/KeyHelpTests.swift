@@ -57,5 +57,6 @@ struct KeyHelpTests {
         #expect(keys.contains("⌘O"))
         #expect(keys.contains("⌘="))
         #expect(keys.contains("⌘0"))
+        #expect(keys.contains("⌘B"))
     }
 }

@@ -172,9 +172,10 @@ Observed calibration notes:
 
 Native pane minimums: the reader webview keeps its 400-point minimum and
 the notes editor its 320-point minimum (growing to 460 on wide windows).
-While the notes pane is shown the window minimum rises to 960 points
-(reader + editor + the library sidebar) so nothing clips and no control
-hides; with the notes pane closed the window minimum stays 720. The
+The library sidebar opens at 320 points (min 260, max 440) and toggles
+with ⌘B. While the notes pane is shown the window minimum rises to 1040
+points (sidebar + reader + editor) so nothing clips and no control hides;
+with the notes pane closed the window minimum stays 720. The
 macOS page uses 24 px top/bottom insets instead of the iOS overlay
 padding, so text clears the native footer; long chapter titles truncate
 in the footer with a tooltip.
