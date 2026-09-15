@@ -321,6 +321,43 @@ struct ReaderLayoutIntegrationTests {
         #expect(harness.messageCount(of: "layoutChanged") == 0)
     }
 
+    // MARK: Visible range endpoints
+
+    @Test("a two-page spread reports its second page as the endpoint")
+    func spreadReportsEndpoint() async throws {
+        let harness = try makeHarness(width: 1400, height: 800)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(2)
+
+        let relocation = try await harness.waitForMessage(
+            "relocated",
+            matching: {
+                guard let page = $0["page"] as? Int, let endPage = $0["endPage"] as? Int else {
+                    return false
+                }
+                return endPage > page
+            },
+            "a spread-sized relocation"
+        )
+        let page = try #require(relocation["page"] as? Int)
+        let endPage = try #require(relocation["endPage"] as? Int)
+        #expect(endPage == page + 1)
+        #expect(relocation["endHref"] as? String == relocation["href"] as? String)
+        #expect(relocation["endCfi"] as? String != relocation["cfi"] as? String)
+    }
+
+    @Test("a single page reports its own page as the endpoint")
+    func singlePageReportsItself() async throws {
+        let harness = try makeHarness(width: 900, height: 700)
+        defer { harness.dismantle() }
+        try await harness.load()
+        let relocation = try await harness.waitForRelocation(after: 0)
+        let page = try #require(relocation["page"] as? Int)
+        #expect(relocation["endPage"] as? Int == page)
+    }
+
     // MARK: Passage preservation through reflow
 
     /// The paragraph nearest the middle of the visible page. A page-start

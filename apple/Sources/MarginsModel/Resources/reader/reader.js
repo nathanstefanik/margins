@@ -889,12 +889,19 @@ function readerReportRelocated(location) {
   if (start && start.cfi && trusted) {
     readerSettledCfi = start.cfi;
   }
+  const end = location && location.end;
+  const endDisplayed = (end && end.displayed) || {};
   readerPost({
     type: "relocated",
     href: start && start.href ? start.href : null,
     cfi: start && start.cfi ? start.cfi : null,
     page: displayed.page || 1,
     totalPages: displayed.total || 0,
+    // The engine's own end-of-range endpoints; the shell only trusts them
+    // when both ends resolve to the same section.
+    endPage: endDisplayed.page || null,
+    endHref: end && end.href ? end.href : null,
+    endCfi: end && end.cfi ? end.cfi : null,
   });
 }
 

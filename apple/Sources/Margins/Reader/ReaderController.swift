@@ -249,7 +249,11 @@ extension ReaderController: WKScriptMessageHandler {
                 page: page,
                 totalPages: totalPages,
                 href: body["href"] as? String,
-                cfi: body["cfi"] as? String
+                cfi: body["cfi"] as? String,
+                endPage: (body["endPage"] as? NSNumber)?.intValue
+                    ?? (body["endPage"] as? Int),
+                endHref: body["endHref"] as? String,
+                endCfi: body["endCfi"] as? String
             )
         case "layoutChanged":
             // The page resolves the effective layout; this only mirrors how

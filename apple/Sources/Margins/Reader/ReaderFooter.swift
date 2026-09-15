@@ -15,8 +15,15 @@ struct ReaderFooter: View {
                 .help(reader.chapter?.title ?? "")
             Spacer(minLength: 0)
             if let progress = reader.progress, progress.totalPages > 0 {
-                Text("Page \(progress.page) of \(progress.totalPages)")
-                    .monospacedDigit()
+                // A verified spread reads as a range; a single page (or one
+                // whose endpoints could not be verified) reads as before.
+                if let endPage = progress.endPage, endPage > progress.page {
+                    Text("Pages \(progress.page)–\(endPage) of \(progress.totalPages)")
+                        .monospacedDigit()
+                } else {
+                    Text("Page \(progress.page) of \(progress.totalPages)")
+                        .monospacedDigit()
+                }
             }
         }
         .font(.caption)

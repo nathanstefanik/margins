@@ -125,6 +125,30 @@ layout and RTL stay single at every width. iPhone 17 Pro simulator: the
 fixture renders as a full-width single column with the iOS CSS padding
 (22.4 px), identically to the Phase 1 baseline.
 
+## Spread-aware progress (Phase 5)
+
+- Relocation messages now carry the engine's own `endPage`, `endHref`,
+  and `endCfi` (from `location.end`), never a synthesized `page + 1`.
+- `ReaderProgress.endPage` is set only when both endpoints resolve to the
+  same section and `page <= endPage <= totalPages`. Reversed,
+  out-of-range, missing, and cross-section endpoints stay nil, leaving
+  start-section progress in charge.
+- The footer shows "Pages 4–5 of 20" for an accepted range and "Page 20
+  of 20" otherwise. The persisted anchor is still the start CFI: nothing
+  about the visible range is stored, and `ReadingPosition`, `Bookmark`,
+  and the iOS caller signature are unchanged (the new trailing arguments
+  default to nil).
+- `pageIsBookmarked` also matches the verified second page's start CFI, so
+  a pin dropped before a layout change still reads as the current page
+  after that page becomes the right side of a spread. A nil end CFI never
+  matches, preserving the existing "CFI-less pin stops matching once the
+  renderer reports a CFI" behavior.
+
+Covered by the `ReaderModel` range tests (4–5 of 20, terminal page,
+reversed, out-of-range, missing, cross-section) and the integration
+endpoint tests (spread `endPage == page + 1` with a distinct end CFI;
+single page reports its own page).
+
 ## Reflow transactions (Phase 4)
 
 Every desktop geometry change (viewport, typography, page mode) runs as

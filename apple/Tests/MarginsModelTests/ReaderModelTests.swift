@@ -186,6 +186,119 @@ struct ReaderModelTests {
         #expect(reader.progress == ReaderProgress(page: 12, totalPages: 12))
     }
 
+    @Test("relocated accepts a verified same-section visible range")
+    func relocatedAcceptsVerifiedRange() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+
+        // Pages 4–5 of 20 in the same section.
+        reader.relocated(
+            page: 4, totalPages: 20,
+            href: "one.xhtml", cfi: "cfi-start",
+            endPage: 5, endHref: "one.xhtml", endCfi: "cfi-end"
+        )
+        #expect(reader.progress == ReaderProgress(page: 4, totalPages: 20, endPage: 5))
+        #expect(reader.currentEndCfi == "cfi-end")
+    }
+
+    @Test("a single terminal page is a one-page range")
+    func relocatedSingleTerminalPage() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+
+        reader.relocated(
+            page: 20, totalPages: 20,
+            href: "one.xhtml", cfi: "cfi-last",
+            endPage: 20, endHref: "one.xhtml", endCfi: "cfi-last"
+        )
+        #expect(reader.progress == ReaderProgress(page: 20, totalPages: 20, endPage: 20))
+    }
+
+    @Test("reversed, out-of-range, and missing endpoints are rejected")
+    func relocatedRejectsUnusableEndpoints() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+
+        // Reversed.
+        reader.relocated(
+            page: 5, totalPages: 20, href: "one.xhtml", cfi: "cfi-start",
+            endPage: 4, endHref: "one.xhtml", endCfi: "cfi-end"
+        )
+        #expect(reader.progress?.endPage == nil)
+        // Beyond the section's page count.
+        reader.relocated(
+            page: 4, totalPages: 20, href: "one.xhtml", cfi: "cfi-start",
+            endPage: 21, endHref: "one.xhtml", endCfi: "cfi-end"
+        )
+        #expect(reader.progress?.endPage == nil)
+        // Missing endpoint entirely.
+        reader.relocated(page: 4, totalPages: 20, href: "one.xhtml", cfi: "cfi-start")
+        #expect(reader.progress?.endPage == nil)
+        #expect(reader.currentEndCfi == nil)
+        // Endpoint without an href cannot be verified as the same section.
+        reader.relocated(
+            page: 4, totalPages: 20, href: "one.xhtml", cfi: "cfi-start",
+            endPage: 5, endHref: nil, endCfi: "cfi-end"
+        )
+        #expect(reader.progress?.endPage == nil)
+    }
+
+    @Test("a spread crossing sections keeps the start-section progress")
+    func relocatedCrossSectionSpread() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(
+            page: 4, totalPages: 20, href: "one.xhtml", cfi: "cfi-start",
+            endPage: 2, endHref: "two.xhtml", endCfi: "cfi-end"
+        )
+        #expect(reader.progress?.page == 4)
+        #expect(reader.progress?.totalPages == 20)
+        #expect(reader.progress?.endPage == nil)
+        #expect(reader.chapter?.key == "ch1")
+    }
+
+    @Test("a bookmark on the second visible page reads as the current page")
+    func bookmarkOnSecondPageIsVisible() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(
+            page: 4, totalPages: 20, href: "one.xhtml", cfi: "cfi-left",
+            endPage: 5, endHref: "one.xhtml", endCfi: "cfi-right"
+        )
+        let now = Date()
+        reader.bookmarksUpdated([
+            Bookmark(
+                id: "left", label: "", chapterKey: "ch1", epubCfi: "cfi-left",
+                percent: 20, createdAt: now, updatedAt: now
+            ),
+            Bookmark(
+                id: "right", label: "", chapterKey: "ch1", epubCfi: "cfi-right",
+                percent: 21, createdAt: now, updatedAt: now
+            ),
+        ])
+        #expect(reader.pageIsBookmarked)
+
+        // A bookmark elsewhere in the chapter is not the visible spread.
+        reader.bookmarksUpdated([
+            Bookmark(
+                id: "other", label: "", chapterKey: "ch1", epubCfi: "cfi-other",
+                percent: 50, createdAt: now, updatedAt: now
+            )
+        ])
+        #expect(reader.pageIsBookmarked == false)
+
+        // Layout changes re-report the same stored CFIs; the pins are not
+        // touched by relocation.
+        let before = reader.bookmarks
+        reader.relocated(page: 4, totalPages: 20, href: "one.xhtml", cfi: "cfi-left")
+        #expect(reader.bookmarks == before)
+    }
+
     @Test("relocated follows the chapter across section boundaries")
     func relocatedFollowsChapter() {
         let reader = ReaderModel()
