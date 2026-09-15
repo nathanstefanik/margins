@@ -321,6 +321,140 @@ struct ReaderLayoutIntegrationTests {
         #expect(harness.messageCount(of: "layoutChanged") == 0)
     }
 
+    // MARK: Passage preservation through reflow
+
+    /// The paragraph nearest the middle of the visible page. A page-start
+    /// CFI sits on a paragraph boundary, so the topmost paragraph can
+    /// legitimately slide to the neighbouring page after repagination;
+    /// mid-page text must not.
+    private func anchorParagraph(_ harness: ReaderLayoutHarness) async throws -> String {
+        let rects = try await harness.visibleParagraphRects()
+        let geometry = try await harness.geometry()
+        let center = geometry.innerHeight / 2
+        let nearest = rects.min(by: {
+            abs(($0.top + $0.bottom) / 2 - center) < abs(($1.top + $1.bottom) / 2 - center)
+        })
+        return try #require(nearest?.id)
+    }
+
+    @Test("a text-size change keeps the visible passage")
+    func textSizeChangeKeepsPassage() async throws {
+        let harness = try makeHarness(width: 900, height: 700)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(1)
+        var visible = try await harness.visibleParagraphIDs()
+
+        try await harness.evaluate("readerScrollBy(1)")
+        visible = try await harness.waitForVisibleParagraphChange(from: visible)
+        try await harness.waitForReaderIdle()
+        let anchor = try await anchorParagraph(harness)
+
+        try await harness.evaluate("readerApplyTypography(160,1.6,72,'%')")
+        try await harness.waitForLayoutSettled()
+
+        let after = try await harness.visibleParagraphIDs()
+        #expect(after.contains(anchor), "anchor \(anchor) left the screen after a text-size change")
+    }
+
+    @Test("a mode change keeps the visible passage")
+    func modeChangeKeepsPassage() async throws {
+        let harness = try makeHarness(width: 1400, height: 800)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(2)
+        var visible = try await harness.visibleParagraphIDs()
+
+        try await harness.evaluate("readerScrollBy(1)")
+        visible = try await harness.waitForVisibleParagraphChange(from: visible)
+        try await harness.waitForReaderIdle()
+        let anchor = try await anchorParagraph(harness)
+
+        try await harness.evaluate("readerSetPageLayout('single')")
+        _ = try await harness.waitForDivisor(1)
+        try await harness.waitForLayoutSettled()
+        var after = try await harness.visibleParagraphIDs()
+        #expect(after.contains(anchor), "anchor \(anchor) left the screen after switching to one page")
+
+        try await harness.evaluate("readerSetPageLayout('double')")
+        _ = try await harness.waitForDivisor(2)
+        try await harness.waitForLayoutSettled()
+        after = try await harness.visibleParagraphIDs()
+        #expect(after.contains(anchor), "anchor \(anchor) left the screen after switching back to two pages")
+    }
+
+    @Test("rapid alternating widths settle on the passage")
+    func rapidResizesKeepPassage() async throws {
+        let harness = try makeHarness(width: 900, height: 700)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(1)
+        var visible = try await harness.visibleParagraphIDs()
+
+        try await harness.evaluate("readerScrollBy(1)")
+        visible = try await harness.waitForVisibleParagraphChange(from: visible)
+        try await harness.waitForReaderIdle()
+        let anchor = try await anchorParagraph(harness)
+
+        // Drag-like burst: several widths before the scheduler fires.
+        for width in [1400.0, 700.0, 1300.0, 800.0, 1200.0, 900.0] {
+            try await harness.setViewport(width: width, height: 700)
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        try await harness.waitForLayoutSettled()
+
+        let after = try await harness.visibleParagraphIDs()
+        #expect(after.contains(anchor), "anchor \(anchor) left the screen after rapid resizes")
+    }
+
+    @Test("navigation during reflow wins over the old anchor")
+    func navigationDuringReflowWins() async throws {
+        let harness = try makeHarness(width: 1200, height: 760)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        try await harness.waitForReaderIdle()
+        let before = try await harness.visibleParagraphIDs()
+        #expect(before.isEmpty == false)
+
+        // Start a reflow, then jump elsewhere before it settles.
+        try await harness.setViewport(width: 800, height: 760)
+        try await harness.evaluate("readerDisplay('ch4.xhtml#p-4-04')")
+        _ = try await harness.waitForVisibleParagraph("p-4-04")
+        try await harness.waitForLayoutSettled()
+
+        let after = try await harness.visibleParagraphIDs()
+        #expect(after.contains("p-4-04"))
+        // The stale anchor must not drag the reader back to chapter one.
+        #expect(after.contains(where: { $0.hasPrefix("p-1-") }) == false)
+    }
+
+    @Test("a settled reflow never leaves a blank page or duplicate views")
+    func reflowLeavesOneVisibleView() async throws {
+        let harness = try makeHarness(width: 1000, height: 700)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        try await harness.waitForDivisor(1)
+
+        try await harness.evaluate("readerApplyTypography(140,1.6,72,'%')")
+        try await harness.waitForLayoutSettled()
+
+        let geometry = try await harness.geometry()
+        #expect(geometry.iframeCount == 1)
+        let visibleIframes = try await harness.visibleIframeCount()
+        #expect(visibleIframes == 1)
+        #expect(try await harness.visibleParagraphIDs().isEmpty == false)
+        // No error page replaced the reader.
+        let body = try await harness.evaluate(
+            "document.querySelector('.reader-error') ? 'error' : 'ok'"
+        ) as? String
+        #expect(body == "ok")
+    }
+
     // MARK: iOS preservation
 
     @Test("the iOS page keeps its full-width single-column behavior")

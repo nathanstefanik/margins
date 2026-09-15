@@ -95,6 +95,28 @@ let readerLayoutFrame = null;
 // invalidates without re-measuring on every relayout.
 let readerTypographyRevision = 0;
 
+// MARK: Reflow transactions
+//
+// A layout change (viewport, typography, page mode) repaginates the book.
+// The engine re-displays at its own idea of the current location, which can
+// drift a page after reflow, and it emits provisional relocations while
+// doing so. A transaction captures the settled page start, resizes, waits
+// for the engine's queue to drain, and re-anchors to the captured CFI —
+// but only while no newer navigation or layout superseded it.
+//
+// The last settled page start, captured before a reflow so the anchor is
+// the reader's real position, never a provisional mid-relayout location.
+let readerSettledCfi = null;
+// Bumped every time a transaction is scheduled; a transaction whose
+// generation changed abandons itself.
+let readerLayoutGeneration = 0;
+// Set while a transaction is between its resize and its re-anchor. While
+// set, relocation reports are withheld from the shell: they describe a
+// half-relaid-out book.
+let readerLayoutInFlight = null;
+// Bounded wait for the rendition queue to drain after a resize.
+const READER_REFLOW_SETTLE_CAP_MS = 500;
+
 function readerPost(payload) {
   const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.reader;
   if (handler) {
@@ -365,7 +387,6 @@ function readerApplyPageLayout() {
       readerAppliedLayout.mode === geometry.mode) {
     return false;
   }
-  const pagesChanged = !readerAppliedLayout || readerAppliedLayout.pages !== geometry.pages;
   readerAppliedLayout = geometry;
   readerPreviousPages = resolved.pages;
   readerReportLayoutChanged();
@@ -378,12 +399,45 @@ function readerApplyPageLayout() {
 
   if (readerRendition) {
     readerApplyRenditionSpread();
-    if (pagesChanged) {
-      readerRestoreCurrentLocation();
-    }
     readerQueueRelayout();
   }
   return true;
+}
+
+// Navigation starts a new layout epoch: a transaction scheduled against
+// the old one must not run and re-anchor to the pre-navigation page. The
+// settled anchor is dropped too — it describes the page the reader just
+// left, and a transaction scheduled around the navigation must fall back
+// to the engine's live location instead.
+function readerInvalidatePendingLayout() {
+  readerLayoutGeneration += 1;
+  readerSettledCfi = null;
+}
+
+// Navigations currently awaiting their display. Relocations that resolve
+// one are trusted even while layout work is queued: they are the user's
+// destination, not a provisional re-layout landing.
+let readerPendingNavigations = 0;
+
+function readerBeginNavigation() {
+  readerPendingNavigations += 1;
+}
+
+function readerEndNavigation() {
+  readerPendingNavigations = Math.max(0, readerPendingNavigations - 1);
+}
+
+// True while the geometry is known to be mid-change: a re-resolution or
+// engine resize is queued, or a transaction is running. Relocations
+// emitted during this window describe a half-relaid-out book and must not
+// become the reflow anchor.
+function readerLayoutWorkPending() {
+  return !!(
+    readerLayoutInFlight ||
+    readerRelayoutTimer !== null ||
+    readerLayoutUpdateTimer !== null ||
+    readerLayoutFrame !== null
+  );
 }
 
 // Keeps the rendition's column count in step with the resolved policy:
@@ -451,21 +505,6 @@ function readerEffectiveLayoutMode() {
   return readerRequestedLayout;
 }
 
-// A mode change can keep the stage's size unchanged, in which case
-// rendition.resize() does nothing and the visible page would stay on the
-// old column geometry. Re-displaying the settled start CFI re-anchors the
-// passage; Phase 4 adds the navigation generation that makes this safe
-// against concurrent user navigation.
-function readerRestoreCurrentLocation() {
-  if (!readerRendition || !readerOpened) {
-    return;
-  }
-  const cfi = readerStartCfiOf(readerRendition);
-  if (cfi) {
-    readerRendition.display(cfi).catch(() => {});
-  }
-}
-
 // The width of one digit in the book's rendered body font. Measured from
 // a live section when one exists (after typography and font face are
 // applied); the outer document is only a fallback, and a half-em estimate
@@ -524,8 +563,8 @@ function readerMeasureGlyphInDocument(doc) {
 // The stage only re-lays out on window resizes (epub.js listens for those
 // exclusively), so changing the inner viewer's width must force one: without
 // it the columns keep the old pixel width and the next page peeks into the
-// wider viewport, cut off. rendition.resize() re-measures the stage,
-// recomputes the column layout, and re-displays at the current position.
+// wider viewport, cut off. On iOS a resize is all that is needed; on the
+// desktop this schedules a reflow transaction that preserves the passage.
 function readerQueueRelayout() {
   if (!readerOpened || !readerRendition) {
     return;
@@ -533,12 +572,132 @@ function readerQueueRelayout() {
   if (readerRelayoutTimer) {
     clearTimeout(readerRelayoutTimer);
   }
+  if (readerIsDesktop) {
+    // The anchor is read when the transaction starts, not here: the
+    // debounce can span a user navigation, and anchoring to the location
+    // captured before it would drag the reader back. The generation
+    // captured here still lets a newer schedule or navigation cancel it.
+    const rendition = readerRendition;
+    const token = readerNavigationToken;
+    const generation = (readerLayoutGeneration += 1);
+    readerRelayoutTimer = setTimeout(() => {
+      readerRelayoutTimer = null;
+      readerRunLayoutTransaction(generation, token, rendition);
+    }, 120);
+    return;
+  }
   readerRelayoutTimer = setTimeout(() => {
     readerRelayoutTimer = null;
     if (readerRendition) {
       readerRendition.resize();
     }
   }, 120);
+}
+
+// A transaction is only allowed to finish if nothing superseded it: not a
+// newer layout, not a user navigation, not a different rendition.
+function readerLayoutIsCurrent(generation, token, rendition) {
+  return generation === readerLayoutGeneration &&
+    token === readerNavigationToken &&
+    rendition === readerRendition;
+}
+
+// Waits out in-flight navigations (bounded) so a reflow never interleaves
+// with a display that is still resolving. Returns false if the wait timed
+// out or the transaction was superseded while waiting.
+async function readerAwaitIdleNavigation(generation, token, rendition) {
+  const deadline = Date.now() + 2000;
+  while (readerPendingNavigations > 0 && Date.now() < deadline) {
+    if (!readerLayoutIsCurrent(generation, token, rendition)) {
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
+  return readerLayoutIsCurrent(generation, token, rendition);
+}
+
+async function readerRunLayoutTransaction(generation, token, rendition) {
+  if (!(await readerAwaitIdleNavigation(generation, token, rendition))) {
+    // A navigation superseded this reflow. Its own display re-measures the
+    // stage, but re-apply the geometry once the dust settles so a stale
+    // column step cannot survive (an in-section page turn does not
+    // re-measure by itself).
+    readerQueueLayoutUpdate();
+    return;
+  }
+  // The settled anchor, read now: everything before this point is the
+  // reader's real position; everything after it belongs to the new layout.
+  const anchor = readerSettledCfi || readerStartCfiOf(rendition);
+  console.log(`reflow: start generation=${generation} anchor=${anchor}`);
+  readerLayoutInFlight = { generation: generation, token: token, anchor: anchor };
+  try {
+    rendition.resize();
+    await readerWaitForEngineSettle(rendition);
+    if (!readerLayoutIsCurrent(generation, token, rendition)) {
+      console.log(`reflow: superseded generation=${generation} token=${token}`);
+      return;
+    }
+    if (anchor) {
+      await rendition.display(anchor);
+    }
+  } catch (error) {
+    // A failed re-anchor keeps the last settled position and surfaces
+    // through the console. Exactly one attempt: no retry loop.
+    console.error("readerRunLayoutTransaction failed:", error);
+  } finally {
+    if (readerLayoutInFlight && readerLayoutInFlight.generation === generation) {
+      readerLayoutInFlight = null;
+    }
+  }
+  if (!readerLayoutIsCurrent(generation, token, rendition)) {
+    return;
+  }
+  await readerNextFrame(document);
+  readerUpdateSettledCfi();
+  // Publish only the settled location; everything emitted during the
+  // transaction was provisional and deliberately withheld.
+  try {
+    readerReportRelocated(rendition.currentLocation());
+  } catch (error) {}
+}
+
+// epub.js serialises resize/display work through its rendition queue, whose
+// rAF-driven drain is the engine's own settle signal. Capped, because a
+// section that never finishes must not hang the reader.
+async function readerWaitForEngineSettle(rendition) {
+  const queue = rendition.q;
+  const drained = new Promise((resolve) => {
+    const check = () => {
+      if (rendition !== readerRendition || !queue || (queue._q.length === 0 && !queue.running)) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 16);
+    };
+    check();
+  });
+  const capped = new Promise((resolve) => setTimeout(resolve, READER_REFLOW_SETTLE_CAP_MS));
+  await Promise.race([drained, capped]);
+  await readerNextFrame(document);
+  await readerNextFrame(document);
+}
+
+function readerUpdateSettledCfi() {
+  if (readerLayoutInFlight) {
+    return;
+  }
+  readerCaptureSettledCfi();
+}
+
+// Records the page the reader is looking at as the reflow anchor. Called
+// when a navigation has finished (its display resolved), where the live
+// location is authoritative even if a geometry transaction is still
+// queued: the user's page is the page on screen.
+function readerCaptureSettledCfi() {
+  const cfi = readerRendition ? readerStartCfiOf(readerRendition) : null;
+  if (cfi) {
+    readerSettledCfi = cfi;
+  }
 }
 
 // Page layout mode from the shell. Accepted before the book opens: the
@@ -614,6 +773,9 @@ function readerTeardownViewportObserver() {
     clearTimeout(readerRelayoutTimer);
     readerRelayoutTimer = null;
   }
+  // Invalidate any transaction still waiting: the page is going away.
+  readerLayoutGeneration += 1;
+  readerLayoutInFlight = null;
   window.removeEventListener("unload", readerTeardownViewportObserver);
   window.removeEventListener("pagehide", readerTeardownViewportObserver);
 }
@@ -712,8 +874,21 @@ function readerSetFontFace(face) {
 // follow chapter changes made by paging across boundaries and save the
 // reading position.
 function readerReportRelocated(location) {
+  // Withheld while a reflow transaction is mid-flight: the engine emits
+  // locations for the half-relaid-out book, and publishing one would
+  // overwrite the shell's stable anchor with a provisional page.
+  if (readerLayoutInFlight) {
+    return;
+  }
   const start = location && location.start;
   const displayed = (start && start.displayed) || {};
+  // Only a trusted relocation updates the reflow anchor. The engine also
+  // re-displays on its own window-resize handler, and those locations
+  // belong to a layout that is about to be replaced.
+  const trusted = !readerLayoutWorkPending() || readerPendingNavigations > 0;
+  if (start && start.cfi && trusted) {
+    readerSettledCfi = start.cfi;
+  }
   readerPost({
     type: "relocated",
     href: start && start.href ? start.href : null,
@@ -866,20 +1041,28 @@ async function readerDisplayTarget(target) {
   }
   const rendition = readerRendition;
   const token = ++readerNavigationToken;
-  readerCurrentTarget = target || null;
-  // No target at all still means "open the book": epub.js starts at the
-  // first section.
-  const displayed = rendition.display(readerResolveSpineTarget(target));
-  setTimeout(() => console.log("readerOpen: display still pending after 6s"), 6000);
-  await displayed;
-  console.log("readerOpen: display resolved for", target || "chapter start");
+  readerInvalidatePendingLayout();
+  readerBeginNavigation();
+  try {
+    readerCurrentTarget = target || null;
+    // No target at all still means "open the book": epub.js starts at the
+    // first section.
+    const displayed = rendition.display(readerResolveSpineTarget(target));
+    setTimeout(() => console.log("readerOpen: display still pending after 6s"), 6000);
+    await displayed;
+    console.log("readerOpen: display resolved for", target || "chapter start");
+    readerCaptureSettledCfi();
+  } finally {
+    // The destination is on screen; the fragment refinement below is a
+    // second pass that must not keep a reflow waiting on "navigation".
+    readerEndNavigation();
+  }
 
   const hashAt = target ? target.indexOf("#") : -1;
-  if (hashAt === -1) {
+  if (hashAt == -1) {
     return;
   }
   const fragment = target.slice(hashAt + 1);
-
   try {
     const contents = (rendition.getContents() || []).filter(
       (candidate) => candidate && candidate.document && candidate.document.getElementById(fragment),
@@ -903,6 +1086,7 @@ async function readerDisplayTarget(target) {
       return;
     }
     await rendition.display(target);
+    readerCaptureSettledCfi();
   } catch (error) {
     // A dead anchor must not break the reading session.
   }
@@ -954,11 +1138,23 @@ function readerScrollBy(delta) {
     return;
   }
   // Paginated flow has no vertical overflow: j/k step between pages.
-  if (delta > 0) {
-    readerRendition.next().catch(readerShowError);
-  } else if (delta < 0) {
-    readerRendition.prev().catch(readerShowError);
+  if (!delta) {
+    return;
   }
+  // A user page turn is a navigation: it invalidates any pending re-anchor
+  // so a layout transaction cannot drag the reader back to its old page.
+  readerNavigationToken += 1;
+  readerInvalidatePendingLayout();
+  readerBeginNavigation();
+  const done = () => {
+    readerEndNavigation();
+    // The turn finished: whatever page is on screen is the passage a later
+    // reflow must preserve.
+    readerCaptureSettledCfi();
+  };
+  const turn = delta > 0 ? readerRendition.next() : readerRendition.prev();
+  turn.then(done, done);
+  turn.catch(readerShowError);
 }
 
 // `gg`: the start of the chapter being read. When the current chapter began
@@ -984,7 +1180,11 @@ function readerScrollBottom() {
   }
   const location = readerRendition.currentLocation();
   if (location && location.end && location.end.cfi) {
-    readerRendition.display(location.end.cfi).catch(readerShowError);
+    readerNavigationToken += 1;
+    readerInvalidatePendingLayout();
+    const displayed = readerRendition.display(location.end.cfi);
+    displayed.then(readerCaptureSettledCfi, () => {});
+    displayed.catch(readerShowError);
   }
 }
 
@@ -1010,6 +1210,15 @@ window.readerPageLayoutState = function () {
     previousPages: readerPreviousPages,
     glyphWidthPx: readerBodyGlyphWidth(),
     desktop: readerIsDesktop,
+    // True while layout work or a navigation is queued or in flight; tests
+    // wait on this instead of guessing at engine timings.
+    settling: !!(
+      readerLayoutInFlight ||
+      readerRelayoutTimer !== null ||
+      readerLayoutUpdateTimer !== null ||
+      readerLayoutFrame !== null ||
+      readerPendingNavigations > 0
+    ),
   };
 };
 // Capture support (see readerResolveSpineTarget note): highlight a mark's

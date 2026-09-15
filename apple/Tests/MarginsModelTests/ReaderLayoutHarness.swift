@@ -158,11 +158,46 @@ final class ReaderLayoutHarness {
         throw ReaderLayoutHarnessError.timedOut("reader.js to define readerApplyTypography")
     }
 
+    /// Sets the viewport without waiting; for drag-like burst tests.
+    func setViewport(width: Double, height: Double) {
+        webView.setFrameSize(NSSize(width: width, height: height))
+        window?.setContentSize(NSSize(width: width, height: height))
+    }
+
+    /// Waits until the page has no pending layout work, epub.js's queue has
+    /// drained, and the visible text stopped changing.
+    func waitForLayoutSettled(timeout: TimeInterval = 10) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastSet: [String]?
+        var stable = 0
+        while Date() < deadline {
+            let settling = try? await pageLayoutState().settling
+            let depth = try? await evaluate(
+                "readerRendition && readerRendition.q ? readerRendition.q._q.length : -1"
+            ) as? Int
+            let current = (try? await visibleParagraphIDs()) ?? []
+            if settling == false, depth == 0, current == lastSet {
+                stable += 1
+                if stable >= 2 {
+                    return
+                }
+            } else {
+                stable = 0
+            }
+            lastSet = current
+            try await Task.sleep(for: Self.pollInterval)
+        }
+    }
+
+    /// Number of section iframes currently visible on the reading surface.
+    func visibleIframeCount() async throws -> Int {
+        (try await evaluate("window.__marginsTest.visibleIframeCount()")) as? Int ?? -1
+    }
+
     /// Resizes the reading viewport (the WKWebView frame) and waits for the
     /// page to settle on new measured geometry.
     func resize(to size: CGSize, timeout: TimeInterval = 10) async throws {
-        webView.setFrameSize(size)
-        window?.setContentSize(size)
+        setViewport(width: size.width, height: size.height)
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             let current = try? await geometry()
@@ -260,6 +295,11 @@ final class ReaderLayoutHarness {
         consoleLines.last(where: { $0.contains("readerOpen failed:") })
     }
 
+    /// Recent console output; used by diagnostics when a wait times out.
+    func consoleTail(_ count: Int = 20) -> [String] {
+        Array(consoleLines.suffix(count))
+    }
+
     func evaluate(_ script: String, timeout: TimeInterval = 15) async throws -> Any? {
         nonisolated(unsafe) var outcome: Result<Any?, Error>?
         webView.evaluateJavaScript(script) { value, error in
@@ -301,6 +341,8 @@ final class ReaderLayoutHarness {
         var left: Double
         var right: Double
         var width: Double
+        var top: Double
+        var bottom: Double
     }
 
     func visibleParagraphRects() async throws -> [ParagraphRect] {
@@ -424,6 +466,8 @@ final class ReaderLayoutHarness {
         var previousPages: Int
         var glyphWidthPx: Double
         var desktop: Bool
+        /// True while a layout transaction or debounced relayout is pending.
+        var settling: Bool
     }
 
     func pageLayoutState() async throws -> PageLayoutState {
@@ -556,7 +600,14 @@ final class ReaderLayoutHarness {
               var top = frameRect.top + rect.top;
               var bottom = top + rect.height;
               if (right > clipLeft && left < clipRight && bottom > clipTop && top < clipBottom) {
-                rects.push({ id: paragraphs[p].id, left: left, right: right, width: rect.width });
+                rects.push({
+                  id: paragraphs[p].id,
+                  left: left,
+                  right: right,
+                  width: rect.width,
+                  top: top,
+                  bottom: bottom
+                });
               }
             }
           }
@@ -564,6 +615,17 @@ final class ReaderLayoutHarness {
         },
         visibleParagraphIDs: function() {
           return window.__marginsTest.visibleParagraphRects().map(function(r) { return r.id; });
+        },
+        visibleIframeCount: function() {
+          var count = 0;
+          var frames = document.querySelectorAll('iframe');
+          for (var f = 0; f < frames.length; f++) {
+            var rect = frames[f].getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) { continue; }
+            if (window.getComputedStyle(frames[f]).visibility === 'hidden') { continue; }
+            count += 1;
+          }
+          return count;
         }
       };
     })();

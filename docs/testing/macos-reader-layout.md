@@ -125,6 +125,39 @@ layout and RTL stay single at every width. iPhone 17 Pro simulator: the
 fixture renders as a full-width single column with the iOS CSS padding
 (22.4 px), identically to the Phase 1 baseline.
 
+## Reflow transactions (Phase 4)
+
+Every desktop geometry change (viewport, typography, page mode) runs as
+one transaction:
+
+- `readerQueueRelayout` coalesces bursts (120 ms) and records a layout
+  generation plus the navigation token. The anchor is read when the
+  transaction *starts*, not when it is scheduled: a schedule can span a
+  navigation, and a pre-navigation anchor would drag the reader back.
+- The anchor is the last settled page start. Relocations update it only
+  when they are trusted: never mid-transaction, and not while geometry
+  work is queued, because the engine re-displays on its own window-resize
+  handler and those locations belong to the layout being replaced. A
+  navigation that has resolved is always trusted (it is the page on
+  screen), and navigation drops the old anchor outright.
+- A transaction waits out in-flight navigations (bounded), calls
+  `rendition.resize()`, waits for the rendition queue to drain (bounded at
+  500 ms) and then, only if the generation and token still match,
+  re-anchors once with `display(anchor)`. There is no retry loop; a failed
+  re-anchor keeps the last settled position and logs through the console.
+- Relocation reports are withheld for the whole transaction, so the shell
+  never sees a half-relaid-out page; the transaction publishes the settled
+  location once at the end. A user page turn or jump during the
+  transaction bumps the token, so the re-anchor is abandoned and the
+  user's destination wins.
+- `pagehide`/`unload` bump the generation and clear the in-flight state,
+  so a torn-down page cannot finish a transaction.
+
+Covered by `textSizeChangeKeepsPassage`, `modeChangeKeepsPassage`,
+`rapidResizesKeepPassage`, `navigationDuringReflowWins`, and
+`reflowLeavesOneVisibleView` (single visible iframe, no blank page, no
+error page).
+
 ## Native controls (Phase 3)
 
 - `ReaderPageLayout` (`automatic` / `single` / `double`) persists under
@@ -177,6 +210,8 @@ horizontal clipping.
 | Fixed-layout and RTL single-page fallback | automated (passing) |
 | iOS single-page preservation | automated + iPhone 17 Pro simulator screenshot |
 | Requested/effective layout messages and popover fallback state | automated (passing) |
+| Passage preserved through text-size, mode, and rapid width changes | automated (passing) |
+| Navigation during reflow wins; no blank/duplicate views | automated (passing) |
 | Preference round-trip on relaunch | automated (UserDefaults round-trip) |
 | Native window with notes/sidebar open and closed | Phase 6 (hardware available; native app build currently traps in CloudKit — see above) |
 | Fullscreen, large text, theme extremes | Phase 6 |
