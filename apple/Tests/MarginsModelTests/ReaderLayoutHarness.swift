@@ -116,20 +116,26 @@ final class ReaderLayoutHarness {
 
     /// Loads the reader page and applies the app's default macOS typography
     /// (`ReaderPreferences.defaultFontSize` / default line height / default
-    /// line width), matching what `ReaderController.didFinish` does.
+    /// line width), matching what `ReaderController` does. Pass
+    /// `platform: nil` to exercise the iOS page (no desktop policy).
     func load(
         bookID: String = "fixture",
         chapter: String = "ch1.xhtml",
-        typography: (fontSize: Double, lineHeight: Double, lineWidth: Double)? = (110, 1.6, 72)
+        platform: String? = "macos",
+        typography: (fontSize: Double, lineHeight: Double, lineWidth: Double, unit: String)? = (110, 1.6, 72, "%")
     ) async throws {
         var components = URLComponents()
         components.scheme = "margins-reader"
         components.host = "app"
         components.path = "/reader.html"
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "book", value: bookID),
             URLQueryItem(name: "chapter", value: chapter),
         ]
+        if let platform {
+            queryItems.append(URLQueryItem(name: "platform", value: platform))
+        }
+        components.queryItems = queryItems
         guard let url = components.url else {
             throw ReaderLayoutHarnessError.readerOpenFailed("bad reader URL")
         }
@@ -142,13 +148,30 @@ final class ReaderLayoutHarness {
                 "typeof readerApplyTypography === 'function'", timeout: 2
             ) as? Bool, ready {
                 try await evaluate(
-                    "readerApplyTypography(\(typography.fontSize),\(typography.lineHeight),\(typography.lineWidth))"
+                    "readerApplyTypography(\(typography.fontSize),\(typography.lineHeight),\(typography.lineWidth),"
+                        + "'\(typography.unit)')"
                 )
                 return
             }
             try await Task.sleep(for: Self.pollInterval)
         }
         throw ReaderLayoutHarnessError.timedOut("reader.js to define readerApplyTypography")
+    }
+
+    /// Resizes the reading viewport (the WKWebView frame) and waits for the
+    /// page to settle on new measured geometry.
+    func resize(to size: CGSize, timeout: TimeInterval = 10) async throws {
+        webView.setFrameSize(size)
+        window?.setContentSize(size)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let current = try? await geometry()
+            if let current, abs(current.innerWidth - size.width) < 1, current.viewerWidth > 0 {
+                return
+            }
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        throw ReaderLayoutHarnessError.timedOut("viewport resize to \(size)")
     }
 
     /// Waits for a message of `type` matching `predicate`.
@@ -268,6 +291,65 @@ final class ReaderLayoutHarness {
         return (result as? [String]) ?? []
     }
 
+    /// A visible paragraph's rect in outer-window coordinates.
+    struct ParagraphRect: Decodable {
+        var id: String
+        var left: Double
+        var right: Double
+        var width: Double
+    }
+
+    func visibleParagraphRects() async throws -> [ParagraphRect] {
+        guard let json = try await evaluateJSON("window.__marginsTest.visibleParagraphRects()") as? [[String: Any]] else {
+            throw ReaderLayoutHarnessError.javaScript("visibleParagraphRects")
+        }
+        let data = try JSONSerialization.data(withJSONObject: json)
+        return try JSONDecoder().decode([ParagraphRect].self, from: data)
+    }
+
+    /// Waits for the visible paragraph set to differ from `previous`.
+    /// Geometry — not a relocation message — is the settle signal, because
+    /// the page reports relocation from the `rendered` hook before the view
+    /// swap is on screen.
+    func waitForVisibleParagraphChange(
+        from previous: [String],
+        timeout: TimeInterval = 5
+    ) async throws -> [String] {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let current = try? await visibleParagraphIDs(), current != previous {
+                return current
+            }
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        throw ReaderLayoutHarnessError.timedOut("visible paragraphs to change")
+    }
+
+    /// Waits until epub.js's rendition queue has drained and the visible
+    /// text has stopped changing, so a test can issue the next command
+    /// without racing queued page turns.
+    func waitForReaderIdle(timeout: TimeInterval = 5) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastSet: [String]?
+        var stableCount = 0
+        while Date() < deadline {
+            let depth = try? await evaluate(
+                "readerRendition && readerRendition.q ? readerRendition.q._q.length : -1"
+            ) as? Int
+            let current = (try? await visibleParagraphIDs()) ?? []
+            if depth == 0, current == lastSet {
+                stableCount += 1
+                if stableCount >= 2 {
+                    return
+                }
+            } else {
+                stableCount = 0
+            }
+            lastSet = current
+            try await Task.sleep(for: Self.pollInterval)
+        }
+    }
+
     func waitForVisibleParagraph(_ id: String, timeout: TimeInterval = 15) async throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -283,12 +365,35 @@ final class ReaderLayoutHarness {
     struct Geometry: Decodable {
         var innerWidth: Double
         var innerHeight: Double
+        var pageWidth: Double
         var viewerWidth: Double
         var viewerHeight: Double
+        var viewerPaddingLeft: Double
         var stageWidth: Double
         var stageHeight: Double
+        var columnWidth: Double
+        var gap: Double
         var renderedDivisor: Int
         var iframeCount: Int
+    }
+
+    /// Waits for the rendition to report `divisor` columns.
+    func waitForDivisor(_ divisor: Int, timeout: TimeInterval = 10) async throws -> Geometry {
+        let deadline = Date().addingTimeInterval(timeout)
+        var latest: Geometry?
+        while Date() < deadline {
+            let current = try? await geometry()
+            if let current {
+                latest = current
+                if current.renderedDivisor == divisor {
+                    return current
+                }
+            }
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        throw ReaderLayoutHarnessError.timedOut(
+            "divisor \(divisor) (last: \(latest.map { "divisor=\($0.renderedDivisor) viewer=\($0.viewerWidth) stage=\($0.stageWidth)" } ?? "none"))"
+        )
     }
 
     func geometry() async throws -> Geometry {
@@ -297,6 +402,32 @@ final class ReaderLayoutHarness {
         }
         let data = try JSONSerialization.data(withJSONObject: json)
         return try JSONDecoder().decode(Geometry.self, from: data)
+    }
+
+    /// The page's `readerPageLayoutState()`: requested vs effective mode,
+    /// last applied geometry, and the measured glyph width.
+    struct PageLayoutState: Decodable {
+        struct Applied: Decodable {
+            var mode: String
+            var pages: Int
+            var viewerWidthPx: Double
+            var insetX: Double
+        }
+
+        var requested: String
+        var effective: String
+        var applied: Applied?
+        var previousPages: Int
+        var glyphWidthPx: Double
+        var desktop: Bool
+    }
+
+    func pageLayoutState() async throws -> PageLayoutState {
+        guard let json = try await evaluateJSON("window.readerPageLayoutState()") as? [String: Any] else {
+            throw ReaderLayoutHarnessError.javaScript("pageLayoutState")
+        }
+        let data = try JSONSerialization.data(withJSONObject: json)
+        return try JSONDecoder().decode(PageLayoutState.self, from: data)
     }
 
     fileprivate func record(_ body: [String: Any]) {
@@ -364,7 +495,10 @@ final class ReaderLayoutHarness {
       window.__marginsTest = {
         geometry: function() {
           var viewer = document.getElementById('viewer');
+          var page = document.getElementById('page');
           var rect = viewer ? viewer.getBoundingClientRect() : { width: 0, height: 0 };
+          var pageRect = page ? page.getBoundingClientRect() : { width: 0, height: 0 };
+          var style = viewer ? window.getComputedStyle(viewer) : null;
           // `readerRendition` is reader.js's top-level binding; classic
           // scripts share the global lexical scope.
           var rendition = typeof readerRendition === 'undefined' ? null : readerRendition;
@@ -374,20 +508,39 @@ final class ReaderLayoutHarness {
           return {
             innerWidth: window.innerWidth,
             innerHeight: window.innerHeight,
+            pageWidth: pageRect.width,
             viewerWidth: rect.width,
             viewerHeight: rect.height,
+            viewerPaddingLeft: style ? parseFloat(style.paddingLeft) : 0,
             stageWidth: layout ? layout.width : 0,
             stageHeight: layout ? layout.height : 0,
+            columnWidth: layout ? layout.columnWidth : 0,
+            gap: layout ? layout.gap : 0,
             renderedDivisor: layout ? layout.divisor : 0,
             iframeCount: iframes.length
           };
         },
-        visibleParagraphIDs: function() {
-          var ids = [];
+        visibleParagraphRects: function() {
+          var rects = [];
+          // Clip to the reading frame the way the eye does: the viewer's
+          // padding box, not the window. A section iframe is several pages
+          // wide and scrolled inside the stage, so off-page columns keep
+          // valid window coordinates.
+          var viewer = document.getElementById('viewer');
+          var view = viewer ? viewer.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+          var viewerStyle = viewer ? window.getComputedStyle(viewer) : null;
+          var clipLeft = view.left + (viewerStyle ? parseFloat(viewerStyle.paddingLeft) : 0);
+          var clipRight = view.right - (viewerStyle ? parseFloat(viewerStyle.paddingRight) : 0);
+          var clipTop = view.top + (viewerStyle ? parseFloat(viewerStyle.paddingTop) : 0);
+          var clipBottom = view.bottom - (viewerStyle ? parseFloat(viewerStyle.paddingBottom) : 0);
           var frames = document.querySelectorAll('iframe');
           for (var f = 0; f < frames.length; f++) {
             var frame = frames[f];
             var frameRect = frame.getBoundingClientRect();
+            // epub.js hides inactive views with `visibility: hidden`, which
+            // keeps their geometry; skip them explicitly.
+            if (frameRect.width <= 0 || frameRect.height <= 0) { continue; }
+            if (window.getComputedStyle(frame).visibility === 'hidden') { continue; }
             var doc = null;
             try { doc = frame.contentDocument; } catch (e) { continue; }
             if (!doc) { continue; }
@@ -395,13 +548,18 @@ final class ReaderLayoutHarness {
             for (var p = 0; p < paragraphs.length; p++) {
               var rect = paragraphs[p].getBoundingClientRect();
               var left = frameRect.left + rect.left;
+              var right = left + rect.width;
               var top = frameRect.top + rect.top;
-              if (left + rect.width > 0 && left < window.innerWidth && top + rect.height > 0 && top < window.innerHeight) {
-                ids.push(paragraphs[p].id);
+              var bottom = top + rect.height;
+              if (right > clipLeft && left < clipRight && bottom > clipTop && top < clipBottom) {
+                rects.push({ id: paragraphs[p].id, left: left, right: right, width: rect.width });
               }
             }
           }
-          return ids;
+          return rects;
+        },
+        visibleParagraphIDs: function() {
+          return window.__marginsTest.visibleParagraphRects().map(function(r) { return r.id; });
         }
       };
     })();

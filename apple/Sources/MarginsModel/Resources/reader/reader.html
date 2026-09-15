@@ -20,6 +20,12 @@
     background: #1b1a18;
     color: #e6e2da;
   }
+  /* Uncapped reading container: the desktop layout resolves the viewer's
+     width from this element, never from the capped viewer itself, so the
+     ResizeObserver cannot see its own output. */
+  #page {
+    height: 100%;
+  }
   #viewer {
     height: 100%;
     box-sizing: border-box;
@@ -27,6 +33,11 @@
        header (chapter title) and footer (page number) that overlay the
        paper, and showing controls never reflows the page. */
     padding: 2.2rem 1.4rem 2.0rem;
+  }
+  /* Desktop (macOS) spacing: 24 CSS px insets, replaced at runtime by
+     readerApplyPageLayout once the viewport and font are measured. */
+  html.reader-macos #viewer {
+    padding: 24px;
   }
   pre.reader-error {
     margin: 2rem;
@@ -39,9 +50,14 @@
      readerSetTheme (reader.js) owns the runtime switch. -->
 <script>
   (function () {
-    if (new URLSearchParams(window.location.search).get("theme") === "dark") {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("theme") === "dark") {
       document.documentElement.classList.add("reader-dark");
       document.documentElement.style.colorScheme = "dark";
+    }
+    // Desktop spacing is a URL opt-in so iOS keeps its own padding.
+    if (params.get("platform") === "macos") {
+      document.documentElement.classList.add("reader-macos");
     }
   })();
 </script>
@@ -49,7 +65,7 @@
 <script src="epub.min.js"></script>
 </head>
 <body>
-  <div id="viewer"></div>
+  <div id="page"><div id="viewer"></div></div>
   <script src="reader.js"></script>
 </body>
 </html>

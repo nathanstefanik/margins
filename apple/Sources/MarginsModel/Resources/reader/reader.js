@@ -11,6 +11,10 @@ const readerStartHref = readerParams.get("chapter");
 // Saved reading position: an epub.js CFI takes precedence over the chapter
 // href so a resumed book opens on the same page.
 const readerStartCfi = readerParams.get("cfi");
+// Desktop (macOS) opt-in: the URL carries platform=macos, which enables the
+// width-aware one/two-page policy below. iOS omits it and keeps the
+// original full-width single-column behavior.
+const readerIsDesktop = readerParams.get("platform") === "macos";
 
 let readerBook = null;
 let readerRendition = null;
@@ -50,6 +54,47 @@ let readerCurrentTarget = null;
 // The most recent text selection (capture UIs consume and clear it).
 let readerLastSelection = null;
 
+// MARK: Desktop page layout (macOS)
+//
+// One policy, measured from the actual reading viewport (the uncapped
+// #page container, after native sidebar/notes allocation) and the book's
+// rendered body font. See docs/testing/macos-reader-layout.md for the
+// engine contract these calls rely on.
+const READER_DESKTOP_INSET_X = 24;
+const READER_DESKTOP_INSET_Y = 24;
+// Below this viewport width the outer insets shrink before content clips.
+const READER_DESKTOP_NARROW_WIDTH = 320;
+const READER_DESKTOP_NARROW_INSET_X = 8;
+// Whitespace between the two pages; epub.js takes it as the layout gap.
+const READER_DESKTOP_GUTTER = 40;
+// Automatic enters two pages this far above the fit threshold and leaves
+// below the threshold, so dragging a divider cannot flip repeatedly.
+const READER_LAYOUT_HYSTERESIS = 32;
+// Automatic needs a comfortable measure per page; manual Two Pages accepts
+// a tighter one before falling back to a single column.
+const READER_AUTOMATIC_MAX_MEASURE_CH = 56;
+const READER_DOUBLE_MIN_MEASURE_CH = 40;
+// Used only before any section has rendered: half the requested em,
+// a typical digit width for a text face.
+const READER_FALLBACK_GLYPH_EM = 0.5;
+
+// The requested mode: "automatic" | "single" | "double". Stored as it
+// arrives so a call before the book opens is honored when it does.
+let readerRequestedLayout = "automatic";
+// The last geometry actually written to the page, so identical updates are
+// skipped (a state change here can otherwise feed the ResizeObserver).
+let readerAppliedLayout = null;
+// Pages reported by the last resolution; Automatic's hysteresis input.
+let readerPreviousPages = 1;
+// Cached body-font digit width; keyed by the typography/face revision.
+let readerGlyphCache = null;
+let readerViewportObserver = null;
+let readerLayoutUpdateTimer = null;
+let readerLayoutFrame = null;
+// Bumped whenever typography or the typeface changes, so the glyph cache
+// invalidates without re-measuring on every relayout.
+let readerTypographyRevision = 0;
+
 function readerPost(payload) {
   const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.reader;
   if (handler) {
@@ -79,6 +124,9 @@ async function readerOpen() {
     height: "100%",
     flow: "paginated",
     spread: "none",
+    // Desktop gutter: whitespace between the two pages (epub.js otherwise
+    // derives its own even(floor(width/12)) gutter). iOS leaves it unset.
+    gap: readerIsDesktop ? READER_DESKTOP_GUTTER : undefined,
     // epub.js >= 0.3.89 sandboxes section iframes without these. allow-scripts
     // is what lets the internal-link onclick handlers epub.js installs fire;
     // allow-popups lets target="_blank" reach the WKUIDelegate, which opens
@@ -99,6 +147,15 @@ async function readerOpen() {
       // zone logic must see every click (link taps page AND navigate).
       readerAttachTapZone(view.contents.document);
       readerAttachLinks(view.contents.document, section.href);
+    }
+    if (readerIsDesktop && view && view.contents && view.contents.document) {
+      // The body font is only real once a section rendered: re-measure the
+      // digit width and re-resolve, then again once webfonts settle.
+      readerQueueLayoutUpdate();
+      const doc = view.contents.document;
+      if (doc.fonts && doc.fonts.ready) {
+        doc.fonts.ready.then(() => readerQueueLayoutUpdate(), () => {});
+      }
     }
     try {
       readerReportRelocated(readerRendition.currentLocation());
@@ -122,8 +179,12 @@ async function readerOpen() {
   // start.displayed.{page,total}. The reporter existed but was never
   // attached, so the shell's progress stayed nil.
   readerRendition.on("relocated", readerReportRelocated);
-  // Preferences may have arrived before the book finished opening.
-  readerApplyViewerWidth();
+  if (readerIsDesktop) {
+    readerInstallViewportObserver();
+  }
+  // Preferences and the page-layout mode may have arrived before the book
+  // finished opening; this applies the stored state to the fresh rendition.
+  readerApplyPageLayout();
   console.log("readerOpen: rendition created, displaying");
 
   try {
@@ -185,13 +246,20 @@ function readerApplyTypography(fontSize, lineHeight, lineWidthCh, unit) {
     lineHeight: lineHeight,
     lineWidthCh: lineWidthCh,
   };
-  readerApplyViewerWidth();
   if (readerRendition) {
+    // Restyle before measuring: the glyph width must be read from the
+    // section font this call just selected.
     readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
+  }
+  readerTypographyRevision += 1;
+  readerApplyPageLayout();
+  if (readerRendition) {
     readerQueueRelayout();
   }
 }
 
+/// The iOS path, unchanged: the measure is expressed in the *outer*
+/// document's `ch`, and 0 disables the cap (full-width text).
 function readerApplyViewerWidth() {
   const viewer = document.getElementById("viewer");
   if (!viewer || !readerTypography) {
@@ -207,6 +275,230 @@ function readerApplyViewerWidth() {
   } else {
     viewer.style.maxWidth = "none";
     viewer.style.margin = "";
+  }
+}
+
+// pure policy: given the available reading width, the body font's digit
+// width, the selected per-page measure, and the previously rendered page
+// count, decide how many pages fit and how wide the viewer may be.
+//
+// Two pages fit when the whole spread — outer insets, the inter-page
+// gutter, and two pages of `measure` characters — is no wider than the
+// viewport. The viewer is capped at the publisher-like single-page or
+// two-page measure so a very wide window keeps comfortable margins.
+function readerResolveLayout(options) {
+  const opts = options || {};
+  const mode = opts.mode === "single" || opts.mode === "double" ? opts.mode : "automatic";
+  const widthPx = Math.max(0, Number(opts.widthPx) || 0);
+  const glyphWidthPx = Number(opts.glyphWidthPx) > 0
+    ? Number(opts.glyphWidthPx)
+    : READER_FALLBACK_GLYPH_EM * 16;
+  const lineWidthCh = Number(opts.lineWidthCh) > 0 ? Number(opts.lineWidthCh) : 72;
+  const previousPages = opts.previousPages === 2 ? 2 : 1;
+
+  const insetsPx = READER_DESKTOP_INSET_X * 2;
+  const singleCapPx = insetsPx + lineWidthCh * glyphWidthPx;
+  const doubleCapPx = insetsPx + READER_DESKTOP_GUTTER + 2 * lineWidthCh * glyphWidthPx;
+
+  if (mode === "single") {
+    return { pages: 1, viewerWidthPx: Math.min(widthPx, singleCapPx) };
+  }
+
+  const minMeasureCh = mode === "double"
+    ? READER_DOUBLE_MIN_MEASURE_CH
+    : Math.min(lineWidthCh, READER_AUTOMATIC_MAX_MEASURE_CH);
+  const fitWidthPx = insetsPx + READER_DESKTOP_GUTTER + 2 * minMeasureCh * glyphWidthPx;
+  // Automatic's hysteresis: enter two-page 32 CSS px above the fit
+  // threshold, leave below it. Manual Two Pages uses the threshold
+  // directly.
+  const thresholdPx = mode === "double" || previousPages === 2
+    ? fitWidthPx
+    : fitWidthPx + READER_LAYOUT_HYSTERESIS;
+  const pages = widthPx >= thresholdPx ? 2 : 1;
+  const capPx = pages === 2 ? doubleCapPx : singleCapPx;
+  return { pages: pages, viewerWidthPx: Math.min(widthPx, capPx) };
+}
+
+// Applies the resolved layout to the outer page and the rendition. macOS
+// only; iOS keeps readerApplyViewerWidth's original behavior.
+function readerApplyPageLayout() {
+  if (!readerIsDesktop) {
+    readerApplyViewerWidth();
+    return false;
+  }
+  const page = document.getElementById("page");
+  const viewer = document.getElementById("viewer");
+  if (!page || !viewer) {
+    return false;
+  }
+  const availableWidth = page.clientWidth;
+  if (!(availableWidth > 0)) {
+    return false;
+  }
+  const lineWidthCh = readerTypography && readerTypography.lineWidthCh > 0
+    ? readerTypography.lineWidthCh
+    : 0;
+  const mode = readerEffectiveLayoutMode();
+  const resolved = readerResolveLayout({
+    mode: mode,
+    widthPx: availableWidth,
+    glyphWidthPx: readerBodyGlyphWidth(),
+    lineWidthCh: lineWidthCh,
+    previousPages: readerPreviousPages,
+  });
+  const insetX = availableWidth < READER_DESKTOP_NARROW_WIDTH
+    ? READER_DESKTOP_NARROW_INSET_X
+    : READER_DESKTOP_INSET_X;
+  const geometry = {
+    mode: mode,
+    pages: resolved.pages,
+    viewerWidthPx: Math.max(0, Math.round(resolved.viewerWidthPx)),
+    insetX: insetX,
+  };
+  if (readerAppliedLayout &&
+      readerAppliedLayout.pages === geometry.pages &&
+      readerAppliedLayout.viewerWidthPx === geometry.viewerWidthPx &&
+      readerAppliedLayout.insetX === geometry.insetX &&
+      readerAppliedLayout.mode === geometry.mode) {
+    return false;
+  }
+  const pagesChanged = !readerAppliedLayout || readerAppliedLayout.pages !== geometry.pages;
+  readerAppliedLayout = geometry;
+  readerPreviousPages = resolved.pages;
+
+  viewer.style.boxSizing = "border-box";
+  viewer.style.width = "100%";
+  viewer.style.maxWidth = `${geometry.viewerWidthPx}px`;
+  viewer.style.margin = "0 auto";
+  viewer.style.padding = `${READER_DESKTOP_INSET_Y}px ${insetX}px`;
+
+  if (readerRendition) {
+    readerApplyRenditionSpread();
+    if (pagesChanged) {
+      readerRestoreCurrentLocation();
+    }
+    readerQueueRelayout();
+  }
+  return true;
+}
+
+// Keeps the rendition's column count in step with the resolved policy:
+// "auto" with the fit threshold lets epub.js split into two columns only
+// when the stage is wide enough; "none" pins a single column.
+function readerApplyRenditionSpread() {
+  if (!readerRendition || !readerAppliedLayout) {
+    return;
+  }
+  if (readerAppliedLayout.pages === 2) {
+    const measureCh = readerAppliedLayout.mode === "double"
+      ? READER_DOUBLE_MIN_MEASURE_CH
+      : Math.min(
+          readerTypography && readerTypography.lineWidthCh > 0 ? readerTypography.lineWidthCh : 72,
+          READER_AUTOMATIC_MAX_MEASURE_CH,
+        );
+    readerRendition.spread("auto", READER_DESKTOP_GUTTER + 2 * measureCh * readerBodyGlyphWidth());
+  } else {
+    readerRendition.spread("none");
+  }
+}
+
+// Covers and fixed-layout sections keep the publisher's layout; RTL and
+// vertical writing stay single-page until the pinned engine's spread
+// treatment is verified for them. The requested mode is still remembered
+// so a fallback can be reported as a fallback.
+function readerEffectiveLayoutMode() {
+  if (!readerBook) {
+    return readerRequestedLayout;
+  }
+  const metadata = readerBook.package && readerBook.package.metadata
+    ? readerBook.package.metadata
+    : {};
+  if (metadata.layout === "pre-paginated" || metadata.direction === "rtl") {
+    return "single";
+  }
+  if (readerRendition) {
+    const contents = readerRendition.getContents() || [];
+    for (let index = 0; index < contents.length; index += 1) {
+      const doc = contents[index] && contents[index].document;
+      if (!doc || !doc.body || !doc.defaultView) {
+        continue;
+      }
+      const writingMode = doc.defaultView.getComputedStyle(doc.body).writingMode || "";
+      if (writingMode.indexOf("vertical") === 0) {
+        return "single";
+      }
+    }
+  }
+  return readerRequestedLayout;
+}
+
+// A mode change can keep the stage's size unchanged, in which case
+// rendition.resize() does nothing and the visible page would stay on the
+// old column geometry. Re-displaying the settled start CFI re-anchors the
+// passage; Phase 4 adds the navigation generation that makes this safe
+// against concurrent user navigation.
+function readerRestoreCurrentLocation() {
+  if (!readerRendition || !readerOpened) {
+    return;
+  }
+  const cfi = readerStartCfiOf(readerRendition);
+  if (cfi) {
+    readerRendition.display(cfi).catch(() => {});
+  }
+}
+
+// The width of one digit in the book's rendered body font. Measured from
+// a live section when one exists (after typography and font face are
+// applied); the outer document is only a fallback, and a half-em estimate
+// covers the window before the first render.
+function readerBodyGlyphWidth() {
+  const key = `${readerTypographyRevision}|${readerFontFace || "publisher"}`;
+  if (readerGlyphCache && readerGlyphCache.key === key && readerGlyphCache.widthPx > 0) {
+    return readerGlyphCache.widthPx;
+  }
+  let widthPx = 0;
+  if (readerRendition) {
+    const contents = readerRendition.getContents() || [];
+    for (let index = 0; index < contents.length; index += 1) {
+      widthPx = readerMeasureGlyphInDocument(contents[index] && contents[index].document);
+      if (widthPx > 0) {
+        break;
+      }
+    }
+  }
+  if (!(widthPx > 0)) {
+    widthPx = readerFallbackGlyphWidth();
+  }
+  readerGlyphCache = { key: key, widthPx: widthPx };
+  return widthPx;
+}
+
+function readerFallbackGlyphWidth() {
+  const typography = readerTypography;
+  const px = typography
+    ? (typography.unit === "px" ? typography.fontSize : (typography.fontSize / 100) * 16)
+    : 16;
+  return Math.max(1, px * READER_FALLBACK_GLYPH_EM);
+}
+
+// Canvas `measureText` is the only way to read the actual glyph metrics
+// the browser will use; measuring "0" matches the CSS `ch` unit.
+function readerMeasureGlyphInDocument(doc) {
+  try {
+    if (!doc || !doc.body) {
+      return 0;
+    }
+    const canvas = doc.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return 0;
+    }
+    const style = doc.defaultView.getComputedStyle(doc.body);
+    context.font = `${style.fontStyle || "normal"} ${style.fontWeight || "400"} ${style.fontSize || "16px"} ${style.fontFamily || "serif"}`;
+    const width = context.measureText("0").width;
+    return Number.isFinite(width) && width > 0 ? width : 0;
+  } catch (error) {
+    return 0;
   }
 }
 
@@ -228,6 +520,83 @@ function readerQueueRelayout() {
       readerRendition.resize();
     }
   }, 120);
+}
+
+// Page layout mode from the shell. Accepted before the book opens: the
+// value is stored and applied as soon as the rendition exists. Unknown
+// values fall back to Automatic.
+function readerSetPageLayout(mode) {
+  readerRequestedLayout = mode === "single" || mode === "double" ? mode : "automatic";
+  readerQueueLayoutUpdate();
+}
+
+// Debounced layout update for events that can arrive in bursts while the
+// page is still churning (a section rendering, web fonts settling).
+function readerQueueLayoutUpdate() {
+  if (!readerIsDesktop || !readerOpened) {
+    return;
+  }
+  if (readerLayoutUpdateTimer) {
+    clearTimeout(readerLayoutUpdateTimer);
+  }
+  readerLayoutUpdateTimer = setTimeout(() => {
+    readerLayoutUpdateTimer = null;
+    readerApplyPageLayout();
+  }, 120);
+}
+
+// One resolution per animation frame for continuous viewport drags. The
+// resolution itself is cheap (the glyph width is cached) and applying it
+// before epub.js's own 50 ms window-resize handler keeps the engine's
+// divisor in step with the policy during the drag.
+function readerScheduleLayoutUpdate() {
+  if (!readerIsDesktop || !readerOpened) {
+    return;
+  }
+  if (readerLayoutFrame) {
+    return;
+  }
+  readerLayoutFrame = requestAnimationFrame(() => {
+    readerLayoutFrame = null;
+    readerApplyPageLayout();
+  });
+}
+
+// Observes the uncapped #page container, never the capped #viewer: an
+// observer on the viewer would see its own width changes and loop.
+function readerInstallViewportObserver() {
+  if (readerViewportObserver || typeof ResizeObserver === "undefined") {
+    return;
+  }
+  const page = document.getElementById("page");
+  if (!page) {
+    return;
+  }
+  readerViewportObserver = new ResizeObserver(() => readerScheduleLayoutUpdate());
+  readerViewportObserver.observe(page);
+  window.addEventListener("unload", readerTeardownViewportObserver);
+  window.addEventListener("pagehide", readerTeardownViewportObserver);
+}
+
+function readerTeardownViewportObserver() {
+  if (readerViewportObserver) {
+    readerViewportObserver.disconnect();
+    readerViewportObserver = null;
+  }
+  if (readerLayoutUpdateTimer) {
+    clearTimeout(readerLayoutUpdateTimer);
+    readerLayoutUpdateTimer = null;
+  }
+  if (readerLayoutFrame) {
+    cancelAnimationFrame(readerLayoutFrame);
+    readerLayoutFrame = null;
+  }
+  if (readerRelayoutTimer) {
+    clearTimeout(readerRelayoutTimer);
+    readerRelayoutTimer = null;
+  }
+  window.removeEventListener("unload", readerTeardownViewportObserver);
+  window.removeEventListener("pagehide", readerTeardownViewportObserver);
 }
 
 // Theme (called from Swift): swap the surface palette at runtime. The
@@ -310,7 +679,11 @@ function readerSetFontFace(face) {
   readerFontFace = Object.prototype.hasOwnProperty.call(READER_FONT_FACES, face) ? face : null;
   if (readerRendition) {
     readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
-    // Different glyphs re-break lines; the column count can change.
+  }
+  readerTypographyRevision += 1;
+  // Different glyphs re-break lines; the column count can change.
+  readerApplyPageLayout();
+  if (readerRendition) {
     readerQueueRelayout();
   }
 }
@@ -605,6 +978,21 @@ window.readerApplyTypography = readerApplyTypography;
 window.readerSetFontFace = readerSetFontFace;
 window.readerSetTheme = readerApplyTheme;
 window.readerRelayout = readerQueueRelayout;
+// Desktop layout API: the shell selects the mode; the page resolves the
+// effective geometry. Exposed resolver is pure and used by the tests'
+// numeric policy cases.
+window.readerSetPageLayout = readerSetPageLayout;
+window.readerResolveLayout = readerResolveLayout;
+window.readerPageLayoutState = function () {
+  return {
+    requested: readerRequestedLayout,
+    effective: readerEffectiveLayoutMode(),
+    applied: readerAppliedLayout,
+    previousPages: readerPreviousPages,
+    glyphWidthPx: readerBodyGlyphWidth(),
+    desktop: readerIsDesktop,
+  };
+};
 // Capture support (see readerResolveSpineTarget note): highlight a mark's
 // CFI range (epub.js dedupes by range), collapse the active selection, and
 // hand back the current page's CFI for page-anchored marks.

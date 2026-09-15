@@ -4,13 +4,8 @@ import Foundation
 import Testing
 import MarginsModel
 
-/// Phase 1 acceptance cases: the fixture harness drives the real reader
-/// page through opening, CFI navigation, and paging. The geometry these
-/// cases record is the one-page baseline the layout policy must preserve
-/// at `spread: "none"`.
-///
-/// Serialized: each case starts a WebKit content process, and the suite
-/// runs inside one shared test process.
+/// Reader-page acceptance cases driven through the real vendored renderer
+/// in a WKWebView. Serialized: each case starts a WebKit content process.
 @Suite("Reader layout integration", .serialized)
 @MainActor
 struct ReaderLayoutIntegrationTests {
@@ -21,6 +16,13 @@ struct ReaderLayoutIntegrationTests {
     ) throws -> ReaderLayoutHarness {
         try ReaderLayoutHarness(fixture: fixture, viewport: CGSize(width: width, height: height))
     }
+
+    private func jsLiteral(_ value: String) -> String {
+        let data = try! JSONEncoder().encode(value)
+        return String(data: data, encoding: .utf8)!
+    }
+
+    // MARK: Opening and navigation
 
     @Test("the reflowable fixture opens and reports a settled relocation")
     func reflowableFixtureOpens() async throws {
@@ -88,66 +90,266 @@ struct ReaderLayoutIntegrationTests {
         #expect(Set(visible).intersection(reopenedVisible).isEmpty == false)
     }
 
-    @Test("the RTL fixture opens and pages forward")
-    func rtlFixtureOpens() async throws {
-        let harness = try makeHarness(.rtl)
-        defer { harness.dismantle() }
-        try await harness.load()
-        let first = try await harness.waitForRelocation(after: 0)
-        #expect((first["href"] as? String)?.hasSuffix("ch1.xhtml") == true)
-        #expect((first["totalPages"] as? Int ?? 0) > 0)
-        #expect(try await harness.visibleParagraphIDs().isEmpty == false)
+    // MARK: Pure layout policy (the numeric contract)
 
-        try await harness.evaluate("readerScrollBy(1)")
-        let second = try await harness.waitForRelocationChange(from: first)
-        #expect(second["cfi"] as? String != first["cfi"] as? String)
-    }
-
-    @Test("the fixed-layout fixture opens")
-    func fixedLayoutFixtureOpens() async throws {
-        let harness = try makeHarness(.fixedLayout)
-        defer { harness.dismantle() }
-        try await harness.load(chapter: "page1.xhtml")
-        let relocation = try await harness.waitForRelocation(after: 0)
-        #expect((relocation["cfi"] as? String)?.isEmpty == false)
-        #expect(try await harness.visibleParagraphIDs().isEmpty == false)
-    }
-
-    /// The one-page baseline. These viewports are test dimensions, not
-    /// claimed hardware resolutions; the measured values feed
-    /// docs/testing/macos-reader-layout.md.
-    @Test(
-        "one-page baselines hold across content viewports",
-        arguments: [
-            (600.0, 650.0),
-            (900.0, 700.0),
-            (1200.0, 760.0),
-            (1440.0, 820.0),
-        ]
-    )
-    func onePageBaselines(width: Double, height: Double) async throws {
-        let harness = try makeHarness(width: width, height: height)
+    @Test("the pure resolver implements the documented policy cases")
+    func pureResolverContract() async throws {
+        let harness = try makeHarness()
         defer { harness.dismantle() }
         try await harness.load()
         _ = try await harness.waitForRelocation(after: 0)
 
-        let geometry = try await harness.geometry()
-        // The stage is inside the viewer's padding; it can never be wider
-        // than the viewport it lives in.
-        #expect(geometry.viewerWidth <= geometry.innerWidth + 1)
-        #expect(geometry.stageWidth <= geometry.viewerWidth + 1)
-        // No horizontal clipping of the outer page.
-        let overflow = try await harness.evaluate(
-            "document.documentElement.scrollWidth - window.innerWidth"
+        let cases: [(String, Int)] = [
+            ("{mode:'automatic',widthPx:1016,glyphWidthPx:8,lineWidthCh:72,previousPages:1}", 2),
+            ("{mode:'automatic',widthPx:983,glyphWidthPx:8,lineWidthCh:72,previousPages:2}", 1),
+            ("{mode:'single',widthPx:1400,glyphWidthPx:8,lineWidthCh:72,previousPages:1}", 1),
+            ("{mode:'double',widthPx:728,glyphWidthPx:8,lineWidthCh:72,previousPages:1}", 2),
+            ("{mode:'double',widthPx:727,glyphWidthPx:8,lineWidthCh:72,previousPages:1}", 1),
+        ]
+        for (options, expected) in cases {
+            let pages = try await harness.evaluate(
+                "window.readerResolveLayout(\(options)).pages"
+            ) as? Int
+            #expect(pages == expected, "policy case \(options)")
+        }
+        // The viewer cap keeps the selected measure: single page = 48 +
+        // lineWidthCh * glyph; two pages add the gutter and a second page.
+        let singleWidth = try await harness.evaluate(
+            "window.readerResolveLayout({mode:'single',widthPx:1400,glyphWidthPx:8,lineWidthCh:72}).viewerWidthPx"
         ) as? Double
-        #expect((overflow ?? 0) <= 1)
-        // Baseline behavior: one column, no spread.
-        #expect(geometry.renderedDivisor == 1)
+        #expect(singleWidth == 624)
+        let doubleWidth = try await harness.evaluate(
+            "window.readerResolveLayout({mode:'double',widthPx:1400,glyphWidthPx:8,lineWidthCh:72}).viewerWidthPx"
+        ) as? Double
+        #expect(doubleWidth == 1240)
     }
 
-    private func jsLiteral(_ value: String) -> String {
-        let data = try! JSONEncoder().encode(value)
-        return String(data: data, encoding: .utf8)!
+    // MARK: Adaptive geometry
+
+    @Test("narrow Automatic renders one column and wide Automatic two")
+    func automaticRespondsToWidth() async throws {
+        let harness = try makeHarness(width: 600, height: 650)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+
+        let narrow = try await harness.waitForDivisor(1)
+        // One page: the measure spans the stage minus epub.js's gap/2 body
+        // padding on each side.
+        let narrowRects = try await harness.visibleParagraphRects()
+        let narrowMeasure = try #require(narrowRects.first?.width)
+        #expect(abs(narrowMeasure - (narrow.stageWidth - 40)) < 1)
+
+        try await harness.resize(to: CGSize(width: 1400, height: 800))
+        let wide = try await harness.waitForDivisor(2)
+        // Two pages: each measure is half the stage after the outer body
+        // padding and the fixed 40 px gutter.
+        #expect(abs(wide.gap - 40) < 1)
+        let wideRects = try await harness.visibleParagraphRects()
+        #expect(wideRects.count >= 2)
+        let widest = try #require(wideRects.map(\.width).max())
+        #expect(abs(widest - (wide.stageWidth - 80) / 2) < 1)
+        // Pages fill the whole viewer minus the outer insets.
+        #expect(abs(wide.stageWidth - (wide.viewerWidth - 2 * wide.viewerPaddingLeft)) < 1)
+        // Both columns sit inside the centered viewer's content box.
+        let viewerLeft = (wide.innerWidth - wide.viewerWidth) / 2
+        let lefts = wideRects.map(\.left)
+        let rights = wideRects.map(\.right)
+        #expect((lefts.min() ?? 0) >= viewerLeft + wide.viewerPaddingLeft - 1)
+        #expect((rights.max() ?? 0) <= viewerLeft + wide.viewerWidth - wide.viewerPaddingLeft + 2)
+    }
+
+    @Test("One Page stays single and centered even in a wide viewport")
+    func singleModeStaysSingle() async throws {
+        let harness = try makeHarness(width: 1400, height: 800)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+
+        try await harness.evaluate("readerSetPageLayout('single')")
+        let geometry = try await harness.waitForDivisor(1)
+        // Centered: equal space on both sides.
+        let margins = try await harness.evaluate(
+            "window.innerWidth - document.getElementById('viewer').getBoundingClientRect().right"
+        ) as? Double
+        let left = try await harness.evaluate(
+            "document.getElementById('viewer').getBoundingClientRect().left"
+        ) as? Double
+        #expect(abs((margins ?? 0) - (left ?? 0)) < 1)
+        #expect(geometry.viewerWidth < geometry.innerWidth)
+        let rects = try await harness.visibleParagraphRects()
+        let measure = try #require(rects.first?.width)
+        #expect(abs(measure - (geometry.stageWidth - 40)) < 1)
+    }
+
+    @Test("Two Pages falls back to one when the measure cannot fit")
+    func doubleModeFallsBack() async throws {
+        let harness = try makeHarness(width: 600, height: 650)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+
+        try await harness.evaluate("readerSetPageLayout('double')")
+        let narrow = try await harness.waitForDivisor(1)
+        #expect(narrow.renderedDivisor == 1)
+
+        try await harness.resize(to: CGSize(width: 1000, height: 700))
+        let wide = try await harness.waitForDivisor(2)
+        #expect(wide.gap == 40)
+    }
+
+    @Test("a larger body font can force Automatic back to one page")
+    func largeTextTriggersFallback() async throws {
+        let harness = try makeHarness(width: 1440, height: 820)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(2)
+
+        try await harness.evaluate("readerApplyTypography(200,1.6,72,'%')")
+        _ = try await harness.waitForDivisor(1)
+
+        // Back to the default size: the wider viewport fits two pages again.
+        try await harness.evaluate("readerApplyTypography(110,1.6,72,'%')")
+        _ = try await harness.waitForDivisor(2)
+    }
+
+    @Test("Automatic uses hysteresis around the fit threshold")
+    func automaticHysteresis() async throws {
+        let harness = try makeHarness(width: 1400, height: 820)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(2)
+
+        let glyph = try await glyphWidth(harness)
+        let lineWidthCh = try await advertisedLineWidth(harness)
+        let measure = min(lineWidthCh, 56)
+        let fit = (48 + 40 + 2 * measure * glyph).rounded(.down)
+
+        // Just below the fit threshold after two pages: leave to one.
+        try await harness.resize(to: CGSize(width: fit - 2, height: 700))
+        _ = try await harness.waitForDivisor(1)
+
+        // Eight px above the fit threshold, but not 32 above: stay single.
+        // The engine's own 50 ms resize handler can transiently re-split
+        // before the policy pins spread "none", so assert after it settles.
+        try await harness.resize(to: CGSize(width: fit + 8, height: 700))
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(try await harness.geometry().renderedDivisor == 1)
+
+        // Another 40 px up puts it past the hysteresis threshold: two.
+        try await harness.resize(to: CGSize(width: fit + 48, height: 700))
+        _ = try await harness.waitForDivisor(2)
+    }
+
+    @Test("fixed-layout and RTL content fall back to a single page")
+    func unsupportedContentStaysSingle() async throws {
+        for (fixture, chapter) in [
+            (ReaderLayoutFixture.fixedLayout, "page1.xhtml"),
+            (ReaderLayoutFixture.rtl, "ch1.xhtml"),
+        ] {
+            let harness = try makeHarness(fixture, width: 1440, height: 820)
+            defer { harness.dismantle() }
+            try await harness.load(chapter: chapter)
+            _ = try await harness.waitForRelocation(after: 0)
+            let geometry = try await harness.waitForDivisor(1)
+            #expect(geometry.renderedDivisor == 1)
+
+            try await harness.evaluate("readerSetPageLayout('double')")
+            try await Task.sleep(for: .milliseconds(400))
+            #expect(try await harness.geometry().renderedDivisor == 1)
+            let state = try await harness.pageLayoutState()
+            #expect(state.applied?.pages == 1)
+        }
+    }
+
+    // MARK: iOS preservation
+
+    @Test("the iOS page keeps its full-width single-column behavior")
+    func iosPageIsUnchanged() async throws {
+        let harness = try makeHarness(width: 1200, height: 760)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        _ = try await harness.waitForRelocation(after: 0)
+
+        let geometry = try await harness.geometry()
+        #expect(geometry.renderedDivisor == 1)
+        #expect(abs(geometry.columnWidth - geometry.stageWidth) < 1)
+        // lineWidthCh = 0 disables the measure: the viewer fills the page.
+        #expect(abs(geometry.viewerWidth - geometry.innerWidth) < 1)
+        // iOS spacing is unchanged: the CSS 1.4rem padding, not 24 px.
+        #expect(abs(geometry.viewerPaddingLeft - 22.4) < 0.5)
+        // The engine is never asked for two columns on iOS.
+        let spread = try await harness.evaluate("readerRendition.settings.spread") as? String
+        #expect(spread == "none")
+        #expect(try await harness.visibleParagraphIDs().isEmpty == false)
+    }
+
+    // MARK: Page traversal over the fixture
+
+    @Test("page turns traverse every paragraph in order across chapter boundaries")
+    func pageTurnsCoverEveryParagraph() async throws {
+        let harness = try makeHarness(width: 900, height: 700)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        // Let the initial typography measurement and its debounced relayout
+        // settle before walking the book.
+        _ = try await harness.waitForDivisor(1)
+        try await Task.sleep(for: .milliseconds(300))
+
+        var observed: [String] = []
+        func appendVisible(_ ids: [String]) {
+            for id in ids where observed.last != id {
+                observed.append(id)
+            }
+        }
+        var visible = try await harness.visibleParagraphIDs()
+        appendVisible(visible)
+
+        // Forward until the last section's final paragraph is on screen or
+        // two consecutive turns stop changing the visible text (end of book).
+        var stalled = 0
+        for _ in 0..<40 {
+            try await harness.evaluate("readerScrollBy(1)")
+            do {
+                visible = try await harness.waitForVisibleParagraphChange(from: visible, timeout: 3)
+                // Let the rendition queue drain before the next turn:
+                // visibility can flip while the engine still has a
+                // cross-section append queued.
+                try await harness.waitForReaderIdle()
+                visible = try await harness.visibleParagraphIDs()
+                appendVisible(visible)
+            } catch {
+                stalled += 1
+                if stalled >= 2 { break }
+                continue
+            }
+            if observed.contains("p-5-03") { break }
+        }
+
+        var expected: [String] = []
+        for section in 1...5 {
+            let count = section == 5 ? 3 : 8
+            for index in 1...count {
+                expected.append(String(format: "p-%d-%02d", section, index))
+            }
+            // The cross-section link paragraph sits after the last
+            // paragraph of section one.
+            if section == 1 {
+                expected.append("link-to-ch3")
+            }
+        }
+        #expect(observed == expected, "saw \(observed)")
+    }
+
+    private func glyphWidth(_ harness: ReaderLayoutHarness) async throws -> Double {
+        try await harness.pageLayoutState().glyphWidthPx
+    }
+
+    private func advertisedLineWidth(_ harness: ReaderLayoutHarness) async throws -> Double {
+        try await harness.evaluate("readerTypography.lineWidthCh") as? Double ?? 72
     }
 }
 #endif

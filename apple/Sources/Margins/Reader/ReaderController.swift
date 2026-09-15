@@ -184,6 +184,10 @@ final class ReaderController: NSObject {
             // Carried in the URL so reader.html can paint the right paper
             // before readerSetTheme arrives (no cream flash in dark).
             URLQueryItem(name: "theme", value: reader.preferences.theme.rawValue),
+            // Desktop opt-in: enables the width-aware one/two-page policy
+            // (and desktop spacing). iOS deliberately omits it. Phase 3
+            // carries the persisted mode here too.
+            URLQueryItem(name: "platform", value: "macos"),
         ]
         if let cfi = reader.resumeCfi {
             queryItems.append(URLQueryItem(name: "cfi", value: cfi))
@@ -213,6 +217,9 @@ extension ReaderController: WKNavigationDelegate {
         // this stores the current preferences for when the rendition appears.
         applyTheme()
         applyTypography()
+        // Phase 2 ships the automatic policy; Phase 3 replaces this literal
+        // with the persisted preference sent as the page loads.
+        evaluate("readerSetPageLayout(\(Self.javaScriptLiteral("automatic")))")
     }
 }
 

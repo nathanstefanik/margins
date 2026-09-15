@@ -77,6 +77,54 @@ Audited in the vendored `epub.min.js` before Phase 2 relied on it:
   displays, page turns, and completed re-layouts. The page reports both
   through the `reader` message handler.
 
+## Desktop policy (Phase 2)
+
+The page opts into desktop behavior through the URL (`platform=macos`, sent
+only by the macOS bridge). iOS never sets it and retains the original
+`spread: "none"` full-width column.
+
+- `window.readerSetPageLayout(mode)` accepts `automatic` (default),
+  `single`, or `double` and stores the value if it arrives before the book
+  opens. Unknown values resolve to Automatic.
+- The effective mode is downgraded to `single` for content the pinned
+  engine's spread treatment is not verified for: fixed-layout packages
+  (`rendition:layout = pre-paginated`), `page-progression-direction=rtl`,
+  and vertical writing modes.
+- `window.readerResolveLayout({mode, widthPx, glyphWidthPx, lineWidthCh,
+  previousPages})` is the pure policy. With `glyphWidthPx = 8`,
+  `lineWidthCh = 72`: `automatic,previousPages=1,width=1016 => 2`;
+  `automatic,previousPages=2,width=983 => 1`; `single => 1`;
+  `double,width=728 => 2`; `double,width=727 => 1`. The viewer cap is
+  `48 + lineWidthCh * glyph` for one page and `48 + 40 + 2 * lineWidthCh *
+  glyph` for two, where 48 is the total outer inset and 40 the gutter.
+- Automatic enters two pages 32 CSS px above the fit threshold and leaves
+  below the threshold; Two Pages uses the fit threshold directly. The fit
+  width is `48 + 40 + 2 * min(lineWidthCh, 56) * glyph` for Automatic and
+  `48 + 40 + 2 * 40 * glyph` for Two Pages.
+- The glyph width is measured with canvas `measureText("0")` against the
+  rendered section's body font (matching CSS `ch`), re-measured after
+  re-styling and `document.fonts.ready`. Before any section renders the
+  page uses half the requested em.
+- `#viewer` is wrapped in an uncapped `#page` container; a
+  `ResizeObserver` on `#page` (never on the capped viewer) coalesces to one
+  resolution per animation frame. Identical geometry is skipped.
+- The gutter is passed to epub.js at rendition creation (`gap: 40`). Its
+  `Contents.columns()` then applies `gap/2` horizontal body padding on
+  each side *and* a `column-gap` of `gap`, so the rendered measure is
+  `(stageWidth - 80) / 2` per page rather than the `(stageWidth - 40) / 2`
+  a hand-rolled gutter would give. At the cap this reads ~2 characters
+  below `lineWidthCh`; the outer margins and the inter-page whitespace are
+  symmetric, which the paired screenshot check confirms. Phase 6 revisits
+  this if readability at the extremes disagrees.
+
+Phase 2 measures (MacBook Air M5, macOS 26): at 1400 CSS px Automatic
+renders two columns with a 40 px gutter and 24 px outer insets; at 600 px
+it renders one. Two Pages falls back to one at 600 px and succeeds at
+1000 px; 200 % text forces Automatic back to one page at 1440 px. Fixed
+layout and RTL stay single at every width. iPhone 17 Pro simulator: the
+fixture renders as a full-width single column with the iOS CSS padding
+(22.4 px), identically to the Phase 1 baseline.
+
 ## Baseline (Phase 1, `spread: "none"`, 110 % / 1.6 / 72 ch)
 
 Measured by the harness on macOS 26 (MacBook Air M5, Mac17,4) with the
@@ -101,8 +149,12 @@ horizontal clipping.
 | Item | Status |
 | --- | --- |
 | Deterministic open, CFI navigation, next/prev with fixtures | automated (passing) |
-| One-page geometry at 600/900/1200/1440 CSS px | automated (passing) |
-| Two-page behavior | absent by design until Phase 2 |
+| One-page geometry at 600/900/1200/1440 CSS px | superseded by the adaptive cases in Phase 2 |
+| Adaptive single/two-page policy, fallback, hysteresis, large text | automated (passing) |
+| Pure policy numeric contract | automated (passing) |
+| Page turns cover every fixture paragraph in order | automated (passing) |
+| Fixed-layout and RTL single-page fallback | automated (passing) |
+| iOS single-page preservation | automated + iPhone 17 Pro simulator screenshot |
 | Native window with notes/sidebar open and closed | Phase 6 (hardware: MacBook Air M5, Mac17,4 available) |
 | Fullscreen, large text, theme extremes | Phase 6 |
-| iPhone/iPad single-page preservation | Phase 6 (`make ios-build` + simulator) |
+| iPhone/iPad, narrow/wide sizes | Phase 6 |
