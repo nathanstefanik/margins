@@ -8,10 +8,16 @@ import MarginsCore
 public struct ReaderProgress: Equatable, Sendable {
     public var page: Int
     public var totalPages: Int
+    /// Last page of the visible range when the renderer verified both
+    /// endpoints inside one section (a two-page spread). nil for a single
+    /// page, an unverified endpoint, or a spread that crosses sections.
+    /// Display state only: the persisted anchor stays the start CFI.
+    public var endPage: Int?
 
-    public init(page: Int, totalPages: Int) {
+    public init(page: Int, totalPages: Int, endPage: Int? = nil) {
         self.page = page
         self.totalPages = totalPages
+        self.endPage = endPage
     }
 }
 
@@ -38,6 +44,24 @@ public final class ReaderModel {
     /// resume semantics (Enter / double-click / Read). Cleared by any
     /// explicit `open(book:chapter:)` jump and on close.
     public private(set) var resumeCfi: String?
+
+    #if os(macOS)
+    /// How many pages the renderer actually laid out (1 or 2), reported by
+    /// the page after each layout resolution. Transient display state for
+    /// the typography popover's fallback note; nil while loading or when
+    /// the book is closed, so the UI never claims a fallback it cannot see.
+    public private(set) var effectivePageCount: Int?
+
+    /// A `layoutChanged` message from the renderer. Ignored unless the
+    /// requested mode is known and the count is one or two: a malformed or
+    /// stale payload must not change what the popover shows.
+    public func layoutChanged(requested: String, pages: Int) {
+        guard ReaderPageLayout(rawValue: requested) != nil, (1...2).contains(pages) else {
+            return
+        }
+        effectivePageCount = pages
+    }
+    #endif
 
     /// Fragment for the current chapter when an outline row targets a
     /// section other than the chapter's first TOC entry. Cleared whenever
@@ -76,6 +100,12 @@ public final class ReaderModel {
         resumeCfi = nil
         progress = nil
         currentCfi = nil
+        currentEndCfi = nil
+        #if os(macOS)
+        // The renderer will report again once it has re-resolved; keeping
+        // the old count would leave a stale fallback note in the popover.
+        effectivePageCount = nil
+        #endif
         if bookChanged {
             bookmarks = []
         }
@@ -116,6 +146,10 @@ public final class ReaderModel {
         noteSaveStatus = .idle
         bookmarks = []
         currentCfi = nil
+        currentEndCfi = nil
+        #if os(macOS)
+        effectivePageCount = nil
+        #endif
     }
 
     /// Advances to the next chapter, if any; returns it.
@@ -146,13 +180,39 @@ public final class ReaderModel {
     /// event: updates the progress footer, follows the chapter when the
     /// renderer moved across a section boundary (e.g. paging past the end
     /// of a chapter with j/k), and schedules the debounced position save.
-    public func relocated(page: Int, totalPages: Int, href: String?, cfi: String?) {
+    public func relocated(
+        page: Int,
+        totalPages: Int,
+        href: String?,
+        cfi: String?,
+        endPage: Int? = nil,
+        endHref: String? = nil,
+        endCfi: String? = nil
+    ) {
         let safeTotal = max(totalPages, 0)
+        let startChapter = href.flatMap { rawHref in
+            book.flatMap { meta in Self.chapter(forHref: rawHref, in: meta) }
+        }
+        // A range is only believable when both endpoints resolve to the
+        // section on screen and the end page is inside its page count. The
+        // engine reports per-section pages, so anything else (a spread
+        // crossing a chapter boundary) falls back to start-page progress.
+        let verifiedEndPage: Int? = {
+            guard let endPage,
+                  let endHref,
+                  let endChapter = book.flatMap({ Self.chapter(forHref: endHref, in: $0) }),
+                  endChapter.key == startChapter?.key,
+                  endPage >= page,
+                  endPage <= safeTotal
+            else { return nil }
+            return endPage
+        }()
         progress = ReaderProgress(
             page: min(max(page, 1), max(safeTotal, 1)),
-            totalPages: safeTotal
+            totalPages: safeTotal,
+            endPage: verifiedEndPage
         )
-        if let href, let book, let match = Self.chapter(forHref: href, in: book) {
+        if let href, let match = startChapter {
             if match.key != chapter?.key {
                 flushNoteSave()
                 jumpFragmentOverride = nil
@@ -160,6 +220,9 @@ public final class ReaderModel {
             }
         }
         currentCfi = cfi
+        // Transient, like `currentCfi`: the visible range explains the
+        // current spread to the bookmark affordance; it is never stored.
+        currentEndCfi = verifiedEndPage == nil ? nil : endCfi
         schedulePositionSave(cfi: cfi)
     }
 
@@ -243,10 +306,18 @@ public final class ReaderModel {
         )
     }
 
-    /// True when a pin already sits on this page.
+    /// True when a pin already sits on this page — either the page the
+    /// spread starts on or its verified second page, so a bookmark stays
+    /// recognized when a layout change turns its page into the right page
+    /// of a spread.
     public var pageIsBookmarked: Bool {
         guard let chapter else { return false }
-        return bookmarks.contains { $0.isAt(chapterKey: chapter.key, cfi: currentCfi) }
+        return bookmarks.contains {
+            $0.isAt(chapterKey: chapter.key, cfi: currentCfi)
+                // `isAt` treats two absent CFIs as equal, so only consult
+                // the second page when the renderer gave it a real CFI.
+                || (currentEndCfi != nil && $0.isAt(chapterKey: chapter.key, cfi: currentEndCfi))
+        }
     }
 
     // MARK: Reading position persistence
@@ -329,6 +400,9 @@ public final class ReaderModel {
     public private(set) var bookmarks: [Bookmark] = []
     /// Last relocated CFI, used when dropping a pin at the current page.
     public private(set) var currentCfi: String?
+    /// Start CFI of the last page of a verified visible spread, so a pin
+    /// dropped there still reads as the current page. Transient.
+    public private(set) var currentEndCfi: String?
 
     /// Called (off the main actor) with book id, chapter key, and body once
     /// the editor content settled. Wired at app startup to the library.

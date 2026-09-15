@@ -1,20 +1,51 @@
 import SwiftUI
 import MarginsModel
 
+/// The sidebar width the window opens with. The system default is
+/// narrower, which leaves the reading surface lopsided against the
+/// library; 320 keeps the two sides balanced at the reader's default
+/// measure and the user can still drag within the bounds.
+private let sidebarWidth: (min: CGFloat, ideal: CGFloat, max: CGFloat) = (260, 320, 440)
+
+/// Exposes the split view's column visibility to the menu commands so
+/// ⌘B can toggle the sidebar (the system's default sidebar shortcut is
+/// replaced in `MarginsCommands`).
+struct SidebarVisibilityKey: FocusedValueKey {
+    typealias Value = Binding<NavigationSplitViewVisibility>
+}
+
+extension FocusedValues {
+    var sidebarVisibility: SidebarVisibilityKey.Value? {
+        get { self[SidebarVisibilityKey.self] }
+        set { self[SidebarVisibilityKey.self] = newValue }
+    }
+}
+
 struct ContentView: View {
     @Environment(LibraryModel.self) private var model
     @Environment(ClubModel.self) private var clubs
     @Environment(ReaderModel.self) private var reader
     @State private var keyboardController: ShellKeyboardController?
+    @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
         @Bindable var clubs = clubs
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $sidebarVisibility) {
             SidebarView()
+                .navigationSplitViewColumnWidth(
+                    min: sidebarWidth.min,
+                    ideal: sidebarWidth.ideal,
+                    max: sidebarWidth.max
+                )
         } detail: {
             DetailArea()
         }
-        .frame(minWidth: 720, minHeight: 440)
+        .focusedSceneValue(\.sidebarVisibility, $sidebarVisibility)
+        // While the notes editor is open the detail area needs the reader's
+        // 400-point minimum plus the editor's 320-point minimum; the
+        // library sidebar takes the rest, so the window minimum grows with
+        // the pane instead of clipping it.
+        .frame(minWidth: reader.isOpen && reader.notesVisible ? 1040 : 720, minHeight: 440)
         .overlay(alignment: .bottom) {
             errorBanner
         }

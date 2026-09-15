@@ -11,6 +11,10 @@ const readerStartHref = readerParams.get("chapter");
 // Saved reading position: an epub.js CFI takes precedence over the chapter
 // href so a resumed book opens on the same page.
 const readerStartCfi = readerParams.get("cfi");
+// Desktop (macOS) opt-in: the URL carries platform=macos, which enables the
+// width-aware one/two-page policy below. iOS omits it and keeps the
+// original full-width single-column behavior.
+const readerIsDesktop = readerParams.get("platform") === "macos";
 
 let readerBook = null;
 let readerRendition = null;
@@ -50,6 +54,73 @@ let readerCurrentTarget = null;
 // The most recent text selection (capture UIs consume and clear it).
 let readerLastSelection = null;
 
+// MARK: Desktop page layout (macOS)
+//
+// One policy, measured from the actual reading viewport (the uncapped
+// #page container, after native sidebar/notes allocation) and the book's
+// rendered body font. See docs/testing/macos-reader-layout.md for the
+// engine contract these calls rely on.
+const READER_DESKTOP_INSET_X = 24;
+const READER_DESKTOP_INSET_Y = 24;
+// Below this viewport width the outer insets shrink before content clips.
+const READER_DESKTOP_NARROW_WIDTH = 320;
+const READER_DESKTOP_NARROW_INSET_X = 8;
+// Whitespace between the two pages; epub.js takes it as the layout gap.
+const READER_DESKTOP_GUTTER = 40;
+// Automatic enters two pages this far above the fit threshold and leaves
+// below the threshold, so dragging a divider cannot flip repeatedly.
+const READER_LAYOUT_HYSTERESIS = 32;
+// Automatic needs a comfortable measure per page; manual Two Pages accepts
+// a tighter one before falling back to a single column.
+const READER_AUTOMATIC_MAX_MEASURE_CH = 56;
+const READER_DOUBLE_MIN_MEASURE_CH = 40;
+// Used only before any section has rendered: half the requested em,
+// a typical digit width for a text face.
+const READER_FALLBACK_GLYPH_EM = 0.5;
+
+// The requested mode: "automatic" | "single" | "double". Stored as it
+// arrives so a call before the book opens is honored when it does.
+let readerRequestedLayout = "automatic";
+// The last geometry actually written to the page, so identical updates are
+// skipped (a state change here can otherwise feed the ResizeObserver).
+let readerAppliedLayout = null;
+// Pages reported by the last resolution; Automatic's hysteresis input.
+let readerPreviousPages = 1;
+// Cached body-font digit width; keyed by the typography/face revision.
+let readerGlyphCache = null;
+let readerViewportObserver = null;
+let readerLayoutUpdateTimer = null;
+let readerLayoutFrame = null;
+// Bumped whenever typography or the typeface changes, so the glyph cache
+// invalidates without re-measuring on every relayout.
+let readerTypographyRevision = 0;
+// Bumped whenever a section renders: before the first render the glyph is
+// an estimate from the outer document, and the cache must not keep that
+// estimate once the book's real font is measurable.
+let readerContentsRevision = 0;
+
+// MARK: Reflow transactions
+//
+// A layout change (viewport, typography, page mode) repaginates the book.
+// The engine re-displays at its own idea of the current location, which can
+// drift a page after reflow, and it emits provisional relocations while
+// doing so. A transaction captures the settled page start, resizes, waits
+// for the engine's queue to drain, and re-anchors to the captured CFI —
+// but only while no newer navigation or layout superseded it.
+//
+// The last settled page start, captured before a reflow so the anchor is
+// the reader's real position, never a provisional mid-relayout location.
+let readerSettledCfi = null;
+// Bumped every time a transaction is scheduled; a transaction whose
+// generation changed abandons itself.
+let readerLayoutGeneration = 0;
+// Set while a transaction is between its resize and its re-anchor. While
+// set, relocation reports are withheld from the shell: they describe a
+// half-relaid-out book.
+let readerLayoutInFlight = null;
+// Bounded wait for the rendition queue to drain after a resize.
+const READER_REFLOW_SETTLE_CAP_MS = 500;
+
 function readerPost(payload) {
   const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.reader;
   if (handler) {
@@ -79,6 +150,9 @@ async function readerOpen() {
     height: "100%",
     flow: "paginated",
     spread: "none",
+    // Desktop gutter: whitespace between the two pages (epub.js otherwise
+    // derives its own even(floor(width/12)) gutter). iOS leaves it unset.
+    gap: readerIsDesktop ? READER_DESKTOP_GUTTER : undefined,
     // epub.js >= 0.3.89 sandboxes section iframes without these. allow-scripts
     // is what lets the internal-link onclick handlers epub.js installs fire;
     // allow-popups lets target="_blank" reach the WKUIDelegate, which opens
@@ -99,6 +173,16 @@ async function readerOpen() {
       // zone logic must see every click (link taps page AND navigate).
       readerAttachTapZone(view.contents.document);
       readerAttachLinks(view.contents.document, section.href);
+    }
+    if (readerIsDesktop && view && view.contents && view.contents.document) {
+      // The body font is only real once a section rendered: re-measure the
+      // digit width and re-resolve, then again once webfonts settle.
+      readerContentsRevision += 1;
+      readerQueueLayoutUpdate();
+      const doc = view.contents.document;
+      if (doc.fonts && doc.fonts.ready) {
+        doc.fonts.ready.then(() => readerQueueLayoutUpdate(), () => {});
+      }
     }
     try {
       readerReportRelocated(readerRendition.currentLocation());
@@ -122,8 +206,12 @@ async function readerOpen() {
   // start.displayed.{page,total}. The reporter existed but was never
   // attached, so the shell's progress stayed nil.
   readerRendition.on("relocated", readerReportRelocated);
-  // Preferences may have arrived before the book finished opening.
-  readerApplyViewerWidth();
+  if (readerIsDesktop) {
+    readerInstallViewportObserver();
+  }
+  // Preferences and the page-layout mode may have arrived before the book
+  // finished opening; this applies the stored state to the fresh rendition.
+  readerApplyPageLayout();
   console.log("readerOpen: rendition created, displaying");
 
   try {
@@ -144,6 +232,9 @@ async function readerOpen() {
   }
   readerOpened = true;
   console.log("readerOpen: displayed, rendition live");
+  // The effective layout is only real now; report it so the shell can
+  // describe one-page fallbacks (and clear the "loading" state).
+  readerReportLayoutChanged();
   // First paint can beat the relocated listener; report whatever mapping
   // is already known so the footer is not blank until the next turn.
   try {
@@ -185,13 +276,20 @@ function readerApplyTypography(fontSize, lineHeight, lineWidthCh, unit) {
     lineHeight: lineHeight,
     lineWidthCh: lineWidthCh,
   };
-  readerApplyViewerWidth();
   if (readerRendition) {
+    // Restyle before measuring: the glyph width must be read from the
+    // section font this call just selected.
     readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
+  }
+  readerTypographyRevision += 1;
+  readerApplyPageLayout();
+  if (readerRendition) {
     readerQueueRelayout();
   }
 }
 
+/// The iOS path, unchanged: the measure is expressed in the *outer*
+/// document's `ch`, and 0 disables the cap (full-width text).
 function readerApplyViewerWidth() {
   const viewer = document.getElementById("viewer");
   if (!viewer || !readerTypography) {
@@ -210,11 +308,268 @@ function readerApplyViewerWidth() {
   }
 }
 
+// pure policy: given the available reading width, the body font's digit
+// width, the selected per-page measure, and the previously rendered page
+// count, decide how many pages fit and how wide the viewer may be.
+//
+// Two pages fit when the whole spread — outer insets, the inter-page
+// gutter, and two pages of `measure` characters — is no wider than the
+// viewport. The viewer is capped at the publisher-like single-page or
+// two-page measure so a very wide window keeps comfortable margins.
+function readerResolveLayout(options) {
+  const opts = options || {};
+  const mode = opts.mode === "single" || opts.mode === "double" ? opts.mode : "automatic";
+  const widthPx = Math.max(0, Number(opts.widthPx) || 0);
+  const glyphWidthPx = Number(opts.glyphWidthPx) > 0
+    ? Number(opts.glyphWidthPx)
+    : READER_FALLBACK_GLYPH_EM * 16;
+  const lineWidthCh = Number(opts.lineWidthCh) > 0 ? Number(opts.lineWidthCh) : 72;
+  const previousPages = opts.previousPages === 2 ? 2 : 1;
+
+  const insetsPx = READER_DESKTOP_INSET_X * 2;
+  const singleCapPx = insetsPx + lineWidthCh * glyphWidthPx;
+  const doubleCapPx = insetsPx + READER_DESKTOP_GUTTER + 2 * lineWidthCh * glyphWidthPx;
+
+  if (mode === "single") {
+    return { pages: 1, viewerWidthPx: Math.min(widthPx, singleCapPx) };
+  }
+
+  const minMeasureCh = mode === "double"
+    ? READER_DOUBLE_MIN_MEASURE_CH
+    : Math.min(lineWidthCh, READER_AUTOMATIC_MAX_MEASURE_CH);
+  const fitWidthPx = insetsPx + READER_DESKTOP_GUTTER + 2 * minMeasureCh * glyphWidthPx;
+  // Automatic's hysteresis: enter two-page 32 CSS px above the fit
+  // threshold, leave below it. Manual Two Pages uses the threshold
+  // directly.
+  const thresholdPx = mode === "double" || previousPages === 2
+    ? fitWidthPx
+    : fitWidthPx + READER_LAYOUT_HYSTERESIS;
+  const pages = widthPx >= thresholdPx ? 2 : 1;
+  const capPx = pages === 2 ? doubleCapPx : singleCapPx;
+  return { pages: pages, viewerWidthPx: Math.min(widthPx, capPx) };
+}
+
+// Applies the resolved layout to the outer page and the rendition. macOS
+// only; iOS keeps readerApplyViewerWidth's original behavior.
+function readerApplyPageLayout() {
+  if (!readerIsDesktop) {
+    readerApplyViewerWidth();
+    return false;
+  }
+  const page = document.getElementById("page");
+  const viewer = document.getElementById("viewer");
+  if (!page || !viewer) {
+    return false;
+  }
+  const availableWidth = page.clientWidth;
+  if (!(availableWidth > 0)) {
+    return false;
+  }
+  const lineWidthCh = readerTypography && readerTypography.lineWidthCh > 0
+    ? readerTypography.lineWidthCh
+    : 0;
+  const mode = readerEffectiveLayoutMode();
+  const resolved = readerResolveLayout({
+    mode: mode,
+    widthPx: availableWidth,
+    glyphWidthPx: readerBodyGlyphWidth(),
+    lineWidthCh: lineWidthCh,
+    previousPages: readerPreviousPages,
+  });
+  const insetX = availableWidth < READER_DESKTOP_NARROW_WIDTH
+    ? READER_DESKTOP_NARROW_INSET_X
+    : READER_DESKTOP_INSET_X;
+  const geometry = {
+    mode: mode,
+    pages: resolved.pages,
+    viewerWidthPx: Math.max(0, Math.round(resolved.viewerWidthPx)),
+    insetX: insetX,
+  };
+  if (readerAppliedLayout &&
+      readerAppliedLayout.pages === geometry.pages &&
+      readerAppliedLayout.viewerWidthPx === geometry.viewerWidthPx &&
+      readerAppliedLayout.insetX === geometry.insetX &&
+      readerAppliedLayout.mode === geometry.mode) {
+    return false;
+  }
+  readerAppliedLayout = geometry;
+  readerPreviousPages = resolved.pages;
+  readerReportLayoutChanged();
+
+  viewer.style.boxSizing = "border-box";
+  viewer.style.width = "100%";
+  viewer.style.maxWidth = `${geometry.viewerWidthPx}px`;
+  viewer.style.margin = "0 auto";
+  viewer.style.padding = `${READER_DESKTOP_INSET_Y}px ${insetX}px`;
+
+  if (readerRendition) {
+    readerApplyRenditionSpread();
+    readerQueueRelayout();
+  }
+  return true;
+}
+
+// Navigation starts a new layout epoch: a transaction scheduled against
+// the old one must not run and re-anchor to the pre-navigation page. The
+// settled anchor is dropped too — it describes the page the reader just
+// left, and a transaction scheduled around the navigation must fall back
+// to the engine's live location instead.
+function readerInvalidatePendingLayout() {
+  readerLayoutGeneration += 1;
+  readerSettledCfi = null;
+}
+
+// Navigations currently awaiting their display. Relocations that resolve
+// one are trusted even while layout work is queued: they are the user's
+// destination, not a provisional re-layout landing.
+let readerPendingNavigations = 0;
+
+function readerBeginNavigation() {
+  readerPendingNavigations += 1;
+}
+
+function readerEndNavigation() {
+  readerPendingNavigations = Math.max(0, readerPendingNavigations - 1);
+}
+
+// True while the geometry is known to be mid-change: a re-resolution or
+// engine resize is queued, or a transaction is running. Relocations
+// emitted during this window describe a half-relaid-out book and must not
+// become the reflow anchor.
+function readerLayoutWorkPending() {
+  return !!(
+    readerLayoutInFlight ||
+    readerRelayoutTimer !== null ||
+    readerLayoutUpdateTimer !== null ||
+    readerLayoutFrame !== null
+  );
+}
+
+// Keeps the rendition's column count in step with the resolved policy:
+// "auto" with the fit threshold lets epub.js split into two columns only
+// when the stage is wide enough; "none" pins a single column.
+function readerApplyRenditionSpread() {
+  if (!readerRendition || !readerAppliedLayout) {
+    return;
+  }
+  if (readerAppliedLayout.pages === 2) {
+    const measureCh = readerAppliedLayout.mode === "double"
+      ? READER_DOUBLE_MIN_MEASURE_CH
+      : Math.min(
+          readerTypography && readerTypography.lineWidthCh > 0 ? readerTypography.lineWidthCh : 72,
+          READER_AUTOMATIC_MAX_MEASURE_CH,
+        );
+    readerRendition.spread("auto", READER_DESKTOP_GUTTER + 2 * measureCh * readerBodyGlyphWidth());
+  } else {
+    readerRendition.spread("none");
+  }
+}
+
+// Tells the shell what was requested and what is actually on screen, so
+// the typography popover can explain a Two Pages fallback without
+// inferring it. Only posted once the book is open: before that the count
+// is not real, and the shell must not claim a fallback it cannot see.
+function readerReportLayoutChanged() {
+  if (!readerIsDesktop || !readerOpened || !readerAppliedLayout) {
+    return;
+  }
+  readerPost({
+    type: "layoutChanged",
+    requested: readerRequestedLayout,
+    pages: readerAppliedLayout.pages,
+  });
+}
+
+// Covers and fixed-layout sections keep the publisher's layout; RTL and
+// vertical writing stay single-page until the pinned engine's spread
+// treatment is verified for them. The requested mode is still remembered
+// so a fallback can be reported as a fallback.
+function readerEffectiveLayoutMode() {
+  if (!readerBook) {
+    return readerRequestedLayout;
+  }
+  const metadata = readerBook.package && readerBook.package.metadata
+    ? readerBook.package.metadata
+    : {};
+  if (metadata.layout === "pre-paginated" || metadata.direction === "rtl") {
+    return "single";
+  }
+  if (readerRendition) {
+    const contents = readerRendition.getContents() || [];
+    for (let index = 0; index < contents.length; index += 1) {
+      const doc = contents[index] && contents[index].document;
+      if (!doc || !doc.body || !doc.defaultView) {
+        continue;
+      }
+      const writingMode = doc.defaultView.getComputedStyle(doc.body).writingMode || "";
+      if (writingMode.indexOf("vertical") === 0) {
+        return "single";
+      }
+    }
+  }
+  return readerRequestedLayout;
+}
+
+// The width of one digit in the book's rendered body font. Measured from
+// a live section when one exists (after typography and font face are
+// applied); the outer document is only a fallback, and a half-em estimate
+// covers the window before the first render.
+function readerBodyGlyphWidth() {
+  const key = `${readerTypographyRevision}|${readerContentsRevision}|${readerFontFace || "publisher"}`;
+  if (readerGlyphCache && readerGlyphCache.key === key && readerGlyphCache.widthPx > 0) {
+    return readerGlyphCache.widthPx;
+  }
+  let widthPx = 0;
+  if (readerRendition) {
+    const contents = readerRendition.getContents() || [];
+    for (let index = 0; index < contents.length; index += 1) {
+      widthPx = readerMeasureGlyphInDocument(contents[index] && contents[index].document);
+      if (widthPx > 0) {
+        break;
+      }
+    }
+  }
+  if (!(widthPx > 0)) {
+    widthPx = readerFallbackGlyphWidth();
+  }
+  readerGlyphCache = { key: key, widthPx: widthPx };
+  return widthPx;
+}
+
+function readerFallbackGlyphWidth() {
+  const typography = readerTypography;
+  const px = typography
+    ? (typography.unit === "px" ? typography.fontSize : (typography.fontSize / 100) * 16)
+    : 16;
+  return Math.max(1, px * READER_FALLBACK_GLYPH_EM);
+}
+
+// Canvas `measureText` is the only way to read the actual glyph metrics
+// the browser will use; measuring "0" matches the CSS `ch` unit.
+function readerMeasureGlyphInDocument(doc) {
+  try {
+    if (!doc || !doc.body) {
+      return 0;
+    }
+    const canvas = doc.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return 0;
+    }
+    const style = doc.defaultView.getComputedStyle(doc.body);
+    context.font = `${style.fontStyle || "normal"} ${style.fontWeight || "400"} ${style.fontSize || "16px"} ${style.fontFamily || "serif"}`;
+    const width = context.measureText("0").width;
+    return Number.isFinite(width) && width > 0 ? width : 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
 // The stage only re-lays out on window resizes (epub.js listens for those
 // exclusively), so changing the inner viewer's width must force one: without
 // it the columns keep the old pixel width and the next page peeks into the
-// wider viewport, cut off. rendition.resize() re-measures the stage,
-// recomputes the column layout, and re-displays at the current position.
+// wider viewport, cut off. On iOS a resize is all that is needed; on the
+// desktop this schedules a reflow transaction that preserves the passage.
 function readerQueueRelayout() {
   if (!readerOpened || !readerRendition) {
     return;
@@ -222,12 +577,212 @@ function readerQueueRelayout() {
   if (readerRelayoutTimer) {
     clearTimeout(readerRelayoutTimer);
   }
+  if (readerIsDesktop) {
+    // The anchor is read when the transaction starts, not here: the
+    // debounce can span a user navigation, and anchoring to the location
+    // captured before it would drag the reader back. The generation
+    // captured here still lets a newer schedule or navigation cancel it.
+    const rendition = readerRendition;
+    const token = readerNavigationToken;
+    const generation = (readerLayoutGeneration += 1);
+    readerRelayoutTimer = setTimeout(() => {
+      readerRelayoutTimer = null;
+      readerRunLayoutTransaction(generation, token, rendition);
+    }, 120);
+    return;
+  }
   readerRelayoutTimer = setTimeout(() => {
     readerRelayoutTimer = null;
     if (readerRendition) {
       readerRendition.resize();
     }
   }, 120);
+}
+
+// A transaction is only allowed to finish if nothing superseded it: not a
+// newer layout, not a user navigation, not a different rendition.
+function readerLayoutIsCurrent(generation, token, rendition) {
+  return generation === readerLayoutGeneration &&
+    token === readerNavigationToken &&
+    rendition === readerRendition;
+}
+
+// Waits out in-flight navigations (bounded) so a reflow never interleaves
+// with a display that is still resolving. Returns false if the wait timed
+// out or the transaction was superseded while waiting.
+async function readerAwaitIdleNavigation(generation, token, rendition) {
+  const deadline = Date.now() + 2000;
+  while (readerPendingNavigations > 0 && Date.now() < deadline) {
+    if (!readerLayoutIsCurrent(generation, token, rendition)) {
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 16));
+  }
+  return readerLayoutIsCurrent(generation, token, rendition);
+}
+
+async function readerRunLayoutTransaction(generation, token, rendition) {
+  if (!(await readerAwaitIdleNavigation(generation, token, rendition))) {
+    // A navigation superseded this reflow. Its own display re-measures the
+    // stage, but re-apply the geometry once the dust settles so a stale
+    // column step cannot survive (an in-section page turn does not
+    // re-measure by itself).
+    readerQueueLayoutUpdate();
+    return;
+  }
+  // The settled anchor, read now: everything before this point is the
+  // reader's real position; everything after it belongs to the new layout.
+  const anchor = readerSettledCfi || readerStartCfiOf(rendition);
+  console.log(`reflow: start generation=${generation} anchor=${anchor}`);
+  readerLayoutInFlight = { generation: generation, token: token, anchor: anchor };
+  try {
+    rendition.resize();
+    await readerWaitForEngineSettle(rendition);
+    if (!readerLayoutIsCurrent(generation, token, rendition)) {
+      console.log(`reflow: superseded generation=${generation} token=${token}`);
+      return;
+    }
+    if (anchor) {
+      await rendition.display(anchor);
+    }
+  } catch (error) {
+    // A failed re-anchor keeps the last settled position and surfaces
+    // through the console. Exactly one attempt: no retry loop.
+    console.error("readerRunLayoutTransaction failed:", error);
+  } finally {
+    if (readerLayoutInFlight && readerLayoutInFlight.generation === generation) {
+      readerLayoutInFlight = null;
+    }
+  }
+  if (!readerLayoutIsCurrent(generation, token, rendition)) {
+    return;
+  }
+  await readerNextFrame(document);
+  readerUpdateSettledCfi();
+  // Publish only the settled location; everything emitted during the
+  // transaction was provisional and deliberately withheld.
+  try {
+    readerReportRelocated(rendition.currentLocation());
+  } catch (error) {}
+}
+
+// epub.js serialises resize/display work through its rendition queue, whose
+// rAF-driven drain is the engine's own settle signal. Capped, because a
+// section that never finishes must not hang the reader.
+async function readerWaitForEngineSettle(rendition) {
+  const queue = rendition.q;
+  const drained = new Promise((resolve) => {
+    const check = () => {
+      if (rendition !== readerRendition || !queue || (queue._q.length === 0 && !queue.running)) {
+        resolve();
+        return;
+      }
+      setTimeout(check, 16);
+    };
+    check();
+  });
+  const capped = new Promise((resolve) => setTimeout(resolve, READER_REFLOW_SETTLE_CAP_MS));
+  await Promise.race([drained, capped]);
+  await readerNextFrame(document);
+  await readerNextFrame(document);
+}
+
+function readerUpdateSettledCfi() {
+  if (readerLayoutInFlight) {
+    return;
+  }
+  readerCaptureSettledCfi();
+}
+
+// Records the page the reader is looking at as the reflow anchor. Called
+// when a navigation has finished (its display resolved), where the live
+// location is authoritative even if a geometry transaction is still
+// queued: the user's page is the page on screen.
+function readerCaptureSettledCfi() {
+  const cfi = readerRendition ? readerStartCfiOf(readerRendition) : null;
+  if (cfi) {
+    readerSettledCfi = cfi;
+  }
+}
+
+// Page layout mode from the shell. Accepted before the book opens: the
+// value is stored and applied as soon as the rendition exists. Unknown
+// values fall back to Automatic.
+function readerSetPageLayout(mode) {
+  readerRequestedLayout = mode === "single" || mode === "double" ? mode : "automatic";
+  readerQueueLayoutUpdate();
+}
+
+// Debounced layout update for events that can arrive in bursts while the
+// page is still churning (a section rendering, web fonts settling).
+function readerQueueLayoutUpdate() {
+  if (!readerIsDesktop || !readerOpened) {
+    return;
+  }
+  if (readerLayoutUpdateTimer) {
+    clearTimeout(readerLayoutUpdateTimer);
+  }
+  readerLayoutUpdateTimer = setTimeout(() => {
+    readerLayoutUpdateTimer = null;
+    readerApplyPageLayout();
+  }, 120);
+}
+
+// One resolution per animation frame for continuous viewport drags. The
+// resolution itself is cheap (the glyph width is cached) and applying it
+// before epub.js's own 50 ms window-resize handler keeps the engine's
+// divisor in step with the policy during the drag.
+function readerScheduleLayoutUpdate() {
+  if (!readerIsDesktop || !readerOpened) {
+    return;
+  }
+  if (readerLayoutFrame) {
+    return;
+  }
+  readerLayoutFrame = requestAnimationFrame(() => {
+    readerLayoutFrame = null;
+    readerApplyPageLayout();
+  });
+}
+
+// Observes the uncapped #page container, never the capped #viewer: an
+// observer on the viewer would see its own width changes and loop.
+function readerInstallViewportObserver() {
+  if (readerViewportObserver || typeof ResizeObserver === "undefined") {
+    return;
+  }
+  const page = document.getElementById("page");
+  if (!page) {
+    return;
+  }
+  readerViewportObserver = new ResizeObserver(() => readerScheduleLayoutUpdate());
+  readerViewportObserver.observe(page);
+  window.addEventListener("unload", readerTeardownViewportObserver);
+  window.addEventListener("pagehide", readerTeardownViewportObserver);
+}
+
+function readerTeardownViewportObserver() {
+  if (readerViewportObserver) {
+    readerViewportObserver.disconnect();
+    readerViewportObserver = null;
+  }
+  if (readerLayoutUpdateTimer) {
+    clearTimeout(readerLayoutUpdateTimer);
+    readerLayoutUpdateTimer = null;
+  }
+  if (readerLayoutFrame) {
+    cancelAnimationFrame(readerLayoutFrame);
+    readerLayoutFrame = null;
+  }
+  if (readerRelayoutTimer) {
+    clearTimeout(readerRelayoutTimer);
+    readerRelayoutTimer = null;
+  }
+  // Invalidate any transaction still waiting: the page is going away.
+  readerLayoutGeneration += 1;
+  readerLayoutInFlight = null;
+  window.removeEventListener("unload", readerTeardownViewportObserver);
+  window.removeEventListener("pagehide", readerTeardownViewportObserver);
 }
 
 // Theme (called from Swift): swap the surface palette at runtime. The
@@ -310,7 +865,11 @@ function readerSetFontFace(face) {
   readerFontFace = Object.prototype.hasOwnProperty.call(READER_FONT_FACES, face) ? face : null;
   if (readerRendition) {
     readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
-    // Different glyphs re-break lines; the column count can change.
+  }
+  readerTypographyRevision += 1;
+  // Different glyphs re-break lines; the column count can change.
+  readerApplyPageLayout();
+  if (readerRendition) {
     readerQueueRelayout();
   }
 }
@@ -320,14 +879,34 @@ function readerSetFontFace(face) {
 // follow chapter changes made by paging across boundaries and save the
 // reading position.
 function readerReportRelocated(location) {
+  // Withheld while a reflow transaction is mid-flight: the engine emits
+  // locations for the half-relaid-out book, and publishing one would
+  // overwrite the shell's stable anchor with a provisional page.
+  if (readerLayoutInFlight) {
+    return;
+  }
   const start = location && location.start;
   const displayed = (start && start.displayed) || {};
+  // Only a trusted relocation updates the reflow anchor. The engine also
+  // re-displays on its own window-resize handler, and those locations
+  // belong to a layout that is about to be replaced.
+  const trusted = !readerLayoutWorkPending() || readerPendingNavigations > 0;
+  if (start && start.cfi && trusted) {
+    readerSettledCfi = start.cfi;
+  }
+  const end = location && location.end;
+  const endDisplayed = (end && end.displayed) || {};
   readerPost({
     type: "relocated",
     href: start && start.href ? start.href : null,
     cfi: start && start.cfi ? start.cfi : null,
     page: displayed.page || 1,
     totalPages: displayed.total || 0,
+    // The engine's own end-of-range endpoints; the shell only trusts them
+    // when both ends resolve to the same section.
+    endPage: endDisplayed.page || null,
+    endHref: end && end.href ? end.href : null,
+    endCfi: end && end.cfi ? end.cfi : null,
   });
 }
 
@@ -474,20 +1053,28 @@ async function readerDisplayTarget(target) {
   }
   const rendition = readerRendition;
   const token = ++readerNavigationToken;
-  readerCurrentTarget = target || null;
-  // No target at all still means "open the book": epub.js starts at the
-  // first section.
-  const displayed = rendition.display(readerResolveSpineTarget(target));
-  setTimeout(() => console.log("readerOpen: display still pending after 6s"), 6000);
-  await displayed;
-  console.log("readerOpen: display resolved for", target || "chapter start");
+  readerInvalidatePendingLayout();
+  readerBeginNavigation();
+  try {
+    readerCurrentTarget = target || null;
+    // No target at all still means "open the book": epub.js starts at the
+    // first section.
+    const displayed = rendition.display(readerResolveSpineTarget(target));
+    setTimeout(() => console.log("readerOpen: display still pending after 6s"), 6000);
+    await displayed;
+    console.log("readerOpen: display resolved for", target || "chapter start");
+    readerCaptureSettledCfi();
+  } finally {
+    // The destination is on screen; the fragment refinement below is a
+    // second pass that must not keep a reflow waiting on "navigation".
+    readerEndNavigation();
+  }
 
   const hashAt = target ? target.indexOf("#") : -1;
-  if (hashAt === -1) {
+  if (hashAt == -1) {
     return;
   }
   const fragment = target.slice(hashAt + 1);
-
   try {
     const contents = (rendition.getContents() || []).filter(
       (candidate) => candidate && candidate.document && candidate.document.getElementById(fragment),
@@ -511,6 +1098,7 @@ async function readerDisplayTarget(target) {
       return;
     }
     await rendition.display(target);
+    readerCaptureSettledCfi();
   } catch (error) {
     // A dead anchor must not break the reading session.
   }
@@ -562,11 +1150,23 @@ function readerScrollBy(delta) {
     return;
   }
   // Paginated flow has no vertical overflow: j/k step between pages.
-  if (delta > 0) {
-    readerRendition.next().catch(readerShowError);
-  } else if (delta < 0) {
-    readerRendition.prev().catch(readerShowError);
+  if (!delta) {
+    return;
   }
+  // A user page turn is a navigation: it invalidates any pending re-anchor
+  // so a layout transaction cannot drag the reader back to its old page.
+  readerNavigationToken += 1;
+  readerInvalidatePendingLayout();
+  readerBeginNavigation();
+  const done = () => {
+    readerEndNavigation();
+    // The turn finished: whatever page is on screen is the passage a later
+    // reflow must preserve.
+    readerCaptureSettledCfi();
+  };
+  const turn = delta > 0 ? readerRendition.next() : readerRendition.prev();
+  turn.then(done, done);
+  turn.catch(readerShowError);
 }
 
 // `gg`: the start of the chapter being read. When the current chapter began
@@ -592,7 +1192,11 @@ function readerScrollBottom() {
   }
   const location = readerRendition.currentLocation();
   if (location && location.end && location.end.cfi) {
-    readerRendition.display(location.end.cfi).catch(readerShowError);
+    readerNavigationToken += 1;
+    readerInvalidatePendingLayout();
+    const displayed = readerRendition.display(location.end.cfi);
+    displayed.then(readerCaptureSettledCfi, () => {});
+    displayed.catch(readerShowError);
   }
 }
 
@@ -605,6 +1209,30 @@ window.readerApplyTypography = readerApplyTypography;
 window.readerSetFontFace = readerSetFontFace;
 window.readerSetTheme = readerApplyTheme;
 window.readerRelayout = readerQueueRelayout;
+// Desktop layout API: the shell selects the mode; the page resolves the
+// effective geometry. Exposed resolver is pure and used by the tests'
+// numeric policy cases.
+window.readerSetPageLayout = readerSetPageLayout;
+window.readerResolveLayout = readerResolveLayout;
+window.readerPageLayoutState = function () {
+  return {
+    requested: readerRequestedLayout,
+    effective: readerEffectiveLayoutMode(),
+    applied: readerAppliedLayout,
+    previousPages: readerPreviousPages,
+    glyphWidthPx: readerBodyGlyphWidth(),
+    desktop: readerIsDesktop,
+    // True while layout work or a navigation is queued or in flight; tests
+    // wait on this instead of guessing at engine timings.
+    settling: !!(
+      readerLayoutInFlight ||
+      readerRelayoutTimer !== null ||
+      readerLayoutUpdateTimer !== null ||
+      readerLayoutFrame !== null ||
+      readerPendingNavigations > 0
+    ),
+  };
+};
 // Capture support (see readerResolveSpineTarget note): highlight a mark's
 // CFI range (epub.js dedupes by range), collapse the active selection, and
 // hand back the current page's CFI for page-anchored marks.

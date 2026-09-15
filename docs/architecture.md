@@ -163,10 +163,26 @@ The vendored `epub.min.js` + `jszip.min.js` (versions pinned in
 `scripts/vendor-reader.sh`) plus the hand-written `reader.html`/`reader.js`
 live in **`MarginsModel`'s resource bundle** so the macOS app, the iOS app, and the
 scheme handler serve one identical copy. The page takes whole-book bytes
-in and renders a paginated flow with `spread: "none"`. Swift drives it
+in and renders a paginated flow. Swift drives it
 through the `window.reader*` functions
 via `evaluateJavaScript`; the page reports `relocated` back through the
 `reader` script message handler.
+
+macOS opts into a desktop layout with `platform=macos` in the reader URL.
+The page then measures the book's rendered body font (`measureText("0")`)
+and resolves one or two pages from the actual available width: Automatic
+uses hysteresis around the fit threshold, One Page stays single and
+centered, Two Pages falls back to one when the minimum measure cannot fit.
+Fixed-layout packages, RTL, and vertical writing stay single-page.
+`readerSetPageLayout(mode)` selects the mode; `layoutChanged` messages
+report the requested mode and the effective page count, and `relocated`
+messages carry the engine's `endPage`/`endHref`/`endCfi` so the footer can
+show a verified spread range. iOS never sends `platform=macos` and keeps
+the original full-width single column. Geometry changes run as reflow
+transactions that capture the settled start CFI, resize, wait for the
+engine queue to drain, and re-anchor once unless a newer navigation or
+layout superseded them. The exact engine contract and acceptance matrix
+are recorded in `docs/testing/macos-reader-layout.md`.
 
 Two href conventions meet here and must never be conflated: the core's
 spine hrefs are **zip-root-relative** (`OEBPS/chapter1.xhtml`), while

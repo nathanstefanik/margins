@@ -55,7 +55,10 @@ let package = Package(
         // Phase 2 step 1).
         .testTarget(
             name: "MarginsModelTests",
-            dependencies: ["MarginsCore", "MarginsModel"]
+            dependencies: ["MarginsCore", "MarginsModel"],
+            // Generated reader-layout EPUBs (see Fixtures/reader-layout/
+            // README.md and scripts/make-reader-layout-fixtures.py).
+            resources: [.copy("Fixtures")]
         ),
         // Tests for the core, including the read-compatibility fixture the
         // pre-Swift core wrote before the port (Fixtures/legacy-library/).

@@ -16,8 +16,10 @@ struct ReaderView: View {
             .background(Paper.background(reader.preferences.theme))
             .frame(maxWidth: .infinity)
             if reader.notesVisible {
+                // 320 is the editor's usable floor; it may grow on wide
+                // windows so long notes do not scroll in a cramped column.
                 NotesPane()
-                    .frame(width: 340)
+                    .frame(minWidth: 320, idealWidth: 340, maxWidth: 460)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -31,7 +33,11 @@ struct ReaderView: View {
         }
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Button("Library", systemImage: "sidebar.left", action: reader.close)
+                // Distinct from the sidebar toggle, which owns
+                // "sidebar.left": this exits the reading view for the
+                // library (home).
+                Button("Library", systemImage: "house", action: reader.close)
+                    .help("Back to library (l)")
             }
             ToolbarItem(placement: .navigation) {
                 Button("Notes", systemImage: "square.and.pencil") {
@@ -59,7 +65,10 @@ struct ReaderView: View {
                     Label("Typography", systemImage: "textformat")
                 }
                 .popover(isPresented: $typographyOpen, arrowEdge: .bottom) {
-                    TypographyPopover(preferences: reader.preferences)
+                    TypographyPopover(
+                        preferences: reader.preferences,
+                        effectivePageCount: reader.effectivePageCount
+                    )
                 }
             }
         }

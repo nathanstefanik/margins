@@ -71,6 +71,7 @@ extension ReaderKeymap {
                 KeyHelpEntry(keys: ["⌘-"], description: "Smaller text"),
                 KeyHelpEntry(keys: ["⌘0"], description: "Reset text size"),
                 KeyHelpEntry(keys: ["⌘,"], description: "Settings"),
+                KeyHelpEntry(keys: ["⌘B"], description: "Toggle the library sidebar"),
                 KeyHelpEntry(keys: ["Trackpad"], description: "Two-finger scroll turns pages"),
             ]),
         ]

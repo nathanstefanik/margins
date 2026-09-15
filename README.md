@@ -120,8 +120,19 @@ macOS keybindings:
 | `?` | Keyboard shortcuts cheat sheet (also ⌘/) |
 | ⌘S | Save note |
 | ⌘+ / ⌘− / ⌘0 | Bigger / smaller / reset text size |
+| ⌘B | Toggle the library sidebar |
 | ⌘, | Settings (typography, library directory) |
 | Trackpad | Two-finger scroll turns pages |
+
+macOS reader layout: the typography popover (textformat button) offers
+**Automatic**, **One Page**, and **Two Pages**. Automatic uses a single
+centered column or a two-page spread based on the actual window width and
+text size; One Page always keeps one column; Two Pages falls back to one
+when the minimum readable measure cannot fit (the popover says so). The
+choice persists locally under `reader.pageLayout.macos` and is separate
+from Reset Typography. Footer page numbers are chapter-local and describe
+what is visible — "Pages 4–5 of 20" for a spread, "Page 20 of 20" for a
+single page. The iOS reader keeps its full-width single column.
 
 ## Configuration
 

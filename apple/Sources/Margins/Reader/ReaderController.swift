@@ -118,6 +118,14 @@ final class ReaderController: NSObject {
         )
     }
 
+    /// Sends the requested page layout; the page resolves what actually
+    /// fits and reports back through `layoutChanged`.
+    private func applyPageLayout() {
+        evaluate(
+            "readerSetPageLayout(\(Self.javaScriptLiteral(reader.preferences.pageLayout.rawValue)))"
+        )
+    }
+
     /// Re-applies appearance and typography whenever any preference changes.
     /// `withObservationTracking` is one-shot, so re-arm after each firing.
     private func observePreferences() {
@@ -127,11 +135,13 @@ final class ReaderController: NSObject {
             _ = preferences.fontSize
             _ = preferences.lineHeight
             _ = preferences.lineWidth
+            _ = preferences.pageLayout
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.applyTheme()
                 self.applyTypography()
+                self.applyPageLayout()
                 self.observePreferences()
             }
         }
@@ -184,6 +194,10 @@ final class ReaderController: NSObject {
             // Carried in the URL so reader.html can paint the right paper
             // before readerSetTheme arrives (no cream flash in dark).
             URLQueryItem(name: "theme", value: reader.preferences.theme.rawValue),
+            // Desktop opt-in: enables the width-aware one/two-page policy
+            // (and desktop spacing). iOS deliberately omits it. Phase 3
+            // carries the persisted mode here too.
+            URLQueryItem(name: "platform", value: "macos"),
         ]
         if let cfi = reader.resumeCfi {
             queryItems.append(URLQueryItem(name: "cfi", value: cfi))
@@ -213,6 +227,7 @@ extension ReaderController: WKNavigationDelegate {
         // this stores the current preferences for when the rendition appears.
         applyTheme()
         applyTypography()
+        applyPageLayout()
     }
 }
 
@@ -234,7 +249,21 @@ extension ReaderController: WKScriptMessageHandler {
                 page: page,
                 totalPages: totalPages,
                 href: body["href"] as? String,
-                cfi: body["cfi"] as? String
+                cfi: body["cfi"] as? String,
+                endPage: (body["endPage"] as? NSNumber)?.intValue
+                    ?? (body["endPage"] as? Int),
+                endHref: body["endHref"] as? String,
+                endCfi: body["endCfi"] as? String
+            )
+        case "layoutChanged":
+            // The page resolves the effective layout; this only mirrors how
+            // many pages are actually visible for the popover's fallback
+            // note. Validation lives in ReaderModel.layoutChanged.
+            reader.layoutChanged(
+                requested: body["requested"] as? String ?? "",
+                pages: (body["pages"] as? NSNumber)?.intValue
+                    ?? (body["pages"] as? Int)
+                    ?? 0
             )
         default:
             break
