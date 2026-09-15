@@ -18,6 +18,16 @@ public enum ReaderTypeface: String, CaseIterable, Sendable {
     case serif
     case sans
 }
+#else
+/// macOS page layout: let the reading viewport decide, or pin one or two
+/// pages. The web reader resolves the effective layout from the actual
+/// available width and text size; this preference only states intent.
+/// Unknown stored values fall back to `automatic`.
+public enum ReaderPageLayout: String, CaseIterable, Sendable {
+    case automatic
+    case single
+    case double
+}
 #endif
 
 /// Reader typography and theme preferences.
@@ -81,6 +91,8 @@ public final class ReaderPreferences {
             Self.lineWidthRange.lowerBound,
             Self.lineWidthRange.upperBound
         )
+        _pageLayout = ReaderPageLayout(rawValue: defaults.string(forKey: Self.pageLayoutKey) ?? "")
+            ?? .automatic
         #endif
     }
 
@@ -174,11 +186,15 @@ public final class ReaderPreferences {
     private static let fontSizeKey = "reader.fontSize"
     private static let lineHeightKey = "reader.lineHeight"
     private static let lineWidthKey = "reader.lineWidth"
+    /// macOS-only and platform-namespaced: the iOS reader has no page
+    /// layout control, and a future iOS default must not inherit this.
+    private static let pageLayoutKey = "reader.pageLayout.macos"
 
     // Backing storage for the clamped, persisting computed properties below.
     private var _fontSize: Double
     private var _lineHeight: Double
     private var _lineWidth: Double
+    private var _pageLayout: ReaderPageLayout
 
     public var fontSize: Double {
         get { _fontSize }
@@ -209,6 +225,17 @@ public final class ReaderPreferences {
                 Self.lineWidthRange.upperBound
             )
             defaults.set(_lineWidth, forKey: Self.lineWidthKey)
+        }
+    }
+
+    /// The requested page layout. Kept separate from Reset Typography:
+    /// text size, height, and width are typography; how many pages share
+    /// the window is a layout choice the reader may override per width.
+    public var pageLayout: ReaderPageLayout {
+        get { _pageLayout }
+        set {
+            _pageLayout = newValue
+            defaults.set(newValue.rawValue, forKey: Self.pageLayoutKey)
         }
     }
 

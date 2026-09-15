@@ -125,6 +125,27 @@ layout and RTL stay single at every width. iPhone 17 Pro simulator: the
 fixture renders as a full-width single column with the iOS CSS padding
 (22.4 px), identically to the Phase 1 baseline.
 
+## Native controls (Phase 3)
+
+- `ReaderPageLayout` (`automatic` / `single` / `double`) persists under
+  `reader.pageLayout.macos`; unknown stored values load as Automatic, and
+  `resetTypography()` deliberately leaves it alone.
+- The typography popover adds a labeled, segmented three-option picker.
+  The fallback line ("One page shown — widen the window or reduce text
+  size") renders only when Two Pages is selected *and* the renderer has
+  reported one page; while the book is loading `effectivePageCount` is
+  nil, so no fallback is claimed.
+- The page posts `{type: "layoutChanged", requested, pages}` after every
+  applied resolution once the book is open. `ReaderModel.layoutChanged`
+  drops payloads whose requested mode is unknown or whose page count is
+  not 1 or 2, and `open`/`close` clear the transient count so a stale
+  message cannot outlive its book.
+- `make app` produces an ad-hoc signed bundle; on a machine with an iCloud
+  account this build traps at `CKContainer(identifier:)` (no CloudKit
+  entitlement) before any window appears — a pre-existing limitation of
+  the ad-hoc build, not of the reader. The native popover screenshot is
+  therefore in the Phase 6 matrix, to be taken from a signed build.
+
 ## Baseline (Phase 1, `spread: "none"`, 110 % / 1.6 / 72 ch)
 
 Measured by the harness on macOS 26 (MacBook Air M5, Mac17,4) with the
@@ -155,6 +176,8 @@ horizontal clipping.
 | Page turns cover every fixture paragraph in order | automated (passing) |
 | Fixed-layout and RTL single-page fallback | automated (passing) |
 | iOS single-page preservation | automated + iPhone 17 Pro simulator screenshot |
-| Native window with notes/sidebar open and closed | Phase 6 (hardware: MacBook Air M5, Mac17,4 available) |
+| Requested/effective layout messages and popover fallback state | automated (passing) |
+| Preference round-trip on relaunch | automated (UserDefaults round-trip) |
+| Native window with notes/sidebar open and closed | Phase 6 (hardware available; native app build currently traps in CloudKit — see above) |
 | Fullscreen, large text, theme extremes | Phase 6 |
 | iPhone/iPad, narrow/wide sizes | Phase 6 |

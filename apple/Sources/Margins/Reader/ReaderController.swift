@@ -118,6 +118,14 @@ final class ReaderController: NSObject {
         )
     }
 
+    /// Sends the requested page layout; the page resolves what actually
+    /// fits and reports back through `layoutChanged`.
+    private func applyPageLayout() {
+        evaluate(
+            "readerSetPageLayout(\(Self.javaScriptLiteral(reader.preferences.pageLayout.rawValue)))"
+        )
+    }
+
     /// Re-applies appearance and typography whenever any preference changes.
     /// `withObservationTracking` is one-shot, so re-arm after each firing.
     private func observePreferences() {
@@ -127,11 +135,13 @@ final class ReaderController: NSObject {
             _ = preferences.fontSize
             _ = preferences.lineHeight
             _ = preferences.lineWidth
+            _ = preferences.pageLayout
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.applyTheme()
                 self.applyTypography()
+                self.applyPageLayout()
                 self.observePreferences()
             }
         }
@@ -217,9 +227,7 @@ extension ReaderController: WKNavigationDelegate {
         // this stores the current preferences for when the rendition appears.
         applyTheme()
         applyTypography()
-        // Phase 2 ships the automatic policy; Phase 3 replaces this literal
-        // with the persisted preference sent as the page loads.
-        evaluate("readerSetPageLayout(\(Self.javaScriptLiteral("automatic")))")
+        applyPageLayout()
     }
 }
 
@@ -242,6 +250,16 @@ extension ReaderController: WKScriptMessageHandler {
                 totalPages: totalPages,
                 href: body["href"] as? String,
                 cfi: body["cfi"] as? String
+            )
+        case "layoutChanged":
+            // The page resolves the effective layout; this only mirrors how
+            // many pages are actually visible for the popover's fallback
+            // note. Validation lives in ReaderModel.layoutChanged.
+            reader.layoutChanged(
+                requested: body["requested"] as? String ?? "",
+                pages: (body["pages"] as? NSNumber)?.intValue
+                    ?? (body["pages"] as? Int)
+                    ?? 0
             )
         default:
             break

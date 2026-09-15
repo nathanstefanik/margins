@@ -205,6 +205,9 @@ async function readerOpen() {
   }
   readerOpened = true;
   console.log("readerOpen: displayed, rendition live");
+  // The effective layout is only real now; report it so the shell can
+  // describe one-page fallbacks (and clear the "loading" state).
+  readerReportLayoutChanged();
   // First paint can beat the relocated listener; report whatever mapping
   // is already known so the footer is not blank until the next turn.
   try {
@@ -365,6 +368,7 @@ function readerApplyPageLayout() {
   const pagesChanged = !readerAppliedLayout || readerAppliedLayout.pages !== geometry.pages;
   readerAppliedLayout = geometry;
   readerPreviousPages = resolved.pages;
+  readerReportLayoutChanged();
 
   viewer.style.boxSizing = "border-box";
   viewer.style.width = "100%";
@@ -400,6 +404,21 @@ function readerApplyRenditionSpread() {
   } else {
     readerRendition.spread("none");
   }
+}
+
+// Tells the shell what was requested and what is actually on screen, so
+// the typography popover can explain a Two Pages fallback without
+// inferring it. Only posted once the book is open: before that the count
+// is not real, and the shell must not claim a fallback it cannot see.
+function readerReportLayoutChanged() {
+  if (!readerIsDesktop || !readerOpened || !readerAppliedLayout) {
+    return;
+  }
+  readerPost({
+    type: "layoutChanged",
+    requested: readerRequestedLayout,
+    pages: readerAppliedLayout.pages,
+  });
 }
 
 // Covers and fixed-layout sections keep the publisher's layout; RTL and

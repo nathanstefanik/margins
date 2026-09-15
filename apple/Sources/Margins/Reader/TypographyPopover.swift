@@ -6,6 +6,9 @@ import MarginsModel
 /// `ReaderPreferences`.
 struct TypographyPopover: View {
     @Bindable var preferences: ReaderPreferences
+    /// How many pages the renderer actually laid out, or nil while loading.
+    /// Only used to explain a Two Pages fallback the user can see.
+    var effectivePageCount: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -19,6 +22,31 @@ struct TypographyPopover: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Page Layout")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Picker("Page Layout", selection: $preferences.pageLayout) {
+                    Text("Automatic").tag(ReaderPageLayout.automatic)
+                    Text("One Page").tag(ReaderPageLayout.single)
+                    Text("Two Pages").tag(ReaderPageLayout.double)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel("Page layout")
+                if preferences.pageLayout == .double, effectivePageCount == 1 {
+                    Text("One page shown — widen the window or reduce text size")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(
+                            "One page shown. Widen the window or reduce text size for two pages."
+                        )
+                }
             }
 
             Divider()

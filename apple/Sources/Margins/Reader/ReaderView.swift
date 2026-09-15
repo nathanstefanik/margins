@@ -59,7 +59,10 @@ struct ReaderView: View {
                     Label("Typography", systemImage: "textformat")
                 }
                 .popover(isPresented: $typographyOpen, arrowEdge: .bottom) {
-                    TypographyPopover(preferences: reader.preferences)
+                    TypographyPopover(
+                        preferences: reader.preferences,
+                        effectivePageCount: reader.effectivePageCount
+                    )
                 }
             }
         }

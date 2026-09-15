@@ -216,6 +216,10 @@ final class ReaderLayoutHarness {
         messages.filter { $0["type"] as? String == "relocated" }.count
     }
 
+    func messageCount(of type: String) -> Int {
+        messages.filter { $0["type"] as? String == type }.count
+    }
+
     /// Waits for the latest relocation to describe a different location than
     /// `previous`. The page reports relocation from both the `rendered`
     /// hook and the `relocated` event, so a fixed count is not a settle

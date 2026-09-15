@@ -101,6 +101,44 @@ struct ReaderPreferencesTests {
         #expect(preferences.lineWidth == ReaderPreferences.defaultLineWidth)
     }
 
+    #if !os(iOS)
+    @Test("page layout defaults to Automatic and round-trips")
+    func pageLayoutRoundTrips() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.pageLayout == .automatic)
+
+        preferences.pageLayout = .double
+        #expect(ReaderPreferences(defaults: defaults).pageLayout == .double)
+        preferences.pageLayout = .single
+        #expect(ReaderPreferences(defaults: defaults).pageLayout == .single)
+    }
+
+    @Test("an unknown persisted page layout falls back to Automatic")
+    func unknownPageLayoutFallsBack() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        defaults.set("spread", forKey: "reader.pageLayout.macos")
+
+        #expect(ReaderPreferences(defaults: defaults).pageLayout == .automatic)
+    }
+
+    @Test("resetTypography preserves the page-layout choice")
+    func resetTypographyPreservesPageLayout() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        preferences.pageLayout = .double
+        preferences.resetTypography()
+
+        #expect(preferences.pageLayout == .double)
+        #expect(ReaderPreferences(defaults: defaults).pageLayout == .double)
+    }
+    #endif
+
     @Test("out-of-range persisted values are clamped on load")
     func corruptPersistedValuesClampOnLoad() throws {
         let defaults = makeDefaults()

@@ -264,6 +264,63 @@ struct ReaderLayoutIntegrationTests {
         }
     }
 
+    // MARK: Layout messages (requested vs effective)
+
+    @Test("the page reports requested and effective layout through layoutChanged")
+    func layoutChangedMessages() async throws {
+        let harness = try makeHarness(width: 600, height: 650)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+
+        let initial = try await harness.waitForMessage(
+            "layoutChanged",
+            matching: { $0["requested"] as? String == "automatic" },
+            "the initial layout message"
+        )
+        #expect(initial["pages"] as? Int == 1)
+
+        // Two Pages requested in a narrow window: the effective count still
+        // reports one page, which is what the popover explains.
+        try await harness.evaluate("readerSetPageLayout('double')")
+        let fallback = try await harness.waitForMessage(
+            "layoutChanged",
+            matching: { $0["requested"] as? String == "double" },
+            "the double fallback message"
+        )
+        #expect(fallback["pages"] as? Int == 1)
+
+        // Widening recovers the requested mode without touching it again.
+        try await harness.resize(to: CGSize(width: 1000, height: 700))
+        let recovered = try await harness.waitForMessage(
+            "layoutChanged",
+            matching: { $0["requested"] as? String == "double" && $0["pages"] as? Int == 2 },
+            "the recovered two-page message"
+        )
+        #expect(recovered["pages"] as? Int == 2)
+
+        try await harness.evaluate("readerSetPageLayout('single')")
+        let pinned = try await harness.waitForMessage(
+            "layoutChanged",
+            matching: { $0["requested"] as? String == "single" },
+            "the single-page message"
+        )
+        #expect(pinned["pages"] as? Int == 1)
+    }
+
+    @Test("iOS never posts desktop layout messages")
+    func iosHasNoLayoutMessages() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        _ = try await harness.waitForRelocation(after: 0)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(harness.relocationCount > 0)
+        // The iOS platform flag gates the desktop policy, so the page never
+        // reports a page-layout state the iOS shell has no UI for.
+        #expect(harness.messageCount(of: "layoutChanged") == 0)
+    }
+
     // MARK: iOS preservation
 
     @Test("the iOS page keeps its full-width single-column behavior")

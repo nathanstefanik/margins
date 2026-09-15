@@ -39,6 +39,24 @@ public final class ReaderModel {
     /// explicit `open(book:chapter:)` jump and on close.
     public private(set) var resumeCfi: String?
 
+    #if os(macOS)
+    /// How many pages the renderer actually laid out (1 or 2), reported by
+    /// the page after each layout resolution. Transient display state for
+    /// the typography popover's fallback note; nil while loading or when
+    /// the book is closed, so the UI never claims a fallback it cannot see.
+    public private(set) var effectivePageCount: Int?
+
+    /// A `layoutChanged` message from the renderer. Ignored unless the
+    /// requested mode is known and the count is one or two: a malformed or
+    /// stale payload must not change what the popover shows.
+    public func layoutChanged(requested: String, pages: Int) {
+        guard ReaderPageLayout(rawValue: requested) != nil, (1...2).contains(pages) else {
+            return
+        }
+        effectivePageCount = pages
+    }
+    #endif
+
     /// Fragment for the current chapter when an outline row targets a
     /// section other than the chapter's first TOC entry. Cleared whenever
     /// the chapter changes and by `open(book:chapter:)` without a fragment.
@@ -76,6 +94,11 @@ public final class ReaderModel {
         resumeCfi = nil
         progress = nil
         currentCfi = nil
+        #if os(macOS)
+        // The renderer will report again once it has re-resolved; keeping
+        // the old count would leave a stale fallback note in the popover.
+        effectivePageCount = nil
+        #endif
         if bookChanged {
             bookmarks = []
         }
@@ -116,6 +139,9 @@ public final class ReaderModel {
         noteSaveStatus = .idle
         bookmarks = []
         currentCfi = nil
+        #if os(macOS)
+        effectivePageCount = nil
+        #endif
     }
 
     /// Advances to the next chapter, if any; returns it.

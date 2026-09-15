@@ -58,6 +58,44 @@ struct ReaderModelTests {
         #expect(reader.displayTarget == "two.xhtml#part-two")
     }
 
+    #if !os(iOS)
+    @Test("effective page count follows validated layout messages")
+    func effectivePageCountValidatesMessages() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        #expect(reader.effectivePageCount == nil)
+
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.layoutChanged(requested: "double", pages: 1)
+        #expect(reader.effectivePageCount == 1)
+
+        // Unusable payloads are dropped, not clamped or guessed.
+        reader.layoutChanged(requested: "double", pages: 3)
+        #expect(reader.effectivePageCount == 1)
+        reader.layoutChanged(requested: "triple", pages: 2)
+        #expect(reader.effectivePageCount == 1)
+
+        reader.layoutChanged(requested: "automatic", pages: 2)
+        #expect(reader.effectivePageCount == 2)
+    }
+
+    @Test("opening another book and closing reset the effective page count")
+    func effectivePageCountResets() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.layoutChanged(requested: "double", pages: 1)
+        #expect(reader.effectivePageCount == 1)
+
+        reader.open(book: book, chapter: book.chapters[1])
+        #expect(reader.effectivePageCount == nil)
+
+        reader.layoutChanged(requested: "automatic", pages: 2)
+        reader.close()
+        #expect(reader.effectivePageCount == nil)
+    }
+    #endif
+
     @Test("relocated still matches chapters by bare href")
     func relocatedMatchesBareHref() {
         // Relocation events carry the section href without a fragment, so a
