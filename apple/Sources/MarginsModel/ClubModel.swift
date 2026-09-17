@@ -201,6 +201,67 @@ public final class ClubModel {
     }
 
     @discardableResult
+    public func renameSelectedClub(_ name: String) async -> Bool {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            errorMessage = "Name can't be empty."
+            return false
+        }
+        guard let sync, let id = selectedClubID else { return false }
+        guard isAdmin(of: selectedClub) else {
+            errorMessage = "Only the club admin can do that."
+            return false
+        }
+        do {
+            _ = try await sync.renameClub(clubId: id, name: name)
+            await refresh()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    public func setDisplayName(_ name: String) async -> Bool {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            errorMessage = "Name can't be empty."
+            return false
+        }
+        guard let sync else { return false }
+        do {
+            try await sync.setDisplayName(name, memberId: identity.memberId)
+            identity = ClubIdentity(memberId: identity.memberId, displayName: name)
+            await refresh()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    public func promoteMember(id memberId: String) async -> Bool {
+        guard let sync, let id = selectedClubID else { return false }
+        guard isAdmin(of: selectedClub) else {
+            errorMessage = "Only the club admin can do that."
+            return false
+        }
+        guard memberId != identity.memberId, selectedClub?.member(id: memberId) != nil else {
+            return false
+        }
+        do {
+            _ = try await sync.transferAdmin(clubId: id, to: memberId)
+            await refresh()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
     public func rotateInviteCode() async -> String? {
         guard let sync, let id = selectedClubID else { return nil }
         do {
@@ -298,5 +359,9 @@ public final class ClubModel {
 
     public func isAdmin(of club: Club?) -> Bool {
         club?.isAdmin(identity.memberId) ?? false
+    }
+
+    public func isOwner(of club: Club?) -> Bool {
+        club?.isOwner(identity.memberId) ?? false
     }
 }

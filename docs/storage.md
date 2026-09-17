@@ -342,9 +342,10 @@ synced folder therefore never replicates club membership between machines.
 ```
 
 - `club.json` is a `Club` record: the book identity (`book_id`, title,
-  author), the four-character invite code, and the roster with roles. One
-  club reads exactly one book; there is no reading list and no persistence
-  of notes into a next book.
+  author), the four-character invite code, `owner_member_id` (the CloudKit
+  share owner; missing on older files falls back to the roster admin), and
+  the roster with roles. One club reads exactly one book; there is no
+  reading list and no persistence of notes into a next book.
 - `members/{member_id}.json` is a `ClubMemberNotes` snapshot: that member's
   chapters with content, compiled from their local notes. Snapshots are
   derived artifacts — deleting one loses nothing, because

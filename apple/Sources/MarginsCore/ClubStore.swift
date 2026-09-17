@@ -40,6 +40,7 @@ public struct ClubStore: Sendable {
             bookAuthor: bookAuthor,
             inviteCode: try uniqueInviteCode(),
             createdAt: now,
+            ownerMemberId: adminId,
             members: [
                 ClubMember(
                     id: adminId, displayName: adminName, role: .admin, joinedAt: now

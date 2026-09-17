@@ -87,6 +87,8 @@ public struct Club: Codable, Sendable, Equatable, Hashable, Identifiable {
     /// the CloudKit share.
     public var inviteCode: String
     public var createdAt: Date
+    /// CloudKit share owner; delete-for-everyone. Roster `admin` can move.
+    public var ownerMemberId: String
     public var members: [ClubMember]
 
     public init(
@@ -97,6 +99,7 @@ public struct Club: Codable, Sendable, Equatable, Hashable, Identifiable {
         bookAuthor: String,
         inviteCode: String,
         createdAt: Date,
+        ownerMemberId: String,
         members: [ClubMember]
     ) {
         self.id = id
@@ -106,6 +109,7 @@ public struct Club: Codable, Sendable, Equatable, Hashable, Identifiable {
         self.bookAuthor = bookAuthor
         self.inviteCode = inviteCode
         self.createdAt = createdAt
+        self.ownerMemberId = ownerMemberId
         self.members = members
     }
 
@@ -128,6 +132,10 @@ public struct Club: Codable, Sendable, Equatable, Hashable, Identifiable {
         member(id: memberId)?.role == .admin
     }
 
+    public func isOwner(_ memberId: String) -> Bool {
+        ownerMemberId == memberId
+    }
+
     public var admin: ClubMember? {
         members.first { $0.role == .admin }
     }
@@ -139,6 +147,7 @@ public struct Club: Codable, Sendable, Equatable, Hashable, Identifiable {
         case bookAuthor = "book_author"
         case inviteCode = "invite_code"
         case createdAt = "created_at"
+        case ownerMemberId = "owner_member_id"
         case members
     }
 
@@ -152,6 +161,10 @@ public struct Club: Codable, Sendable, Equatable, Hashable, Identifiable {
         inviteCode = try container.decode(String.self, forKey: .inviteCode)
         createdAt = try container.decodeDate(forKey: .createdAt)
         members = try container.decode([ClubMember].self, forKey: .members)
+        ownerMemberId = try container.decodeIfPresent(String.self, forKey: .ownerMemberId)
+            ?? members.first(where: \.isAdmin)?.id
+            ?? members.first?.id
+            ?? ""
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -163,6 +176,7 @@ public struct Club: Codable, Sendable, Equatable, Hashable, Identifiable {
         try container.encode(bookAuthor, forKey: .bookAuthor)
         try container.encode(inviteCode, forKey: .inviteCode)
         try container.encodeDate(createdAt, forKey: .createdAt)
+        try container.encode(ownerMemberId, forKey: .ownerMemberId)
         try container.encode(members, forKey: .members)
     }
 }
