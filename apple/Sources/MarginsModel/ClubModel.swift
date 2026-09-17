@@ -36,6 +36,7 @@ public final class ClubModel {
     private let dataDir: String?
     private var store: CoreStore?
     private var sync: ClubSync?
+    private var publishTasks: [String: Task<Void, Never>] = [:]
 
     /// - Parameter dataDir: explicit data directory for a self-activated
     ///   model, or `nil` when the app passes in the library's store.
@@ -185,6 +186,10 @@ public final class ClubModel {
     @discardableResult
     public func publishOwnSnapshot() async -> Bool {
         guard let sync, let id = selectedClubID else { return false }
+        if let bookId = selectedClub?.bookId {
+            publishTasks[bookId]?.cancel()
+            publishTasks[bookId] = nil
+        }
         isBusy = true
         defer { isBusy = false }
         do {
@@ -197,6 +202,32 @@ public final class ClubModel {
         } catch {
             errorMessage = error.localizedDescription
             return false
+        }
+    }
+
+    public func schedulePublish(bookId: String) {
+        publishTasks[bookId]?.cancel()
+        publishTasks[bookId] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            await self?.publishNotes(bookId: bookId)
+        }
+    }
+
+    private func publishNotes(bookId: String) async {
+        defer { publishTasks[bookId] = nil }
+        guard let sync else { return }
+        let matches = clubs.filter { $0.bookId == bookId }
+        guard !matches.isEmpty else { return }
+        let name = identity.displayName ?? "You"
+        for club in matches {
+            do {
+                try await sync.publishOwnSnapshot(
+                    clubId: club.id, memberId: identity.memberId, displayName: name
+                )
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

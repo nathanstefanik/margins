@@ -74,6 +74,9 @@ final class AppModel {
         if let store = library.coreStore {
             await clubs.activate(store: store)
         }
+        library.onBookNotesChanged = { [weak clubs] bookId in
+            await clubs?.schedulePublish(bookId: bookId)
+        }
     }
 
     /// Ensures `books/{id}/source.epub` is on disk before the reader
