@@ -37,6 +37,9 @@ public final class LibraryModel {
     /// the same files.
     public var coreStore: CoreStore? { store }
 
+    /// Fired after a note or mark lands on disk. Clubs debounce-publish from here.
+    public var onBookNotesChanged: ((String) async -> Void)?
+
     /// - Parameter dataDir: explicit data directory for the core, or `nil`
     ///   to let it resolve `MARGINS_DATA_DIR` / the platform default.
     public init(dataDir: String? = nil) {
@@ -585,7 +588,7 @@ public final class LibraryModel {
                 body: body
             )
             reader.noteMarksUpdated(reader.noteMarks + [mark])
-            await refreshCompiledNotesAfterSave(bookId: bookId)
+            await notesDidChange(bookId: bookId)
             return mark
         } catch {
             self.reader?.noteFailed(String(describing: error))
@@ -601,7 +604,7 @@ public final class LibraryModel {
         do {
             try await store.deleteMark(bookId: book.id, chapterKey: chapter.key, markId: mark.id)
             reader.noteMarksUpdated(reader.noteMarks.filter { $0.id != mark.id })
-            await refreshCompiledNotesAfterSave(bookId: book.id)
+            await notesDidChange(bookId: book.id)
         } catch {
             reader.noteFailed(String(describing: error))
         }
@@ -617,7 +620,7 @@ public final class LibraryModel {
             reader.noteMarksUpdated(
                 reader.noteMarks.map { $0.id == mark.id ? updated : $0 }
             )
-            await refreshCompiledNotesAfterSave(bookId: book.id)
+            await notesDidChange(bookId: book.id)
         } catch {
             reader.noteFailed(String(describing: error))
         }
@@ -641,7 +644,7 @@ public final class LibraryModel {
                 updatedAt: note.frontmatter.updatedAt,
                 savedBody: body
             )
-            await refreshCompiledNotesAfterSave(bookId: book.id)
+            await notesDidChange(bookId: book.id)
         } catch {
             reader.noteFailed(String(describing: error))
         }
@@ -667,10 +670,15 @@ public final class LibraryModel {
                 updatedAt: note.frontmatter.updatedAt,
                 savedBody: body
             )
-            await refreshCompiledNotesAfterSave(bookId: bookId)
+            await notesDidChange(bookId: bookId)
         } catch {
             reader?.noteFailed(String(describing: error))
         }
+    }
+
+    private func notesDidChange(bookId: String) async {
+        await refreshCompiledNotesAfterSave(bookId: bookId)
+        await onBookNotesChanged?(bookId)
     }
 
     /// The compiled notes page keeps its snapshot while a reader session

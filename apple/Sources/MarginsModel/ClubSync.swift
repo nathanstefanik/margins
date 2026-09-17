@@ -318,6 +318,43 @@ public struct ClubSync: Sendable {
         return code
     }
 
+    public func renameClub(clubId: String, name: String) async throws -> Club {
+        var club = try await store.getClub(id: clubId)
+        club.name = name
+        try await store.updateClub(club)
+        try await engine.publishClub(club)
+        return club
+    }
+
+    public func setDisplayName(_ name: String, memberId: String) async throws {
+        try await store.setClubDisplayName(name)
+        for club in try await store.listClubs() {
+            guard let index = club.members.firstIndex(where: { $0.id == memberId }) else {
+                continue
+            }
+            var updated = club
+            updated.members[index].displayName = name
+            try await store.updateClub(updated)
+            try await engine.publishClub(updated)
+            _ = try await publishOwnSnapshot(
+                clubId: club.id, memberId: memberId, displayName: name
+            )
+        }
+    }
+
+    public func transferAdmin(clubId: String, to memberId: String) async throws -> Club {
+        var club = try await store.getClub(id: clubId)
+        guard club.member(id: memberId) != nil else {
+            throw CoreError.library("member not in club: \(memberId)")
+        }
+        for index in club.members.indices {
+            club.members[index].role = club.members[index].id == memberId ? .admin : .member
+        }
+        try await store.updateClub(club)
+        try await engine.publishClub(club)
+        return club
+    }
+
     /// Removes a member locally, remotely, and from the share. Role
     /// enforcement belongs to the UI and the transport; this performs the
     /// mechanics.

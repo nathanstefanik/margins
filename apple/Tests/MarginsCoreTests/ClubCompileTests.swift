@@ -24,6 +24,7 @@ struct ClubCompileTests {
             bookAuthor: "George Eliot",
             inviteCode: "7KQP",
             createdAt: epoch,
+            ownerMemberId: members.first(where: \.isAdmin)?.id ?? members.first?.id ?? "owner",
             members: members
         )
     }

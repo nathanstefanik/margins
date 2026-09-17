@@ -8,6 +8,8 @@ struct SettingsView: View {
     let clubs: ClubModel
     let reader: ReaderModel
 
+    @State private var displayName = ""
+
     var body: some View {
         TabView {
             typographyTab
@@ -17,12 +19,23 @@ struct SettingsView: View {
             clubsTab
                 .tabItem { Label("Clubs", systemImage: "person.2") }
         }
-        .frame(width: 420, height: 300)
+        .frame(width: 420, height: 360)
+        .onAppear { displayName = clubs.identity.displayName ?? "" }
+        .onDisappear {
+            let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return }
+            Task { await clubs.setDisplayName(name) }
+        }
     }
 
     private var clubsTab: some View {
         Form {
             Section("Book Clubs") {
+                TextField("Name", text: $displayName)
+                    .onSubmit { Task { await clubs.setDisplayName(displayName) } }
+                Text("The name other members see, on every club.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle(
                     "Spoiler protection",
                     isOn: Binding(

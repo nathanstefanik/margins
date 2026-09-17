@@ -90,6 +90,9 @@ struct ContentView: View {
             if let store = model.coreStore {
                 await clubs.activate(store: store)
             }
+            model.onBookNotesChanged = { bookId in
+                await clubs.schedulePublish(bookId: bookId)
+            }
         }
         .onAppear {
             if keyboardController == nil {
@@ -104,7 +107,7 @@ struct ContentView: View {
     /// the message explains itself and drifts away; a click dismisses.
     @ViewBuilder
     private var errorBanner: some View {
-        if let message = model.errorMessage {
+        if let message = clubs.errorMessage ?? model.errorMessage {
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
@@ -113,6 +116,7 @@ struct ContentView: View {
                     .lineLimit(3)
                 Spacer(minLength: 8)
                 Button("Dismiss") {
+                    clubs.errorMessage = nil
                     model.clearError()
                 }
                 .buttonStyle(.borderless)
@@ -125,7 +129,10 @@ struct ContentView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .task {
                 try? await Task.sleep(for: .seconds(8))
-                withAnimation { model.clearError() }
+                withAnimation {
+                    clubs.errorMessage = nil
+                    model.clearError()
+                }
             }
         }
     }

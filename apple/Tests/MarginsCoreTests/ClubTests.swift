@@ -24,6 +24,7 @@ struct ClubTests {
             bookAuthor: "George Eliot",
             inviteCode: "7KQP",
             createdAt: epoch,
+            ownerMemberId: members.first(where: \.isAdmin)?.id ?? members.first?.id ?? "owner",
             members: members
         )
     }
@@ -80,6 +81,7 @@ struct ClubTests {
         let raw = try #require(String(data: data, encoding: .utf8))
         #expect(raw.contains("\"book_id\""))
         #expect(raw.contains("\"invite_code\""))
+        #expect(raw.contains("\"owner_member_id\""))
         #expect(raw.contains("\"joined_at\""))
         #expect(try MarginsJSON.decode(Club.self, from: data) == club)
     }

@@ -406,13 +406,17 @@ public actor CoreStore {
         if let previous {
             for club in try clubs.listClubs() {
                 var updated = club
-                var rosterChanged = false
+                var changed = false
+                if updated.ownerMemberId == previous {
+                    updated.ownerMemberId = memberId
+                    changed = true
+                }
                 for index in updated.members.indices
                 where updated.members[index].id == previous {
                     updated.members[index].id = memberId
-                    rosterChanged = true
+                    changed = true
                 }
-                if rosterChanged { try clubs.writeClub(updated) }
+                if changed { try clubs.writeClub(updated) }
 
                 if let snapshot = try clubs.memberSnapshot(
                     clubId: club.id, memberId: previous

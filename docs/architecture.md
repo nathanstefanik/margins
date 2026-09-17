@@ -96,7 +96,7 @@ A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
   library root: iCloud container resolution with runtime fallback,
   placeholder materialization for reader assets and covers, coordinated
   staging of picked files, conflict detection), and the club layer:
-  `ClubModel` (club list, selection, merged document), `ClubSync` +
+  `ClubModel` (club list, selection, merged document, auto-publish), `ClubSync` +
   `CloudKitClubSync` (share transport), and `LocalClubSyncEngine` (the
   no-iCloud fallback used by unsigned builds). Unit-tested via
   `MarginsModelTests`.
@@ -257,12 +257,19 @@ writes the file after an `NSSavePanel`; note bodies render as plain `Text`
 renders `ClubModel.clubs`; selecting one takes over the detail area).
 `ClubDetailView` shows the roster, invite code (copy/rotate), spoiler
 toggle, export/copy, and the merged document: clustered passages, long-form
-notes, and spoiler placeholders. Create/join sheets are bound to
-`ClubModel.createSheetPresented` / `joinSheetPresented`, so the Clubs menu
-in `MarginsCommands` opens the same sheets. `ClubSync.automatic` picks
-CloudKit when an iCloud account is available and the local-only engine
-otherwise, so the unsigned `make app` build keeps working with
-single-member clubs; the Settings → Clubs tab reports which mode is active.
+notes, and spoiler placeholders. Roster `isAdmin` can rename, rotate the
+invite, remove members, and promote; `isOwner` (`Club.ownerMemberId`) is
+the only one who deletes the club — everyone else leaves. Create/join
+sheets are bound to `ClubModel.createSheetPresented` /
+`joinSheetPresented`, so the Clubs menu in `MarginsCommands` opens the
+same sheets. An empty library does not hide **New Book Club**: the create
+sheet is an import empty state, then the form once a book exists. Saving a
+note or mark calls `LibraryModel.notesDidChange` →
+`ClubModel.schedulePublish` (1s latest-wins); pull stays `selectClub` /
+iOS pull-to-refresh. `ClubSync.automatic` picks CloudKit when an iCloud
+account is available and the local-only engine otherwise, so the unsigned
+`make app` build keeps working with single-member clubs; the Settings →
+Clubs tab reports which mode is active.
 
 ## Building and running (macOS)
 

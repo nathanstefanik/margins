@@ -93,7 +93,7 @@ struct ClubStoreTests {
         let ghost = Club(
             id: "zzzzzzzzzz", name: "Ghost", bookId: "book1",
             bookTitle: "Middlemarch", bookAuthor: "George Eliot",
-            inviteCode: "ABCD", createdAt: Date(), members: []
+            inviteCode: "ABCD", createdAt: Date(), ownerMemberId: "ghost", members: []
         )
         #expect(throws: CoreError.self) { try store.updateClub(ghost) }
     }

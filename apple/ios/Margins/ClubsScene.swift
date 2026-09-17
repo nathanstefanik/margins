@@ -10,6 +10,8 @@ struct ClubsScene: View {
     @Environment(LibraryModel.self) private var library
 
     @State private var path: [String] = []
+    @State private var nameOpen = false
+    @State private var displayName = ""
 
     var body: some View {
         @Bindable var clubs = clubs
@@ -30,6 +32,12 @@ struct ClubsScene: View {
                                 Label("Join with Code", systemImage: "person.badge.key")
                             }
                             .disabled(!clubs.supportsSharing)
+                            Button {
+                                displayName = clubs.identity.displayName ?? ""
+                                nameOpen = true
+                            } label: {
+                                Label("My Name…", systemImage: "person")
+                            }
                         } label: {
                             Label("Add Club", systemImage: "plus")
                         }
@@ -45,6 +53,13 @@ struct ClubsScene: View {
                 }
                 .sheet(isPresented: $clubs.joinSheetPresented) {
                     JoinClubSheet()
+                }
+                .alert("Name", isPresented: $nameOpen) {
+                    TextField("Name", text: $displayName)
+                    Button("Save") {
+                        Task { await clubs.setDisplayName(displayName) }
+                    }
+                    Button("Cancel", role: .cancel) {}
                 }
                 .alert(
                     "Book Clubs",

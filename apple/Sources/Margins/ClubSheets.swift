@@ -18,42 +18,66 @@ struct CreateClubSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("New Book Club")
                 .font(.title2.weight(.semibold))
-            Text("A club reads one book. Everyone imports the same EPUB.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            Form {
-                TextField("Club Name", text: $name)
-                TextField("Name", text: $displayName)
-                Picker("Book", selection: $selectedBookID) {
-                    Text("Choose a book…").tag(String?.none)
-                    ForEach(library.books) { book in
-                        Text("\(book.title) — \(book.author)")
-                            .tag(String?.some(book.id))
+            if library.books.isEmpty {
+                Text("A club reads one book from your library. Import an EPUB first.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Spacer()
+                    Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                    Button("Import EPUB…") {
+                        Task { await ImportPanel.run(model: library) }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            } else {
+                Text("A club reads one book. Everyone imports the same EPUB.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Form {
+                    TextField("Club Name", text: $name)
+                    TextField("Name", text: $displayName)
+                    Picker("Book", selection: $selectedBookID) {
+                        Text("Choose a book…").tag(String?.none)
+                        ForEach(library.books) { book in
+                            Text("\(book.title) — \(book.author)")
+                                .tag(String?.some(book.id))
+                        }
                     }
                 }
-            }
-            .formStyle(.grouped)
-
-            HStack {
-                if !clubs.supportsSharing {
-                    Label("Sharing needs iCloud; the club stays on this Mac.", systemImage: "icloud.slash")
+                .formStyle(.grouped)
+                HStack {
+                    if !clubs.supportsSharing {
+                        Label(
+                            "Sharing needs iCloud; the club stays on this Mac.",
+                            systemImage: "icloud.slash"
+                        )
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                    Button("Create") { create() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!canCreate)
                 }
-                Spacer()
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Create") { create() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!canCreate)
             }
         }
         .padding(20)
         .frame(width: 460)
         .disabled(isSubmitting || clubs.isBusy)
         .onAppear {
+            if displayName.isEmpty, let saved = clubs.identity.displayName {
+                displayName = saved
+            }
             selectedBookID = library.selectedBookID ?? library.books.first?.id
+        }
+        .onChange(of: library.books.count) {
+            if selectedBookID == nil {
+                selectedBookID = library.selectedBookID ?? library.books.first?.id
+            }
         }
     }
 
@@ -119,6 +143,11 @@ struct JoinClubSheet: View {
         .padding(20)
         .frame(width: 420)
         .disabled(isSubmitting || clubs.isBusy)
+        .onAppear {
+            if displayName.isEmpty, let saved = clubs.identity.displayName {
+                displayName = saved
+            }
+        }
     }
 
     private var canJoin: Bool {
