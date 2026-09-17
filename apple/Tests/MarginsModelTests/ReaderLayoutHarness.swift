@@ -46,7 +46,10 @@ enum ReaderLayoutHarnessError: Error, CustomStringConvertible {
 /// collecting everything the page posts to the `reader` message handler.
 ///
 /// macOS-only: the reader page is shared with iOS, but its WKWebView can
-/// only be hosted by a macOS test process.
+/// only be hosted by a macOS test process. Hosted in a transparent
+/// NSWindow so navigation completes under `swift test`; rAF is still
+/// shimmed. Construction is serialized so two cold WebKit processes
+/// don't start together.
 ///
 /// All waits are async and bounded. The test harness cannot spin the run
 /// loop synchronously: under `swift test`, the main dispatch queue — which
@@ -54,38 +57,32 @@ enum ReaderLayoutHarnessError: Error, CustomStringConvertible {
 /// drains while the test is suspended.
 @MainActor
 final class ReaderLayoutHarness {
-    let webView: WKWebView
+    private(set) var webView: WKWebView!
+    private var window: NSWindow?
+    private var relay: MessageRelay?
+    private let fixtureData: Data
+    private var viewport: CGSize
     private var messages: [[String: Any]] = []
     private var consoleLines: [String] = []
+    private var pageDidFinish = false
+    private var navigationError: String?
 
     private static let pollInterval = Duration.milliseconds(20)
+    private static var installing = false
 
     init(fixture: ReaderLayoutFixture, viewport: CGSize) throws {
-        let data = try fixture.data
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.setURLSchemeHandler(
-            ReaderSchemeHandler(bytesProvider: { _ in data }),
-            forURLScheme: "margins-reader"
-        )
-        // Test-only diagnostics: console + uncaught errors are invisible
-        // from Swift otherwise, and a silently stalled reader would look
-        // like an empty message list.
-        let diagnostics = WKUserScript(
-            source: Self.diagnosticScript,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        )
-        configuration.userContentController.addUserScript(diagnostics)
-        webView = WKWebView(
-            frame: NSRect(origin: .zero, size: viewport),
-            configuration: configuration
-        )
-        configuration.userContentController.add(MessageRelay(harness: self), name: "reader")
+        fixtureData = try fixture.data
+        self.viewport = viewport
     }
 
     func dismantle() {
-        webView.loadHTMLString("", baseURL: nil)
+        webView?.navigationDelegate = nil
+        webView?.loadHTMLString("", baseURL: nil)
+        window?.contentView = nil
+        window?.close()
+        window = nil
+        webView = nil
+        relay = nil
     }
 
     /// Loads the reader page and applies the app's default macOS typography
@@ -98,6 +95,8 @@ final class ReaderLayoutHarness {
         platform: String? = "macos",
         typography: (fontSize: Double, lineHeight: Double, lineWidth: Double, unit: String)? = (110, 1.6, 72, "%")
     ) async throws {
+        try await installWebView()
+
         var components = URLComponents()
         components.scheme = "margins-reader"
         components.host = "app"
@@ -113,28 +112,87 @@ final class ReaderLayoutHarness {
         guard let url = components.url else {
             throw ReaderLayoutHarnessError.readerOpenFailed("bad reader URL")
         }
+        pageDidFinish = false
+        navigationError = nil
         webView.load(URLRequest(url: url))
+        try await waitForNavigation()
 
         guard let typography else { return }
-        let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline {
-            if let ready = try? await evaluate(
-                "typeof readerApplyTypography === 'function'", timeout: 2
-            ) as? Bool, ready {
-                try await evaluate(
-                    "readerApplyTypography(\(typography.fontSize),\(typography.lineHeight),\(typography.lineWidth),"
-                        + "'\(typography.unit)')"
-                )
-                return
-            }
-            try await Task.sleep(for: Self.pollInterval)
-        }
-        throw ReaderLayoutHarnessError.timedOut("reader.js to define readerApplyTypography")
+        try await evaluate(
+            "readerApplyTypography(\(typography.fontSize),\(typography.lineHeight),\(typography.lineWidth),"
+                + "'\(typography.unit)')"
+        )
     }
 
     /// Sets the viewport without waiting; for drag-like burst tests.
     func setViewport(width: Double, height: Double) {
-        webView.setFrameSize(NSSize(width: width, height: height))
+        viewport = CGSize(width: width, height: height)
+        let size = NSSize(width: width, height: height)
+        webView?.setFrameSize(size)
+        window?.setContentSize(size)
+    }
+
+    private func installWebView() async throws {
+        if webView != nil { return }
+        while Self.installing {
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        Self.installing = true
+        defer { Self.installing = false }
+
+        let app = NSApplication.shared
+        if app.activationPolicy() == .prohibited {
+            app.setActivationPolicy(.accessory)
+        }
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.setURLSchemeHandler(
+            ReaderSchemeHandler(bytesProvider: { [fixtureData] _ in fixtureData }),
+            forURLScheme: "margins-reader"
+        )
+        // Test-only diagnostics: console + uncaught errors are invisible
+        // from Swift otherwise, and a silently stalled reader would look
+        // like an empty message list.
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: Self.diagnosticScript,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        let relay = MessageRelay(harness: self)
+        configuration.userContentController.add(relay, name: "reader")
+        let frame = NSRect(origin: .zero, size: viewport)
+        let webView = WKWebView(frame: frame, configuration: configuration)
+        webView.navigationDelegate = relay
+        let window = NSWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.alphaValue = 0
+        window.contentView = webView
+        window.orderFront(nil)
+        self.relay = relay
+        self.window = window
+        self.webView = webView
+    }
+
+    private func waitForNavigation() async throws {
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            if let navigationError {
+                throw ReaderLayoutHarnessError.readerOpenFailed(navigationError)
+            }
+            if pageDidFinish { return }
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        throw ReaderLayoutHarnessError.timedOut(
+            "reader.html to load (console: \(consoleLines.suffix(8)))"
+        )
     }
 
     /// Waits until the page has no pending layout work, epub.js's queue has
@@ -185,7 +243,7 @@ final class ReaderLayoutHarness {
     /// Waits for a message of `type` matching `predicate`.
     func waitForMessage(
         _ type: String,
-        timeout: TimeInterval = 15,
+        timeout: TimeInterval = 30,
         matching predicate: (([String: Any]) -> Bool)? = nil,
         _ what: String
     ) async throws -> [String: Any] {
@@ -205,7 +263,7 @@ final class ReaderLayoutHarness {
     }
 
     /// Waits for relocation number `count + 1` (one-based ordering).
-    func waitForRelocation(after count: Int, timeout: TimeInterval = 15) async throws -> [String: Any] {
+    func waitForRelocation(after count: Int, timeout: TimeInterval = 30) async throws -> [String: Any] {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if messages.filter({ $0["type"] as? String == "relocated" }).count > count,
@@ -234,7 +292,7 @@ final class ReaderLayoutHarness {
     /// signal — a changed fingerprint is.
     func waitForRelocationChange(
         from previous: [String: Any]?,
-        timeout: TimeInterval = 15
+        timeout: TimeInterval = 30
     ) async throws -> [String: Any] {
         let previousFingerprint = previous.map(Self.relocationFingerprint)
         let deadline = Date().addingTimeInterval(timeout)
@@ -461,7 +519,7 @@ final class ReaderLayoutHarness {
 
     /// `WKScriptMessageHandler` must be an Objective-C object; the harness
     /// itself is not one, so a tiny relay forwards into it.
-    private final class MessageRelay: NSObject, WKScriptMessageHandler {
+    private final class MessageRelay: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private weak var harness: ReaderLayoutHarness?
 
         init(harness: ReaderLayoutHarness) {
@@ -475,6 +533,32 @@ final class ReaderLayoutHarness {
             guard message.name == "reader", let body = message.body as? [String: Any] else { return }
             MainActor.assumeIsolated {
                 harness?.record(body)
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            MainActor.assumeIsolated {
+                harness?.pageDidFinish = true
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFail navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            MainActor.assumeIsolated {
+                harness?.navigationError = error.localizedDescription
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            MainActor.assumeIsolated {
+                harness?.navigationError = error.localizedDescription
             }
         }
     }
