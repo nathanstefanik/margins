@@ -1,6 +1,6 @@
 # Development plan: book club management QoL
 
-Status: planned · Last updated: 2026-09-17
+Status: implemented · Last updated: 2026-09-17
 
 Follows [docs/book-clubs-plan.md](book-clubs-plan.md). Each phase is one
 commit. `swift test --package-path apple` green before the next.
@@ -227,10 +227,10 @@ Do not rewrite `book-clubs-plan.md`.
 
 ## Commits
 
-1. [ ] `FEAT Add club owner, rename, display name, and admin promote`
-2. [ ] `FEAT Auto-publish club snapshots after note saves`
-3. [ ] `FEAT Add club management UI`
-4. [ ] `DOCS Document club auto-publish and owner vs admin`
+1. [x] `FEAT Add club owner, rename, display name, and admin promote`
+2. [x] `FEAT Auto-publish club snapshots after note saves`
+3. [x] `FEAT Add club management UI`
+4. [x] `DOCS Document club auto-publish and owner vs admin`
 
 ## Do not
 

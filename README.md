@@ -16,8 +16,10 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Private **book clubs** (one book per club): a four-character invite code,
   CloudKit sharing with an automatic local-only fallback, and a merged view
   of every member's notes — overlapping highlights cluster under one quoted
-  passage, with spoiler protection on by default
-  ([docs/book-clubs-plan.md](docs/book-clubs-plan.md))
+  passage, with spoiler protection on by default. Saving a note publishes
+  the club snapshot after a one-second debounce
+  ([docs/book-clubs-plan.md](docs/book-clubs-plan.md),
+  [docs/book-clubs-qol-plan.md](docs/book-clubs-qol-plan.md))
 - Choose the library directory with the in-app folder picker or **root** command
 
 ## Quick start
