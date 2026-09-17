@@ -12,6 +12,9 @@ struct ClubDetailView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingLeaveConfirmation = false
     @State private var memberPendingRemoval: ClubMember?
+    @State private var memberPendingPromote: ClubMember?
+    @State private var renameOpen = false
+    @State private var renameText = ""
 
     var body: some View {
         if let club = clubs.selectedClub {
@@ -62,6 +65,30 @@ struct ClubDetailView: View {
             } message: { member in
                 Text("\(member.displayName) is removed from the roster and their shared snapshot is deleted.")
             }
+            .confirmationDialog(
+                "Promote Member?",
+                isPresented: Binding(
+                    get: { memberPendingPromote != nil },
+                    set: { if !$0 { memberPendingPromote = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: memberPendingPromote
+            ) { member in
+                Button("Promote \(member.displayName)") {
+                    Task { await clubs.promoteMember(id: member.id) }
+                }
+            } message: { member in
+                Text(
+                    "Promote \(member.displayName) to admin? They can rename the club, remove members, and rotate the invite code. You become a member.\n\nIf you created the club, you can still delete it."
+                )
+            }
+            .alert("Name", isPresented: $renameOpen) {
+                TextField("Club Name", text: $renameText)
+                Button("Save") {
+                    Task { await clubs.renameSelectedClub(renameText) }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
     }
 
@@ -70,8 +97,20 @@ struct ClubDetailView: View {
     private func header(_ club: Club) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(club.name)
-                    .font(.system(.largeTitle, design: .serif).weight(.semibold))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(club.name)
+                        .font(.system(.largeTitle, design: .serif).weight(.semibold))
+                    if clubs.isAdmin(of: club) {
+                        Button {
+                            renameText = club.name
+                            renameOpen = true
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Rename club")
+                    }
+                }
                 Text("\(club.bookTitle) — \(club.bookAuthor)")
                     .font(.title3)
                     .foregroundStyle(.secondary)
@@ -138,7 +177,7 @@ struct ClubDetailView: View {
 
                 Spacer()
 
-                if clubs.isAdmin(of: club) {
+                if clubs.isOwner(of: club) {
                     Button("Delete Club", role: .destructive) {
                         showingDeleteConfirmation = true
                     }
@@ -188,16 +227,23 @@ struct ClubDetailView: View {
                             .font(.caption2)
                             .help("Admin")
                     }
-                    if clubs.isAdmin(of: club), !clubs.isCurrentMember(member),
-                       clubs.supportsSharing
-                    {
+                    if clubs.isAdmin(of: club), !clubs.isCurrentMember(member) {
                         Button {
-                            memberPendingRemoval = member
+                            memberPendingPromote = member
                         } label: {
-                            Image(systemName: "xmark.circle.fill")
+                            Image(systemName: "crown")
                         }
                         .buttonStyle(.borderless)
-                        .help("Remove \(member.displayName)")
+                        .help("Promote \(member.displayName)")
+                        if clubs.supportsSharing {
+                            Button {
+                                memberPendingRemoval = member
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Remove \(member.displayName)")
+                        }
                     }
                 }
                 .font(.caption)
