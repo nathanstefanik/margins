@@ -79,13 +79,10 @@ struct ReaderLayoutIntegrationTests {
         try await reopened.load()
         try await reopened.waitForRelocation(after: 0)
         try await reopened.evaluate("readerDisplay(\(jsLiteral(cfi)))")
-        let settled = try await reopened.waitForMessage(
-            "relocated",
-            matching: { $0["cfi"] as? String == cfi },
-            "the requested CFI to settle"
-        )
-        #expect(settled["cfi"] as? String == cfi)
-
+        // Passage on screen, not an exact relocated CFI: display() can
+        // resolve while currentLocation is still the previous page.
+        let expected = try #require(visible.first)
+        try await reopened.waitForVisibleParagraph(expected, timeout: 30)
         let reopenedVisible = try await reopened.visibleParagraphIDs()
         #expect(Set(visible).intersection(reopenedVisible).isEmpty == false)
     }

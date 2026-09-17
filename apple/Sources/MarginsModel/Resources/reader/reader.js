@@ -111,6 +111,10 @@ let readerContentsRevision = 0;
 // The last settled page start, captured before a reflow so the anchor is
 // the reader's real position, never a provisional mid-relayout location.
 let readerSettledCfi = null;
+// True when the shell just asked for a CFI: display() can resolve while
+// currentLocation is still the previous page, and a relocated event from
+// that page must not become the reflow anchor.
+let readerSettledCfiPinned = false;
 // Bumped every time a transaction is scheduled; a transaction whose
 // generation changed abandons itself.
 let readerLayoutGeneration = 0;
@@ -218,6 +222,7 @@ async function readerOpen() {
     if (readerStartCfi) {
       console.log("readerOpen: displaying start CFI");
       await readerRendition.display(readerStartCfi);
+      readerPinSettledCfi(readerStartCfi);
     } else {
       await readerDisplayTarget(readerStartHref || undefined);
     }
@@ -417,6 +422,7 @@ function readerApplyPageLayout() {
 function readerInvalidatePendingLayout() {
   readerLayoutGeneration += 1;
   readerSettledCfi = null;
+  readerSettledCfiPinned = false;
 }
 
 // Navigations currently awaiting their display. Relocations that resolve
@@ -698,7 +704,18 @@ function readerUpdateSettledCfi() {
 // when a navigation has finished (its display resolved), where the live
 // location is authoritative even if a geometry transaction is still
 // queued: the user's page is the page on screen.
+function readerPinSettledCfi(cfi) {
+  if (!cfi) {
+    return;
+  }
+  readerSettledCfi = cfi;
+  readerSettledCfiPinned = true;
+}
+
 function readerCaptureSettledCfi() {
+  if (readerSettledCfiPinned) {
+    return;
+  }
   const cfi = readerRendition ? readerStartCfiOf(readerRendition) : null;
   if (cfi) {
     readerSettledCfi = cfi;
@@ -891,7 +908,7 @@ function readerReportRelocated(location) {
   // re-displays on its own window-resize handler, and those locations
   // belong to a layout that is about to be replaced.
   const trusted = !readerLayoutWorkPending() || readerPendingNavigations > 0;
-  if (start && start.cfi && trusted) {
+  if (start && start.cfi && trusted && !readerSettledCfiPinned) {
     readerSettledCfi = start.cfi;
   }
   const end = location && location.end;
@@ -1063,7 +1080,11 @@ async function readerDisplayTarget(target) {
     setTimeout(() => console.log("readerOpen: display still pending after 6s"), 6000);
     await displayed;
     console.log("readerOpen: display resolved for", target || "chapter start");
-    readerCaptureSettledCfi();
+    if (target && target.indexOf("epubcfi(") === 0) {
+      readerPinSettledCfi(target);
+    } else {
+      readerCaptureSettledCfi();
+    }
   } finally {
     // The destination is on screen; the fragment refinement below is a
     // second pass that must not keep a reflow waiting on "navigation".
