@@ -1218,6 +1218,7 @@ public enum CoreError: Error, LocalizedError, Sendable, Equatable, Hashable {
     case notes(String)
     case epub(String)
     case io(String)
+    case notDownloaded(String)
     case other(String)
 
     public var message: String {
@@ -1225,6 +1226,8 @@ public enum CoreError: Error, LocalizedError, Sendable, Equatable, Hashable {
         case let .config(message), let .library(message), let .notes(message),
              let .epub(message), let .io(message), let .other(message):
             return message
+        case let .notDownloaded(path):
+            return "\((path as NSString).lastPathComponent) has not downloaded from iCloud yet"
         }
     }
 

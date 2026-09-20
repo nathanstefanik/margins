@@ -8,6 +8,7 @@ Icon
 .Trashes
 .TemporaryItems
 *.icloud
+**-plan.md
 
 # Xcode user state and build byproducts
 xcuserdata/

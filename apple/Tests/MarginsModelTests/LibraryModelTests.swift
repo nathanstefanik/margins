@@ -11,6 +11,7 @@ struct LibraryModelTests {
         let model = LibraryModel(dataDir: try makeTempDataDir())
         await model.activate()
         #expect(model.books.isEmpty)
+        #expect(model.notDownloadedBookIDs.isEmpty)
         #expect(!model.libraryRoot.isEmpty)
         #expect(model.selectedBookID == nil)
         #expect(model.selectedBook == nil)

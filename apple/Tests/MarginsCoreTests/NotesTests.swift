@@ -206,6 +206,81 @@ struct NotesTests {
         )
     }
 
+    @Test("saving refuses to overwrite an evicted chapter note")
+    func saveRefusesEvictedNote() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
+        let book = try Book()
+        let saved = try Notes.saveChapterNote(
+            bookDir: book.dir, chapter: book.chapter,
+            frontmatter: book.frontmatter(), body: "original note"
+        )
+        let indexPath = book.dir.appendingPathComponent("notes/_index.json")
+        let indexBefore = try Files.readData(indexPath)
+        try Files.remove(saved.path)
+        let fileName = (saved.path as NSString).lastPathComponent
+        let placeholder = (saved.path as NSString).deletingLastPathComponent
+            .appendingPathComponent(".\(fileName).icloud")
+        try Files.write("placeholder", to: placeholder)
+
+        FileStore.overrideContainerProvider { URL(fileURLWithPath: book.dir, isDirectory: true) }
+
+        do {
+            _ = try Notes.saveChapterNote(
+                bookDir: book.dir, chapter: book.chapter,
+                frontmatter: book.frontmatter(), body: "replacement note"
+            )
+            Issue.record("expected an evicted note to refuse the save")
+        } catch let error as CoreError {
+            #expect(error == .notDownloaded(saved.path))
+        } catch {
+            Issue.record("expected CoreError, got \(error)")
+        }
+        #expect(!Files.exists(saved.path))
+        #expect(Files.exists(placeholder))
+        #expect(try Files.readData(indexPath) == indexBefore)
+    }
+
+    @Test("retitling refuses to replace an evicted note at its old filename")
+    func retitledSaveRefusesEvictedSourceNote() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
+        let book = try Book()
+        let saved = try Notes.saveChapterNote(
+            bookDir: book.dir, chapter: book.chapter,
+            frontmatter: book.frontmatter(), body: "original note"
+        )
+        let indexPath = book.dir.appendingPathComponent("notes/_index.json")
+        let indexBefore = try Files.readData(indexPath)
+        try Files.remove(saved.path)
+        let fileName = (saved.path as NSString).lastPathComponent
+        let placeholder = (saved.path as NSString).deletingLastPathComponent
+            .appendingPathComponent(".\(fileName).icloud")
+        try Files.write("placeholder", to: placeholder)
+
+        FileStore.overrideContainerProvider { URL(fileURLWithPath: book.dir, isDirectory: true) }
+        var retitled = book.chapter
+        retitled.title = "Opening Remarks"
+        let destination = book.dir
+            .appendingPathComponent("notes/chapters/001-opening-remarks.md")
+
+        do {
+            _ = try Notes.saveChapterNote(
+                bookDir: book.dir, chapter: retitled,
+                frontmatter: book.frontmatter(), body: "replacement note"
+            )
+            Issue.record("expected an evicted source note to refuse the retitled save")
+        } catch let error as CoreError {
+            #expect(error == .notDownloaded(saved.path))
+        } catch {
+            Issue.record("expected CoreError, got \(error)")
+        }
+        #expect(!Files.exists(saved.path))
+        #expect(Files.exists(placeholder))
+        #expect(!Files.exists(destination))
+        #expect(try Files.readData(indexPath) == indexBefore)
+    }
+
     @Test("loading a chapter with no note returns a blank one")
     func loadMissingNoteReturnsBlank() throws {
         let book = try Book()

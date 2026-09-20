@@ -81,6 +81,10 @@ public actor CoreStore {
         try library.listBooks()
     }
 
+    public func notDownloadedBookIDs() -> [String] {
+        library.notDownloadedBookIDs()
+    }
+
     public func importEpub(atPath path: String) throws -> BookMeta {
         try library.importEpub(atPath: path)
     }

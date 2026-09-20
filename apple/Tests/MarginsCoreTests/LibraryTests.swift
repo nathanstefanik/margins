@@ -96,6 +96,45 @@ struct LibraryTests {
         #expect(try harness.library.listBooks()[0].cover == nil)
     }
 
+    @Test("the catalog skips books whose metadata is evicted")
+    func catalogSkipsEvictedMetadata() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
+        let documents = FileManager.default.temporaryDirectory
+            .appendingPathComponent("margins-library-evicted-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Documents", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: documents, withIntermediateDirectories: true
+        )
+        FileStore.overrideContainerProvider { documents }
+
+        let library = try Library(root: documents.appendingPathComponent("Library").path)
+        let epub = try EpubFixtureBuilder.sampleEpub(in: documents, named: "available.epub")
+        let available = try library.importEpub(atPath: epub)
+
+        let evictedID = "evicted-book"
+        let evictedDir = library.bookDir(evictedID)
+        try Files.createDirectory(evictedDir)
+        let placeholder = evictedDir.appendingPathComponent(".meta.json.icloud")
+        try Files.write("placeholder", to: placeholder)
+
+        let listed = try library.listBooks()
+        #expect(listed.map(\.id) == [available.id])
+        #expect(library.notDownloadedBookIDs() == [evictedID])
+
+        let index = try MarginsJSON.decode(
+            LibraryIndex.self,
+            from: Files.readData(documents.appendingPathComponent("Library/index.json").path)
+        )
+        #expect(index.books.map(\.id) == [available.id])
+
+        try Files.remove(placeholder)
+        try Files.write("not json", to: evictedDir.appendingPathComponent("meta.json"))
+        #expect(throws: CoreError.self) {
+            try library.listBooks()
+        }
+    }
+
     @Test("the scan backfills covers for books imported before extraction existed")
     func scanBackfillsCovers() throws {
         let harness = try Harness()
@@ -313,6 +352,41 @@ struct LibraryTests {
             to: harness.library.bookDir(meta.id).appendingPathComponent("bookmarks.json")
         )
         #expect(harness.library.readBookmarks(bookID: meta.id).isEmpty)
+    }
+
+    @Test("adding a bookmark refuses to overwrite an evicted file")
+    func addBookmarkRefusesEvictedFile() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
+        let documents = FileManager.default.temporaryDirectory
+            .appendingPathComponent("margins-bookmarks-evicted-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Documents", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: documents, withIntermediateDirectories: true
+        )
+        FileStore.overrideContainerProvider { documents }
+
+        let library = try Library(root: documents.appendingPathComponent("Library").path)
+        let epub = try EpubFixtureBuilder.sampleEpub(in: documents, named: "book.epub")
+        let book = try library.importEpub(atPath: epub)
+        let path = library.bookDir(book.id).appendingPathComponent("bookmarks.json")
+        let placeholder = library.bookDir(book.id).appendingPathComponent(".bookmarks.json.icloud")
+        try Files.write("placeholder", to: placeholder)
+
+        do {
+            _ = try library.addBookmark(
+                bookID: book.id,
+                label: "saved place",
+                position: ReadingPosition(chapterKey: "001", percent: 12.5)
+            )
+            Issue.record("expected an evicted bookmarks file to refuse the write")
+        } catch let error as CoreError {
+            #expect(error == .notDownloaded(path))
+        } catch {
+            Issue.record("expected CoreError, got \(error)")
+        }
+        #expect(!Files.exists(path))
+        #expect(Files.exists(placeholder))
     }
 
     // MARK: Import lifecycle

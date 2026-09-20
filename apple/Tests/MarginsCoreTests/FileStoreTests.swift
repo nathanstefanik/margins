@@ -2,6 +2,20 @@ import Foundation
 @testable import MarginsCore
 import Testing
 
+enum FileStoreTestIsolation {
+    private static let lock = NSLock()
+
+    static func begin() {
+        lock.lock()
+    }
+
+    static func end() {
+        FileStore.accessDeadline = 8
+        FileStore.overrideContainerProvider(nil)
+        lock.unlock()
+    }
+}
+
 /// The coordination layer for the core's documents. `NSFileCoordinator`
 /// works fine over plain local files, so the coordinated branch is
 /// exercised against a fake container root — the real ubiquity path only
@@ -36,6 +50,8 @@ struct FileStoreTests {
 
     @Test("membership follows the resolved container root")
     func membership() {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
         let root = Self.useFakeContainer()
         #expect(FileStore.isCoordinated(root))
         #expect(FileStore.isCoordinated(root.appendingPathComponent("Library/books/abc/meta.json")))
@@ -44,6 +60,8 @@ struct FileStoreTests {
 
     @Test("outside the container the calls are a plain passthrough")
     func passthrough() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
         Self.useNoContainer()
         let dir = Self.tempDir("plain")
         let path = dir.appendingPathComponent("meta.json")
@@ -63,6 +81,8 @@ struct FileStoreTests {
 
     @Test("coordinated writes, reads, renames, and removals round-trip")
     func coordinatedRoundTrip() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
         let root = Self.useFakeContainer()
         let bookDir = root.appendingPathComponent("Library/books/abc")
         try Files.createDirectory(bookDir.appendingPathComponent("notes/chapters"))
@@ -81,8 +101,10 @@ struct FileStoreTests {
         #expect(!FileStore.exists(renamed))
     }
 
-    @Test("an evicted placeholder counts as existing but fails to read")
+    @Test("an evicted read fails fast without touching the placeholder")
     func evictedPlaceholder() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
         let root = Self.useFakeContainer()
         let dir = root.appendingPathComponent("Library/books/abc/notes/chapters")
         try Files.createDirectory(dir)
@@ -97,9 +119,19 @@ struct FileStoreTests {
         #expect(FileStore.isFile(logical))
         #expect(!Files.exists(logical), "plain fileExists misses the evicted item")
 
-        // Reading still needs the content; without a real sync engine the
-        // error surfaces like any other read failure.
-        #expect(throws: (Error).self) { try FileStore.read(logical) }
+        let clock = ContinuousClock()
+        let start = clock.now
+        do {
+            _ = try FileStore.read(logical)
+            Issue.record("expected an evicted read to fail")
+        } catch let error as CoreError {
+            #expect(error == .notDownloaded(logical))
+            #expect(error.message == "001-note.md has not downloaded from iCloud yet")
+        } catch {
+            Issue.record("expected CoreError, got \(error)")
+        }
+        #expect(start.duration(to: clock.now) < .milliseconds(100))
+        #expect(try Files.read(placeholder) == "placeholder")
 
         // A directory listing reports the logical name, so clears and
         // counts see the note.
@@ -115,6 +147,8 @@ struct FileStoreTests {
 
     @Test("placeholder entries outside the container are left alone")
     func placeholderOnlyInsideContainer() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
         Self.useNoContainer()
         let dir = Self.tempDir("outside-placeholder")
         let placeholder = dir.appendingPathComponent(".001-note.md.icloud")
@@ -126,5 +160,60 @@ struct FileStoreTests {
         #expect(!FileStore.exists(logical))
         #expect(FileStore.exists(placeholder))
         #expect(try FileStore.contents(ofDirectory: dir) == [placeholder])
+    }
+
+    @Test("a blocked coordinated read is cancelled at the access deadline")
+    func coordinationDeadlineCancelsBlockedRead() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
+        let root = Self.useFakeContainer()
+        let dir = root.appendingPathComponent("Library/books/abc")
+        try Files.createDirectory(dir)
+        let path = dir.appendingPathComponent("meta.json")
+        try Files.write("content", to: path)
+
+        let blockerStarted = DispatchSemaphore(value: 0)
+        let releaseBlocker = DispatchSemaphore(value: 0)
+        let blockerFinished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            let blocker = NSFileCoordinator(filePresenter: nil)
+            var coordinationError: NSError?
+            blocker.coordinate(
+                writingItemAt: URL(fileURLWithPath: path),
+                options: .forReplacing,
+                error: &coordinationError
+            ) { _ in
+                blockerStarted.signal()
+                _ = releaseBlocker.wait(timeout: .now() + 2)
+            }
+            blockerFinished.signal()
+        }
+        #expect(blockerStarted.wait(timeout: .now() + 1) == .success)
+
+        FileStore.accessDeadline = 0.2
+        defer {
+            FileStore.accessDeadline = 8
+            releaseBlocker.signal()
+            _ = blockerFinished.wait(timeout: .now() + 1)
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {
+            releaseBlocker.signal()
+        }
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        do {
+            _ = try FileStore.readData(path)
+            Issue.record("expected the blocked read to be cancelled")
+        } catch let error as CoreError {
+            if case .io = error {
+                // Expected: `checked` maps coordinator cancellation to I/O.
+            } else {
+                Issue.record("expected CoreError.io, got \(error)")
+            }
+        } catch {
+            Issue.record("expected CoreError.io, got \(error)")
+        }
+        #expect(start.duration(to: clock.now) < .milliseconds(500))
     }
 }

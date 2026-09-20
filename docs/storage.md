@@ -373,3 +373,7 @@ synced folder therefore never replicates club membership between machines.
 On iOS, writes inside the ubiquity container are wrapped in
 `NSFileCoordinator` (`FileStore`) and version conflicts surface as
 `NSFileVersion` conflicts rather than silently overwriting a file.
+Evicted iCloud items are refused rather than awaited: unavailable book
+metadata is omitted from the catalog, bookmark add/update/delete operations
+refuse an evicted `bookmarks.json`, and saving a chapter note refuses an
+evicted existing note so remote content is never overwritten blindly.

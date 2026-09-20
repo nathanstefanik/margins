@@ -13,6 +13,7 @@ import MarginsCore
 public final class LibraryModel {
     public private(set) var libraryRoot = ""
     public private(set) var books: [BookSummary] = []
+    public private(set) var notDownloadedBookIDs: [String] = []
     public private(set) var selectedBook: BookMeta?
     /// The selected book's notes index (`notes/_index.json`), loaded with
     /// the book so the detail view can flag chapters that have notes.
@@ -66,6 +67,7 @@ public final class LibraryModel {
         do {
             libraryRoot = try await store.libraryRoot()
             books = try await store.listBooks()
+            notDownloadedBookIDs = await store.notDownloadedBookIDs()
             if selectedBookID != nil, books.contains(where: { $0.id == selectedBookID }) {
                 await loadSelectedBook()
             } else {
