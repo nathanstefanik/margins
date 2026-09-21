@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-21
+
+### Added
+
+- macOS adaptive reader pagination: single page or spread with layout
+  preferences, spread-aware reading progress, and reading position preserved
+  across window and layout changes
+- Named bookmarks beside the reading position, on macOS and iOS
+- Reader sidebar widens and toggles with Command-B; the back button has its
+  own icon
+- Offline reading on iOS: every opened EPUB keeps an eviction-proof local
+  copy, evicted files re-download whenever the app is online, and opening a
+  book iCloud has not downloaded fails fast with a clear message
+- Book club management: club owner role, rename and display name, admin
+  promotion, a management UI, and club snapshots that auto-publish after
+  note saves; members can leave a club and joining is locked while a save
+  is in flight
+
+### Fixed
+
+- Reader: first-paint reflow can no longer jump to the chapter start,
+  concurrent layout loads cannot stall two webviews, and bookmarks survive
+  relocation and book switches; the reader shows its page number and uses
+  the reading typeface
+- Book clubs: note sync, note deletion, and re-entering club creation work
+  reliably; club activation stays off the library launch path; club sync
+  falls back to local-only without the iCloud entitlement
+- iOS: books whose notes have not downloaded yet now open
+
 ## [0.2.5] - 2026-09-11
 
 ### Fixed
@@ -130,7 +159,8 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.0
 [0.2.5]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.5
 [0.2.4]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.4
 [0.2.3]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.3
