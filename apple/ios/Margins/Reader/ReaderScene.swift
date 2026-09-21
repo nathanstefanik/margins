@@ -150,7 +150,7 @@ struct ReaderScene: View {
                 reader.flushNoteSave()
             }
         }
-        .task(id: reader.chapter?.key) {
+        .task(id: "\(reader.chapter?.key ?? "")#\(app.downloadGeneration)") {
             // The chapter note (body + marks) feeds the sheets, the
             // highlight overlays, and the chrome; reloaded per chapter.
             await library.loadChapterNote(reader: reader)

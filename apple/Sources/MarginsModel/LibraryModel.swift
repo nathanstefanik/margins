@@ -435,6 +435,10 @@ public final class LibraryModel {
             detailMode = .notes
             notesPageTab = .contents
             return notes
+        } catch let error as CoreError {
+            if case .notDownloaded = error { return nil }
+            errorMessage = error.message
+            return nil
         } catch {
             errorMessage = String(describing: error)
             return nil
@@ -575,7 +579,7 @@ public final class LibraryModel {
                 updatedAt: note.frontmatter.updatedAt
             )
         } catch {
-            reader.noteFailed(String(describing: error))
+            reader.noteFailed(error.localizedDescription)
         }
     }
 
@@ -606,7 +610,7 @@ public final class LibraryModel {
             await notesDidChange(bookId: bookId)
             return mark
         } catch {
-            self.reader?.noteFailed(String(describing: error))
+            self.reader?.noteFailed(error.localizedDescription)
             return nil
         }
     }
@@ -621,7 +625,7 @@ public final class LibraryModel {
             reader.noteMarksUpdated(reader.noteMarks.filter { $0.id != mark.id })
             await notesDidChange(bookId: book.id)
         } catch {
-            reader.noteFailed(String(describing: error))
+            reader.noteFailed(error.localizedDescription)
         }
     }
 
@@ -637,7 +641,7 @@ public final class LibraryModel {
             )
             await notesDidChange(bookId: book.id)
         } catch {
-            reader.noteFailed(String(describing: error))
+            reader.noteFailed(error.localizedDescription)
         }
     }
 
@@ -661,7 +665,7 @@ public final class LibraryModel {
             )
             await notesDidChange(bookId: book.id)
         } catch {
-            reader.noteFailed(String(describing: error))
+            reader.noteFailed(error.localizedDescription)
         }
     }
 
@@ -687,7 +691,7 @@ public final class LibraryModel {
             )
             await notesDidChange(bookId: bookId)
         } catch {
-            reader?.noteFailed(String(describing: error))
+            reader?.noteFailed(error.localizedDescription)
         }
     }
 

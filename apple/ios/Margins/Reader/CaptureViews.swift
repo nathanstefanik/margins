@@ -248,6 +248,7 @@ struct MarksSheet: View {
 struct ChapterNoteEditorSheet: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
+    @Environment(AppModel.self) private var app
 
     @Environment(\.dismiss) private var dismiss
     @FocusState private var editorFocused: Bool
@@ -265,6 +266,11 @@ struct ChapterNoteEditorSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
+                }
+                if let error = reader.notesError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
                 ZStack(alignment: .topLeading) {
                     TextEditor(text: Binding(
@@ -297,7 +303,7 @@ struct ChapterNoteEditorSheet: View {
                 }
             }
             .presentationDetents([.large])
-            .task(id: reader.chapter?.key) {
+            .task(id: "\(reader.chapter?.key ?? "")#\(app.downloadGeneration)") {
                 await library.loadChapterNote(reader: reader)
                 editorFocused = true
             }
