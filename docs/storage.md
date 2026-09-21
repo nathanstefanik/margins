@@ -330,7 +330,7 @@ export never loses data.
 ## Book clubs
 
 Club state is social state, not library content: it is derived from notes,
-shared through CloudKit (`docs/book-clubs-plan.md`), and stored under the app
+shared through CloudKit, and stored under the app
 **data directory** rather than the library root. Pointing the library at a
 synced folder therefore never replicates club membership between machines.
 
@@ -352,7 +352,7 @@ synced folder therefore never replicates club membership between machines.
   `ClubCompile.snapshot` rebuilds it from the library tree.
 - Members never see another member's raw note files. Shared records and the
   UI carry snapshots and the merged view only.
-- Remote state lives in CloudKit (`docs/book-clubs-plan.md`): one private
+- Remote state lives in CloudKit: one private
   record zone per club holds the `Club` roster record and one `Snapshot`
   record per member behind a `CKShare`; a public `ClubInvite` record maps
   the invite code to the share URL until it expires. Unsigned builds fall

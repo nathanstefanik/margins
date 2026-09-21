@@ -2,8 +2,7 @@
 
 This document is the acceptance record for the adaptive macOS reader
 layout work and the engine contract the implementation is allowed to rely
-on. It is updated as each phase lands; the phase plan lives in
-`docs/macos-reader-layout-plan.md`.
+on.
 
 ## Harness
 

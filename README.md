@@ -17,9 +17,7 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
   CloudKit sharing with an automatic local-only fallback, and a merged view
   of every member's notes — overlapping highlights cluster under one quoted
   passage, with spoiler protection on by default. Saving a note publishes
-  the club snapshot after a one-second debounce
-  ([docs/book-clubs-plan.md](docs/book-clubs-plan.md),
-  [docs/book-clubs-qol-plan.md](docs/book-clubs-qol-plan.md))
+  the club snapshot after a one-second debounce.
 - Choose the library directory with the in-app folder picker or **root** command
 
 ## Quick start
@@ -31,9 +29,7 @@ make run         # assemble and open build/Margins.app (needs full Xcode)
 ## Apple apps (macOS + iOS)
 
 Native SwiftUI frontends sharing the same Swift core through one SwiftPM
-package (`apple/`; see [docs/architecture.md](docs/architecture.md) for the
-module map and [docs/ios-plan.md](docs/ios-plan.md) for the historical iOS
-build-out).
+package (`apple/`; see [docs/architecture.md](docs/architecture.md)).
 
 Requirements:
 
@@ -50,8 +46,7 @@ make ios-build   # build the iOS app for the simulator (no signing)
 
 The iOS app itself builds from `apple/ios/Margins.xcodeproj` (open in Xcode,
 or `xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins -destination
-'platform=iOS Simulator,name=iPhone 17 Pro'`). [docs/ios-plan.md](docs/ios-plan.md)
-is the historical build-out, kept for reference.
+'platform=iOS Simulator,name=iPhone 17 Pro'`).
 
 **iOS TestFlight/App Store release**: the app record must exist in App Store
 Connect first (bundle ID `io.github.nathanstefanik.margins`, registered with
@@ -149,9 +144,7 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 
 ## Status
 
-Roadmap detail: [docs/architecture.md](docs/architecture.md) (shape);
-[docs/apple-only-plan.md](docs/apple-only-plan.md) records the migration
-that produced it.
+Roadmap detail: [docs/architecture.md](docs/architecture.md).
 
 **Done**
 
