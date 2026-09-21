@@ -375,9 +375,15 @@ struct LibraryScene: View {
             bookId: meta.id, chapterKey: chapter.key,
             body: "A first thought to share with the club."
         )
-        if await clubs.createClub(
-            bookId: meta.id, name: "Thursday Readers", displayName: "Reader"
-        ) != nil {
+        var created: Club?
+        for _ in 0..<50 {
+            created = await clubs.createClub(
+                bookId: meta.id, name: "Thursday Readers", displayName: "Reader"
+            )
+            if created != nil { break }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        if created != nil {
             _ = await clubs.publishOwnSnapshot()
         }
         selectedTab = .clubs

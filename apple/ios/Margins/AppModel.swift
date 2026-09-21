@@ -91,13 +91,14 @@ final class AppModel {
         if library.libraryRoot != root {
             await library.setLibraryRoot(root)
         }
-        // Clubs reuse the library's store actor; data dir is app-support,
-        // so club state never lands in the synced library folder.
-        if let store = library.coreStore {
-            await clubs.activate(store: store)
-        }
+        // Notes can save before club transport finishes; publish is a
+        // no-op while `sync` is still nil. CloudKit must not gate the
+        // library grid.
         library.onBookNotesChanged = { [weak clubs] bookId in
             await clubs?.schedulePublish(bookId: bookId)
+        }
+        if let store = library.coreStore {
+            Task { await clubs.activate(store: store) }
         }
         await downloadPass()
     }
