@@ -49,6 +49,7 @@ scripts/assets/Margins.iconset/
 
 # Editor
 .idea/
+.vscode/
 *.swp
 *.swo
 
