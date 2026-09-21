@@ -55,7 +55,13 @@ public final class Library {
             let metaPath = path.appendingPathComponent("meta.json")
             guard FileStore.exists(metaPath) else { continue }
 
-            var meta = try readMeta(at: metaPath)
+            let loadedMeta: BookMeta
+            do {
+                loadedMeta = try readMeta(at: metaPath)
+            } catch CoreError.notDownloaded {
+                continue
+            }
+            var meta = loadedMeta
             backfillChapters(bookDir: path, meta: &meta)
             summaries.append(
                 BookSummary(
@@ -74,6 +80,15 @@ public final class Library {
         summaries.sort { $0.addedAt > $1.addedAt }
         try writeIndex(summaries)
         return summaries.map(resolvingCover)
+    }
+
+    public func notDownloadedBookIDs() -> [String] {
+        let booksDir = root.appendingPathComponent("books")
+        return ((try? Files.contents(ofDirectory: booksDir)) ?? [])
+            .filter { Files.isDirectory($0) }
+            .filter { FileStore.isEvicted($0.appendingPathComponent("meta.json")) }
+            .map { ($0 as NSString).lastPathComponent }
+            .sorted()
     }
 
     public func getBook(id: String) throws -> BookMeta {
@@ -136,7 +151,7 @@ public final class Library {
     public func addBookmark(
         bookID: String, label: String, position: ReadingPosition
     ) throws -> Bookmark {
-        var bookmarks = readBookmarks(bookID: bookID)
+        var bookmarks = try bookmarksForWrite(bookID: bookID)
         let taken = Set(bookmarks.map(\.id))
         var id = CoreID.newID()
         while taken.contains(id) { id = CoreID.newID() }
@@ -160,7 +175,7 @@ public final class Library {
     public func updateBookmark(
         bookID: String, id: String, label: String?, position: ReadingPosition?
     ) throws -> Bookmark {
-        var bookmarks = readBookmarks(bookID: bookID)
+        var bookmarks = try bookmarksForWrite(bookID: bookID)
         guard let index = bookmarks.firstIndex(where: { $0.id == id }) else {
             throw CoreError.library("bookmark not found: \(id)")
         }
@@ -180,13 +195,19 @@ public final class Library {
     }
 
     public func deleteBookmark(bookID: String, id: String) throws {
-        var bookmarks = readBookmarks(bookID: bookID)
+        var bookmarks = try bookmarksForWrite(bookID: bookID)
         let before = bookmarks.count
         bookmarks.removeAll { $0.id == id }
         guard bookmarks.count != before else {
             throw CoreError.library("bookmark not found: \(id)")
         }
         try writeBookmarks(bookID: bookID, bookmarks: bookmarks)
+    }
+
+    private func bookmarksForWrite(bookID: String) throws -> [Bookmark] {
+        let path = bookDir(bookID).appendingPathComponent("bookmarks.json")
+        guard !FileStore.isEvicted(path) else { throw CoreError.notDownloaded(path) }
+        return readBookmarks(bookID: bookID)
     }
 
     private func writeBookmarks(bookID: String, bookmarks: [Bookmark]) throws {
@@ -220,6 +241,12 @@ public final class Library {
             throw CoreError.library("epub missing for book: \(bookID)")
         }
         return try Files.readData(path)
+    }
+
+    /// The content-hash id of the file at `path` — the same 24-character
+    /// hex SHA-256 prefix the library uses as a book directory name.
+    public static func contentID(ofFile path: String) throws -> String {
+        try hashFile(path) { _, _ in }
     }
 
     // MARK: Import

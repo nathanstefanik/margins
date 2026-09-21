@@ -7,8 +7,8 @@ import Foundation
 // When the path lives inside the ubiquity container — the iOS library root
 // (LibraryLocation resolves it to `Documents/Library`) — every read and
 // write is wrapped in `NSFileCoordinator` so it serializes against iCloud's
-// sync engine: reads of evicted placeholders wait for content, writes
-// register cleanly with sync, and renames and removals are announced.
+// sync engine: reads of evicted placeholders are refused rather than awaited,
+// writes register cleanly with sync, and renames and removals are announced.
 // Everywhere else (macOS, the local iOS fallback, the app-support config)
 // the same calls are a plain passthrough to `Files`.
 //
@@ -25,8 +25,9 @@ import Foundation
 // index or note is never mistaken for a missing one and, say, a compile
 // cannot silently report zero notes.
 
-enum FileStore {
+public enum FileStore {
     private static let resolver = ContainerResolver()
+    nonisolated(unsafe) static var accessDeadline: TimeInterval = 8
 
     /// Resolves the ubiquity container's Documents directory once per
     /// process and guards the (test-only) override. All decisions flow
@@ -65,16 +66,29 @@ enum FileStore {
     /// Test seam: overrides the container resolver and drops the cache.
     /// Passing `nil` restores the default. Paths outside the override stay
     /// on the passthrough, so suites using their own temp directories are
-    /// unaffected.
+    /// unaffected. Public in DEBUG so the iOS evict fixture can treat the
+    /// local Documents directory as coordinated.
+    #if DEBUG
+    public static func overrideContainerProvider(_ replacement: (@Sendable () -> URL?)?) {
+        resolver.overrideProvider(replacement)
+    }
+    #else
     static func overrideContainerProvider(_ replacement: (@Sendable () -> URL?)?) {
         resolver.overrideProvider(replacement)
     }
+    #endif
 
     /// True when `path` is inside the container, i.e. handled by
     /// `NSFileCoordinator`.
     static func isCoordinated(_ path: String) -> Bool {
         guard let root = resolver.root() else { return false }
         return path == root || path.hasPrefix(root + "/")
+    }
+
+    /// True only for a coordinated logical file that is absent while its
+    /// `.<name>.icloud` placeholder exists.
+    static func isEvicted(_ path: String) -> Bool {
+        isCoordinated(path) && !Files.exists(path) && hasEvictedPlaceholder(path)
     }
 
     /// True when the item exists — counting an evicted iCloud placeholder.
@@ -116,8 +130,10 @@ enum FileStore {
 
     static func readData(_ path: String) throws -> Data {
         guard isCoordinated(path) else { return try Files.readData(path) }
+        guard !isEvicted(path) else { throw CoreError.notDownloaded(path) }
         let box = Box()
         let coordinator = NSFileCoordinator(filePresenter: nil)
+        let cancellation = cancellationWorkItem(for: coordinator)
         var coordinationError: NSError?
         coordinator.coordinate(
             readingItemAt: URL(fileURLWithPath: path),
@@ -129,6 +145,7 @@ enum FileStore {
                 box.error = error
             }
         }
+        cancellation.cancel()
         guard let data = try checked(box, operation: "read", path: path, coordinationError) else {
             throw CoreError.io("io error: could not read \(path)")
         }
@@ -143,6 +160,7 @@ enum FileStore {
         guard isCoordinated(path) else { return try Files.writeData(data, to: path) }
         let box = Box()
         let coordinator = NSFileCoordinator(filePresenter: nil)
+        let cancellation = cancellationWorkItem(for: coordinator)
         var coordinationError: NSError?
         coordinator.coordinate(
             writingItemAt: URL(fileURLWithPath: path),
@@ -156,6 +174,7 @@ enum FileStore {
                 box.error = error
             }
         }
+        cancellation.cancel()
         _ = try checked(box, operation: "write", path: path, coordinationError)
     }
 
@@ -167,6 +186,7 @@ enum FileStore {
         }
         let box = Box()
         let coordinator = NSFileCoordinator(filePresenter: nil)
+        let cancellation = cancellationWorkItem(for: coordinator)
         var coordinationError: NSError?
         coordinator.coordinate(
             readingItemAt: URL(fileURLWithPath: path),
@@ -188,6 +208,7 @@ enum FileStore {
                 box.error = nestedError
             }
         }
+        cancellation.cancel()
         _ = try checked(box, operation: "move", path: path, coordinationError)
     }
 
@@ -198,6 +219,7 @@ enum FileStore {
         guard isCoordinated(path) else { return try Files.remove(path) }
         let box = Box()
         let coordinator = NSFileCoordinator(filePresenter: nil)
+        let cancellation = cancellationWorkItem(for: coordinator)
         var coordinationError: NSError?
         coordinator.coordinate(
             writingItemAt: URL(fileURLWithPath: path),
@@ -215,6 +237,7 @@ enum FileStore {
                 }
             }
         }
+        cancellation.cancel()
         _ = try checked(box, operation: "remove", path: path, coordinationError)
     }
 
@@ -242,6 +265,17 @@ enum FileStore {
             )
         }
         return box.data
+    }
+
+    private static func cancellationWorkItem(
+        for coordinator: NSFileCoordinator
+    ) -> DispatchWorkItem {
+        let workItem = DispatchWorkItem { coordinator.cancel() }
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(
+            deadline: .now() + accessDeadline,
+            execute: workItem
+        )
+        return workItem
     }
 
     /// `.<name>.icloud` sibling of the logical path — the evicted

@@ -122,6 +122,9 @@ public enum Notes {
         if let previous = try readIndex(bookDir: bookDir).chapters
             .first(where: { $0.chapterKey == chapter.key })?.file {
             let source = notesDir.appendingPathComponent(previous)
+            if previous != relativePath, FileStore.isEvicted(source) {
+                throw CoreError.notDownloaded(source)
+            }
             if previous != relativePath, FileStore.isFile(source), !FileStore.exists(path) {
                 try? FileStore.rename(source, to: path)
             }
@@ -129,9 +132,13 @@ public enum Notes {
 
         // Read from the final path — after the rename above, the index may
         // still point at the old name.
-        let existing = FileStore.isFile(path)
-            ? try? parseNoteContent(try FileStore.read(path), chapterKey: chapter.key)
-            : nil
+        let existing: NoteFile?
+        if FileStore.isFile(path) {
+            let raw = try FileStore.read(path)
+            existing = try? parseNoteContent(raw, chapterKey: chapter.key)
+        } else {
+            existing = nil
+        }
 
         let split = Marks.splitBody(body)
         let items: [MarkItem]

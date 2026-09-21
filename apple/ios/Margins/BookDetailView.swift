@@ -123,7 +123,7 @@ struct BookDetailView: View {
                         readerActive = true
                     }
                 } label: {
-                    Label(continueLabel, systemImage: "book.fill")
+                    Label(readingActionTitle(for: meta.id), systemImage: readingActionSymbol(for: meta.id))
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -151,6 +151,14 @@ struct BookDetailView: View {
 
     private var continueLabel: String {
         position != nil ? "Continue reading" : "Start reading"
+    }
+
+    private func readingActionTitle(for bookId: String) -> String {
+        app.isReadableOffline(bookId: bookId) ? continueLabel : "Download"
+    }
+
+    private func readingActionSymbol(for bookId: String) -> String {
+        app.isReadableOffline(bookId: bookId) ? "book.fill" : "icloud.and.arrow.down"
     }
 
     /// The cover is large on an expansive canvas and yields on a constrained

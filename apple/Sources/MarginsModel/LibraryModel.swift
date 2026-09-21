@@ -13,6 +13,7 @@ import MarginsCore
 public final class LibraryModel {
     public private(set) var libraryRoot = ""
     public private(set) var books: [BookSummary] = []
+    public private(set) var notDownloadedBookIDs: [String] = []
     public private(set) var selectedBook: BookMeta?
     /// The selected book's notes index (`notes/_index.json`), loaded with
     /// the book so the detail view can flag chapters that have notes.
@@ -66,6 +67,10 @@ public final class LibraryModel {
         do {
             libraryRoot = try await store.libraryRoot()
             books = try await store.listBooks()
+            notDownloadedBookIDs = await store.notDownloadedBookIDs()
+            for id in notDownloadedBookIDs {
+                LibraryLocation.requestDownload(bookFilePath(id, "meta.json"))
+            }
             if selectedBookID != nil, books.contains(where: { $0.id == selectedBookID }) {
                 await loadSelectedBook()
             } else {
@@ -210,16 +215,22 @@ public final class LibraryModel {
     public private(set) var importStatus: String?
 
     /// Imports several EPUBs in turn, surfacing per-file progress for the
-    /// sidebar. One failed file does not stop the rest.
-    public func importEpubs(atPaths paths: [String]) async {
+    /// sidebar. One failed file does not stop the rest. Returns the ids
+    /// that landed; macOS ignores the value.
+    @discardableResult
+    public func importEpubs(atPaths paths: [String]) async -> [String] {
+        var ids: [String] = []
         for (offset, path) in paths.enumerated() {
             let name = URL(fileURLWithPath: path).lastPathComponent
             importStatus = paths.count > 1
                 ? "Importing \(offset + 1) of \(paths.count): \(name)"
                 : "Importing \(name)…"
-            _ = await importEpub(atPath: path)
+            if await importEpub(atPath: path), let id = selectedBookID {
+                ids.append(id)
+            }
         }
         importStatus = nil
+        return ids
     }
 
     /// The reader state this library drives. Wired once at app startup so
@@ -290,10 +301,14 @@ public final class LibraryModel {
     /// Absolute path of `books/{id}/source.epub` under the current library
     /// root. The iOS app materializes this before the core reads it.
     public func sourceEpubPath(for bookId: String) -> String {
+        bookFilePath(bookId, "source.epub")
+    }
+
+    private func bookFilePath(_ bookId: String, _ fileName: String) -> String {
         URL(fileURLWithPath: libraryRoot)
             .appendingPathComponent("books", isDirectory: true)
             .appendingPathComponent(bookId, isDirectory: true)
-            .appendingPathComponent("source.epub")
+            .appendingPathComponent(fileName)
             .path
     }
 
@@ -420,6 +435,10 @@ public final class LibraryModel {
             detailMode = .notes
             notesPageTab = .contents
             return notes
+        } catch let error as CoreError {
+            if case .notDownloaded = error { return nil }
+            errorMessage = error.message
+            return nil
         } catch {
             errorMessage = String(describing: error)
             return nil
@@ -560,7 +579,7 @@ public final class LibraryModel {
                 updatedAt: note.frontmatter.updatedAt
             )
         } catch {
-            reader.noteFailed(String(describing: error))
+            reader.noteFailed(error.localizedDescription)
         }
     }
 
@@ -591,7 +610,7 @@ public final class LibraryModel {
             await notesDidChange(bookId: bookId)
             return mark
         } catch {
-            self.reader?.noteFailed(String(describing: error))
+            self.reader?.noteFailed(error.localizedDescription)
             return nil
         }
     }
@@ -606,7 +625,7 @@ public final class LibraryModel {
             reader.noteMarksUpdated(reader.noteMarks.filter { $0.id != mark.id })
             await notesDidChange(bookId: book.id)
         } catch {
-            reader.noteFailed(String(describing: error))
+            reader.noteFailed(error.localizedDescription)
         }
     }
 
@@ -622,7 +641,7 @@ public final class LibraryModel {
             )
             await notesDidChange(bookId: book.id)
         } catch {
-            reader.noteFailed(String(describing: error))
+            reader.noteFailed(error.localizedDescription)
         }
     }
 
@@ -646,7 +665,7 @@ public final class LibraryModel {
             )
             await notesDidChange(bookId: book.id)
         } catch {
-            reader.noteFailed(String(describing: error))
+            reader.noteFailed(error.localizedDescription)
         }
     }
 
@@ -672,7 +691,7 @@ public final class LibraryModel {
             )
             await notesDidChange(bookId: bookId)
         } catch {
-            reader?.noteFailed(String(describing: error))
+            reader?.noteFailed(error.localizedDescription)
         }
     }
 

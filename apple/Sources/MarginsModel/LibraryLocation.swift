@@ -19,6 +19,12 @@ public struct LibraryLocation: Sendable {
         case localDocuments(path: String)
     }
 
+    public enum Availability: Equatable, Sendable {
+        case local
+        case evicted
+        case missing
+    }
+
     public struct MaterializationError: LocalizedError, Equatable {
         public var message: String
         public var errorDescription: String? { message }
@@ -67,10 +73,52 @@ public struct LibraryLocation: Sendable {
         return .localDocuments(path: root.path)
     }
 
+    /// Filesystem check only: a present file, an evicted placeholder, or
+    /// neither. Does not talk to iCloud.
+    public static func availability(of path: String) -> Availability {
+        if FileManager.default.fileExists(atPath: path) { return .local }
+        if hasEvictedPlaceholder(for: URL(fileURLWithPath: path)) { return .evicted }
+        return .missing
+    }
+
+    public struct DownloadPass: Equatable, Sendable {
+        public var requested: Int
+        public var failed: Int
+    }
+
+    /// Asks iCloud to download `path`. Errors are ignored: a non-ubiquitous
+    /// path is a no-op, and a daemon refusal is not the caller's to surface.
+    public static func requestDownload(_ path: String) {
+        try? startDownloading(path)
+    }
+
+    /// Walks `root` for `.name.icloud` placeholders and asks iCloud to
+    /// download each logical file, one at a time. Placeholders are hidden,
+    /// so the enumerator must not skip hidden files.
+    public static func requestDownloads(under root: String) -> DownloadPass {
+        var requested = 0
+        var failed = 0
+        for placeholder in placeholderURLs(under: root) {
+            do {
+                try startDownloading(logicalPath(fromPlaceholder: placeholder))
+                requested += 1
+            } catch {
+                failed += 1
+            }
+        }
+        return DownloadPass(requested: requested, failed: failed)
+    }
+
+    /// How many `.name.icloud` placeholders sit under `root`.
+    public static func placeholderCount(under root: String) -> Int {
+        placeholderURLs(under: root).count
+    }
+
     /// Ensures the file at `path` is fully downloaded before the core reads
     /// it. Local files (and already-current iCloud items) pass through;
     /// evicted placeholders start downloading and the call waits, bounded.
-    public func materializedPath(for path: String) async throws -> String {
+    /// `CancellationError` from the wait is not mapped into a timeout.
+    public func materializedPath(for path: String, pollLimit: Int? = nil) async throws -> String {
         let url = URL(fileURLWithPath: path)
         let fileManager = FileManager.default
         let exists = fileManager.fileExists(atPath: path)
@@ -93,15 +141,17 @@ public struct LibraryLocation: Sendable {
             return path
         }
         // `startDownloadingUbiquitousItem` accepts the logical URL of an
-        // evicted placeholder. A throw means "no such item at all", which
-        // passes through like any other missing file (the core owns the
-        // not-found error).
+        // evicted placeholder. A throw on a non-evicted path means "no such
+        // item at all" and passes through so the core owns the not-found
+        // error. An evicted path still waits: a fixture placeholder is not
+        // ubiquitous, and Cancel must be able to stop the overlay.
         do {
             try fileManager.startDownloadingUbiquitousItem(at: url)
         } catch {
-            return path
+            if !evicted { return path }
         }
-        for _ in 0..<downloadPollLimit {
+        let limit = pollLimit ?? downloadPollLimit
+        for _ in 0..<limit {
             if (try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?
                 .ubiquitousItemDownloadingStatus == URLUbiquitousItemDownloadingStatus.current
             {
@@ -120,6 +170,33 @@ public struct LibraryLocation: Sendable {
         let placeholder = url.deletingLastPathComponent()
             .appendingPathComponent("." + url.lastPathComponent + ".icloud")
         return FileManager.default.fileExists(atPath: placeholder.path)
+    }
+
+    private static func startDownloading(_ path: String) throws {
+        try FileManager.default.startDownloadingUbiquitousItem(at: URL(fileURLWithPath: path))
+    }
+
+    private static func placeholderURLs(under root: String) -> [URL] {
+        let rootURL = URL(fileURLWithPath: root, isDirectory: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: rootURL,
+            includingPropertiesForKeys: [],
+            options: []
+        ) else { return [] }
+        var urls: [URL] = []
+        for case let url as URL in enumerator {
+            let name = url.lastPathComponent
+            if name.hasPrefix("."), name.hasSuffix(".icloud"), name.count > 8 {
+                urls.append(url)
+            }
+        }
+        return urls
+    }
+
+    private static func logicalPath(fromPlaceholder url: URL) -> String {
+        let name = url.lastPathComponent
+        let logicalName = String(name.dropFirst().dropLast(7))
+        return url.deletingLastPathComponent().appendingPathComponent(logicalName).path
     }
 
     /// Copies a security-scoped picked file (document picker) into a

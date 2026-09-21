@@ -15,6 +15,7 @@ import MarginsModel
 struct ReaderScene: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
+    @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -58,7 +59,10 @@ struct ReaderScene: View {
         ZStack {
             DesignTokens.Paper.background(reader.preferences.theme)
                 .ignoresSafeArea()
-            IOSReaderWebView(model: library, reader: reader, bridge: $bridge, callbacks: callbacks)
+            IOSReaderWebView(
+                model: library, reader: reader, mirror: app.mirror,
+                bridge: $bridge, callbacks: callbacks
+            )
                 .accessibilityAction(named: Text("Show controls")) {
                     chromeVisible = true
                 }
@@ -146,7 +150,7 @@ struct ReaderScene: View {
                 reader.flushNoteSave()
             }
         }
-        .task(id: reader.chapter?.key) {
+        .task(id: "\(reader.chapter?.key ?? "")#\(app.downloadGeneration)") {
             // The chapter note (body + marks) feeds the sheets, the
             // highlight overlays, and the chrome; reloaded per chapter.
             await library.loadChapterNote(reader: reader)

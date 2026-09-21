@@ -373,3 +373,12 @@ synced folder therefore never replicates club membership between machines.
 On iOS, writes inside the ubiquity container are wrapped in
 `NSFileCoordinator` (`FileStore`) and version conflicts surface as
 `NSFileVersion` conflicts rather than silently overwriting a file.
+Evicted iCloud items are refused rather than awaited: unavailable book
+metadata is omitted from the catalog, bookmark add/update/delete operations
+refuse an evicted `bookmarks.json`, and saving a chapter note refuses an
+evicted existing note so remote content is never overwritten blindly.
+`position.json` and the derived `index.json` stay last-writer-wins.
+
+The iOS EPUB mirror is a derived copy outside this tree: Application
+Support, excluded from backup, one file per content-hash book id. It is
+not synced, not part of the layout above, and is removed with the book.

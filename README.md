@@ -99,7 +99,9 @@ is paired with Xcode). The library lives in the iCloud Documents container
 available — visible in the Files app and pointable at from the Mac via
 `MARGINS_LIBRARY_ROOT` — falling back to local `Documents/Library` at
 runtime otherwise; sync happens through iCloud, conflict detection surfaces
-`NSFileVersion` conflicts rather than discarding them.
+`NSFileVersion` conflicts rather than discarding them. Books you have
+opened or imported on this iPhone stay readable offline even if iCloud
+later evicts the library copy.
 
 macOS keybindings:
 

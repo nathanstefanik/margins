@@ -81,6 +81,10 @@ public actor CoreStore {
         try library.listBooks()
     }
 
+    public func notDownloadedBookIDs() -> [String] {
+        library.notDownloadedBookIDs()
+    }
+
     public func importEpub(atPath path: String) throws -> BookMeta {
         try library.importEpub(atPath: path)
     }
@@ -159,7 +163,12 @@ public actor CoreStore {
         guard Files.isDirectory(bookDir) else {
             throw CoreError.library("book not found: \(bookId)")
         }
-        return try Notes.readIndex(bookDir: bookDir).chapters
+        do {
+            return try Notes.readIndex(bookDir: bookDir).chapters
+        } catch let error as CoreError {
+            guard case .notDownloaded = error else { throw error }
+            return []
+        }
     }
 
     /// The book's notes compiled into one spine-ordered document.

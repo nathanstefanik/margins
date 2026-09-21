@@ -96,7 +96,7 @@ struct LibraryScene: View {
                     Button("Delete Book", role: .destructive) {
                         guard let book = bookPendingDeletion else { return }
                         bookPendingDeletion = nil
-                        Task { await library.removeBook(id: book.id) }
+                        Task { await app.removeBook(id: book.id) }
                     }
                     Button("Cancel", role: .cancel) {
                         bookPendingDeletion = nil
@@ -120,7 +120,7 @@ struct LibraryScene: View {
 
     @ViewBuilder
     private var libraryContent: some View {
-        if library.books.isEmpty {
+        if library.books.isEmpty && library.notDownloadedBookIDs.isEmpty {
             ContentUnavailableView {
                 Label("No books yet", systemImage: "book")
             } description: {
@@ -132,43 +132,30 @@ struct LibraryScene: View {
             }
         } else {
             ScrollView {
-                if let status = library.importStatus {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text(status)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 8)
-                }
-                if let notice = app.locationNotice {
-                    Label(notice, systemImage: "icloud.slash")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                }
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 104, maximum: 160), spacing: DesignTokens.Spacing.gridCell)],
-                    spacing: DesignTokens.Spacing.grid
-                ) {
-                    ForEach(library.books) { book in
-                        Button {
-                            select(book.id)
-                        } label: {
-                            BookGridCell(book: book, zoomNamespace: zoomNamespace)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                bookPendingDeletion = book
+                libraryStatusHeader
+                if !library.books.isEmpty {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 104, maximum: 160), spacing: DesignTokens.Spacing.gridCell)],
+                        spacing: DesignTokens.Spacing.grid
+                    ) {
+                        ForEach(library.books) { book in
+                            Button {
+                                select(book.id)
                             } label: {
-                                Label("Delete…", systemImage: "trash")
+                                BookGridCell(book: book, zoomNamespace: zoomNamespace)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    bookPendingDeletion = book
+                                } label: {
+                                    Label("Delete…", systemImage: "trash")
+                                }
                             }
                         }
                     }
+                    .padding()
                 }
-                .padding()
             }
         }
     }
@@ -249,6 +236,51 @@ struct LibraryScene: View {
         hits = await library.searchNotes(trimmed)
     }
 
+    // MARK: Status
+
+    @ViewBuilder
+    private var libraryStatusHeader: some View {
+        if let status = library.importStatus {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text(status)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 8)
+        }
+        if let notice = app.locationNotice {
+            Label(notice, systemImage: "icloud.slash")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.top, 8)
+        }
+        if app.pendingDownloads > 0, app.connectivity.isOnline {
+            let n = app.pendingDownloads
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Downloading \(n) \(n == 1 ? "file" : "files") from iCloud…")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+        } else if !library.notDownloadedBookIDs.isEmpty {
+            let n = library.notDownloadedBookIDs.count
+            let noun = n == 1 ? "book" : "books"
+            let suffix = app.connectivity.isOnline ? "" : " — offline"
+            Label(
+                "\(n) \(noun) waiting for iCloud\(suffix)",
+                systemImage: "icloud.and.arrow.down"
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal)
+            .padding(.top, 8)
+        }
+    }
+
     // MARK: Overlays
 
     @ViewBuilder
@@ -256,13 +288,21 @@ struct LibraryScene: View {
         if app.isMaterializing {
             ZStack {
                 Color.black.opacity(0.2).ignoresSafeArea()
-                ProgressView("Downloading book…")
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 14)
-                    .glassEffect(.regular, in: .capsule)
+                VStack(spacing: 12) {
+                    ProgressView("Downloading book…")
+                    Button("Cancel") {
+                        app.cancelMaterialization()
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.Radius.card))
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Downloading book from iCloud")
+            .accessibilityAction(named: "Cancel") {
+                app.cancelMaterialization()
+            }
         }
     }
 
@@ -285,6 +325,7 @@ struct LibraryScene: View {
     private func runDebugSeams() async {
         await app.activate()
         await importFixtureIfRequested()
+        await evictFixtureIfRequested()
         if let search = ProcessInfo.processInfo.environment["MARGINS_SEARCH_FIXTURE"] {
             for _ in 0..<50 where library.books.isEmpty {
                 try? await Task.sleep(for: .milliseconds(200))
@@ -308,7 +349,7 @@ struct LibraryScene: View {
             bookPendingDeletion = book
             if mode == "confirm" {
                 try? await Task.sleep(for: .seconds(1.5))
-                await library.removeBook(id: book.id)
+                await app.removeBook(id: book.id)
                 bookPendingDeletion = nil
             }
         }
@@ -334,9 +375,15 @@ struct LibraryScene: View {
             bookId: meta.id, chapterKey: chapter.key,
             body: "A first thought to share with the club."
         )
-        if await clubs.createClub(
-            bookId: meta.id, name: "Thursday Readers", displayName: "Reader"
-        ) != nil {
+        var created: Club?
+        for _ in 0..<50 {
+            created = await clubs.createClub(
+                bookId: meta.id, name: "Thursday Readers", displayName: "Reader"
+            )
+            if created != nil { break }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        if created != nil {
             _ = await clubs.publishOwnSnapshot()
         }
         selectedTab = .clubs
@@ -351,6 +398,36 @@ struct LibraryScene: View {
         else { return }
         await library.importEpubs(atPaths: [fixture])
     }
+
+    /// Launch with `MARGINS_EVICT_FIXTURE=source|position|meta` after an
+    /// import to replace that file with a `.name.icloud` placeholder, so
+    /// the simulator can exercise the offline/evicted paths.
+    private func evictFixtureIfRequested() async {
+        guard let kind = ProcessInfo.processInfo.environment["MARGINS_EVICT_FIXTURE"] else {
+            return
+        }
+        for _ in 0..<50 where library.books.isEmpty {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        guard let book = library.books.first else { return }
+        let fileName: String
+        switch kind {
+        case "source": fileName = "source.epub"
+        case "position": fileName = "position.json"
+        case "meta": fileName = "meta.json"
+        default: return
+        }
+        let logical = URL(fileURLWithPath: library.libraryRoot)
+            .appendingPathComponent("books", isDirectory: true)
+            .appendingPathComponent(book.id, isDirectory: true)
+            .appendingPathComponent(fileName)
+        let placeholder = logical.deletingLastPathComponent()
+            .appendingPathComponent("." + fileName + ".icloud")
+        try? Data().write(to: placeholder)
+        try? FileManager.default.removeItem(at: logical)
+        await library.refresh()
+        await app.downloadPass()
+    }
     #endif
 }
 
@@ -358,6 +435,8 @@ struct LibraryScene: View {
 /// reading-progress bar from `progress_percent`. Wrapped in a `Button` by
 /// the grid so VoiceOver sees an action, not a tap gesture.
 struct BookGridCell: View {
+    @Environment(AppModel.self) private var app
+
     let book: BookSummary
     var zoomNamespace: Namespace.ID
 
@@ -367,6 +446,15 @@ struct BookGridCell: View {
                 .frame(height: 150)
                 .clipShape(.rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
+                .overlay(alignment: .topTrailing) {
+                    if !app.isReadableOffline(bookId: book.id) {
+                        Image(systemName: "icloud.and.arrow.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(6)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .matchedTransitionSource(id: book.id, in: zoomNamespace)
             Text(book.title)
                 .font(.footnote.weight(.medium))
@@ -386,9 +474,18 @@ struct BookGridCell: View {
         }
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "\(book.title) by \(book.author), \(book.notesCount) notes" +
-                (book.progressPercent.map { String(format: ", %.0f%% read", $0) } ?? "")
-        )
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        var label =
+            "\(book.title) by \(book.author), \(book.notesCount) notes"
+        if let progress = book.progressPercent {
+            label += String(format: ", %.0f%% read", progress)
+        }
+        if !app.isReadableOffline(bookId: book.id) {
+            label += ", not downloaded"
+        }
+        return label
     }
 }
