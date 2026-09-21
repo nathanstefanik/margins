@@ -25,7 +25,7 @@ import Foundation
 // index or note is never mistaken for a missing one and, say, a compile
 // cannot silently report zero notes.
 
-enum FileStore {
+public enum FileStore {
     private static let resolver = ContainerResolver()
     nonisolated(unsafe) static var accessDeadline: TimeInterval = 8
 
@@ -66,10 +66,17 @@ enum FileStore {
     /// Test seam: overrides the container resolver and drops the cache.
     /// Passing `nil` restores the default. Paths outside the override stay
     /// on the passthrough, so suites using their own temp directories are
-    /// unaffected.
+    /// unaffected. Public in DEBUG so the iOS evict fixture can treat the
+    /// local Documents directory as coordinated.
+    #if DEBUG
+    public static func overrideContainerProvider(_ replacement: (@Sendable () -> URL?)?) {
+        resolver.overrideProvider(replacement)
+    }
+    #else
     static func overrideContainerProvider(_ replacement: (@Sendable () -> URL?)?) {
         resolver.overrideProvider(replacement)
     }
+    #endif
 
     /// True when `path` is inside the container, i.e. handled by
     /// `NSFileCoordinator`.

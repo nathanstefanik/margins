@@ -68,6 +68,9 @@ public final class LibraryModel {
             libraryRoot = try await store.libraryRoot()
             books = try await store.listBooks()
             notDownloadedBookIDs = await store.notDownloadedBookIDs()
+            for id in notDownloadedBookIDs {
+                LibraryLocation.requestDownload(bookFilePath(id, "meta.json"))
+            }
             if selectedBookID != nil, books.contains(where: { $0.id == selectedBookID }) {
                 await loadSelectedBook()
             } else {
@@ -292,10 +295,14 @@ public final class LibraryModel {
     /// Absolute path of `books/{id}/source.epub` under the current library
     /// root. The iOS app materializes this before the core reads it.
     public func sourceEpubPath(for bookId: String) -> String {
+        bookFilePath(bookId, "source.epub")
+    }
+
+    private func bookFilePath(_ bookId: String, _ fileName: String) -> String {
         URL(fileURLWithPath: libraryRoot)
             .appendingPathComponent("books", isDirectory: true)
             .appendingPathComponent(bookId, isDirectory: true)
-            .appendingPathComponent("source.epub")
+            .appendingPathComponent(fileName)
             .path
     }
 

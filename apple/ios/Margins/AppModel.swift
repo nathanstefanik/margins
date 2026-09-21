@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import MarginsCore
 import MarginsModel
 
 /// App-level glue for the iOS target: resolves the library location once
@@ -12,6 +13,7 @@ final class AppModel {
     let reader: ReaderModel
     let clubs: ClubModel
     let libraryLocation: LibraryLocation
+    let connectivity = Connectivity()
     /// Where the library root resolved to this launch; the scene surfaces
     /// the reason whenever the runtime fallback kicked in.
     let locationSource: LibraryLocation.Source
@@ -21,8 +23,22 @@ final class AppModel {
     /// scene shows a quiet overlay so Continue reading is not a blank fail.
     var isMaterializing = false
 
+    private var materializationTask: Task<String, Error>?
+
     init() {
-        let location = LibraryLocation()
+        let location: LibraryLocation
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["MARGINS_EVICT_FIXTURE"] != nil {
+            let documents = FileManager.default
+                .urls(for: .documentDirectory, in: .userDomainMask)[0]
+            FileStore.overrideContainerProvider { documents }
+            location = LibraryLocation(containerProvider: { documents })
+        } else {
+            location = LibraryLocation()
+        }
+        #else
+        location = LibraryLocation()
+        #endif
         libraryLocation = location
         locationSource = location.resolve()
 
@@ -79,21 +95,55 @@ final class AppModel {
         }
     }
 
+    /// True when `books/{id}/source.epub` is on this device. Cheap enough
+    /// to call per grid cell; the badge means the EPUB is not local.
+    func isReadableOffline(bookId: String) -> Bool {
+        LibraryLocation.availability(of: library.sourceEpubPath(for: bookId)) == .local
+    }
+
+    func cancelMaterialization() {
+        materializationTask?.cancel()
+    }
+
     /// Ensures `books/{id}/source.epub` is on disk before the reader
-    /// fetches bytes. Local files pass through; an evicted iCloud item
-    /// downloads (bounded) and surfaces a timeout as `library.errorMessage`.
+    /// fetches bytes. Local and missing files pass through (the core owns
+    /// the missing-file error). An evicted item either fails immediately
+    /// when offline or downloads, bounded and cancellable.
     @discardableResult
     func prepareForReading(bookId: String) async -> Bool {
         let path = library.sourceEpubPath(for: bookId)
-        let url = URL(fileURLWithPath: path)
-        let evicted = LibraryLocation.hasEvictedPlaceholder(for: url)
-        if evicted {
-            isMaterializing = true
-        }
-        defer { isMaterializing = false }
-        do {
-            _ = try await libraryLocation.materializedPath(for: path)
+        switch LibraryLocation.availability(of: path) {
+        case .local, .missing:
             return true
+        case .evicted:
+            break
+        }
+        LibraryLocation.requestDownload(path)
+        if !connectivity.isOnline {
+            let title = library.books.first(where: { $0.id == bookId })?.title
+                ?? library.selectedBook.flatMap { $0.id == bookId ? $0.title : nil }
+                ?? "This book"
+            library.errorMessage =
+                "\(title) isn't downloaded to this iPhone. Connect to the internet to download it."
+            return false
+        }
+        materializationTask?.cancel()
+        isMaterializing = true
+        let task = Task {
+            try await libraryLocation.materializedPath(for: path, pollLimit: 600)
+        }
+        materializationTask = task
+        defer {
+            isMaterializing = false
+            if materializationTask == task {
+                materializationTask = nil
+            }
+        }
+        do {
+            _ = try await task.value
+            return true
+        } catch is CancellationError {
+            return false
         } catch {
             library.errorMessage = error.localizedDescription
             return false

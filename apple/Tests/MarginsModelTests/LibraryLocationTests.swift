@@ -72,6 +72,21 @@ struct LibraryLocationTests {
         #expect(LibraryLocation.hasEvictedPlaceholder(for: logical))
     }
 
+    @Test("availability distinguishes local, evicted, and missing paths")
+    func availability() throws {
+        let dir = tempDirectory()
+        let local = dir.appendingPathComponent("cover.jpg")
+        try Data([0xFF]).write(to: local)
+        #expect(LibraryLocation.availability(of: local.path) == .local)
+
+        let evicted = dir.appendingPathComponent("source.epub")
+        try Data([0x00]).write(to: dir.appendingPathComponent(".source.epub.icloud"))
+        #expect(LibraryLocation.availability(of: evicted.path) == .evicted)
+
+        let missing = dir.appendingPathComponent("nope.jpg")
+        #expect(LibraryLocation.availability(of: missing.path) == .missing)
+    }
+
     @Test("a placeholder-only path enters the download path and stays bounded")
     func placeholderPathIsBounded() async throws {
         // A local fixture cannot be a real ubiquity item: the download
