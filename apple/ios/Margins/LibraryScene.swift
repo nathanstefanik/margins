@@ -256,7 +256,17 @@ struct LibraryScene: View {
                 .padding(.horizontal)
                 .padding(.top, 8)
         }
-        if !library.notDownloadedBookIDs.isEmpty {
+        if app.pendingDownloads > 0, app.connectivity.isOnline {
+            let n = app.pendingDownloads
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Downloading \(n) \(n == 1 ? "file" : "files") from iCloud…")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+        } else if !library.notDownloadedBookIDs.isEmpty {
             let n = library.notDownloadedBookIDs.count
             let noun = n == 1 ? "book" : "books"
             let suffix = app.connectivity.isOnline ? "" : " — offline"
@@ -410,6 +420,7 @@ struct LibraryScene: View {
         try? Data().write(to: placeholder)
         try? FileManager.default.removeItem(at: logical)
         await library.refresh()
+        await app.downloadPass()
     }
     #endif
 }

@@ -124,4 +124,28 @@ struct LibraryLocationTests {
     func conflictsEmptyWithoutICloud() {
         #expect(LibraryLocation.unresolvedConflictFileNames(at: "/nonexistent/note.md") == [])
     }
+
+    @Test("a download pass finds every placeholder under the root and ignores the rest")
+    func downloadPassWalksPlaceholders() throws {
+        let root = tempDirectory()
+        let book = root.appendingPathComponent("books/abc", isDirectory: true)
+        let notes = book.appendingPathComponent("notes", isDirectory: true)
+        try FileManager.default.createDirectory(at: notes, withIntermediateDirectories: true)
+        try Data([0]).write(to: book.appendingPathComponent(".meta.json.icloud"))
+        try Data([0]).write(to: book.appendingPathComponent(".source.epub.icloud"))
+        try Data([0]).write(to: notes.appendingPathComponent(".001-note.md.icloud"))
+
+        let outsider = tempDirectory().appendingPathComponent(".outside.md.icloud")
+        try Data([0xFF]).write(to: outsider)
+        let outsiderBytes = try Data(contentsOf: outsider)
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        let pass = LibraryLocation.requestDownloads(under: root.path)
+        let count = LibraryLocation.placeholderCount(under: root.path)
+        #expect(start.duration(to: clock.now) < .seconds(1))
+        #expect(pass.requested + pass.failed == 3)
+        #expect(count == 3)
+        #expect(try Data(contentsOf: outsider) == outsiderBytes)
+    }
 }

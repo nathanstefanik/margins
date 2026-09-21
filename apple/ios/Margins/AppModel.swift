@@ -22,8 +22,12 @@ final class AppModel {
     /// True while an evicted `source.epub` is downloading; the library
     /// scene shows a quiet overlay so Continue reading is not a blank fail.
     var isMaterializing = false
+    private(set) var pendingDownloads = 0
+    private(set) var downloadGeneration = 0
 
     private var materializationTask: Task<String, Error>?
+    private var downloadPassRunning = false
+    private var downloadPassQueued = false
 
     init() {
         let location: LibraryLocation
@@ -92,6 +96,67 @@ final class AppModel {
         }
         library.onBookNotesChanged = { [weak clubs] bookId in
             await clubs?.schedulePublish(bookId: bookId)
+        }
+        await downloadPass()
+    }
+
+    /// Asks iCloud for every placeholder under the library root, then
+    /// polls until the tree is current, the count stops moving, or the
+    /// bound elapses. Overlapping calls queue one follow-up pass; offline
+    /// is a no-op.
+    func downloadPass() async {
+        guard connectivity.isOnline else { return }
+        if downloadPassRunning {
+            downloadPassQueued = true
+            return
+        }
+        downloadPassRunning = true
+        defer {
+            downloadPassRunning = false
+            downloadPassQueued = false
+            pendingDownloads = 0
+        }
+        repeat {
+            downloadPassQueued = false
+            await runDownloadPass()
+        } while downloadPassQueued && connectivity.isOnline
+    }
+
+    private func runDownloadPass() async {
+        let root = library.libraryRoot
+        guard !root.isEmpty else { return }
+
+        await Task.detached(priority: .utility) {
+            _ = LibraryLocation.requestDownloads(under: root)
+        }.value
+
+        var count = await Task.detached(priority: .utility) {
+            LibraryLocation.placeholderCount(under: root)
+        }.value
+        pendingDownloads = count
+        if count == 0 { return }
+
+        var last = count
+        var unchanged = 0
+        let deadline = ContinuousClock.now + .seconds(120)
+        while count > 0 {
+            try? await Task.sleep(for: .seconds(2))
+            if Task.isCancelled || !connectivity.isOnline { return }
+            if ContinuousClock.now >= deadline { return }
+            count = await Task.detached(priority: .utility) {
+                LibraryLocation.placeholderCount(under: root)
+            }.value
+            pendingDownloads = count
+            if count < last {
+                await library.refresh()
+                downloadGeneration += 1
+                if count == 0 { return }
+                unchanged = 0
+            } else {
+                unchanged += 1
+                if unchanged >= 5 { return }
+            }
+            last = count
         }
     }
 

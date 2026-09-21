@@ -6,6 +6,8 @@ import MarginsModel
 /// requests a download and keeps the placeholder; a missing cover is the
 /// shared initials + tint.
 struct CoverView: View {
+    @Environment(AppModel.self) private var app
+
     let coverPath: String?
     let title: String
 
@@ -30,7 +32,7 @@ struct CoverView: View {
                 placeholder
             }
         }
-        .task(id: coverPath) {
+        .task(id: "\(coverPath ?? "")#\(app.downloadGeneration)") {
             await load()
         }
     }
