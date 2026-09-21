@@ -36,7 +36,8 @@ apple/                 # shared Apple SwiftPM package (macOS + iOS)
                        # Marks, Frontmatter, Compile, Search, FileStore,
                        # Files, AppConfig, Text, CoreStore (actor facade)
   Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap,
-                       # LibraryLocation (iCloud root, materialization, conflicts)
+                       # LibraryLocation (iCloud root, materialization, conflicts),
+                       # EpubMirror (eviction-proof local EPUB copies)
   Sources/Margins/     # macOS SwiftUI views, reader webview glue, key routing
   Tests/               # MarginsModelTests + MarginsCoreTests (Swift Testing);
                        # MarginsCoreTests/Fixtures/legacy-library/ is a library
@@ -78,8 +79,11 @@ Everything needs **full Xcode** (26.x): the iOS SDK for `ios-build` and the
 iOS targets. The iOS library root lives in the iCloud Documents container
 when available, falling back to local `Documents/Library` at runtime
 (`LibraryLocation`); DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`,
-`MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`) drive simulator
-verification flows. Device signing uses the team ID in
+`MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`,
+`MARGINS_EVICT_FIXTURE`, `MARGINS_OFFLINE_FIXTURE`) drive simulator
+verification flows. FileStore refuses evicted iCloud reads rather than
+waiting; see `docs/architecture.md` (iOS) and `docs/testing/ios-offline.md`.
+Device signing uses the team ID in
 `apple/ios/Signing.local.xcconfig` (gitignored — created from
 `Signing.local.xcconfig.example`; never commit it).
 

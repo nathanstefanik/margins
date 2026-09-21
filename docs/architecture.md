@@ -46,7 +46,9 @@ mode throughout):
 - `FileStore.swift` — coordinated document I/O: every read/write of
   `meta.json`, `position.json`, `bookmarks.json`, `notes/**`, and `notes/_index.json` goes through
   it; inside the ubiquity container the operations are wrapped in
-  `NSFileCoordinator`, elsewhere it is a plain passthrough.
+  `NSFileCoordinator`, elsewhere it is a plain passthrough. Evicted
+  ubiquity items throw `CoreError.notDownloaded` before coordination so
+  the actor never waits on iCloud.
 - `Models.swift` — shared record types (`Codable`, snake_case coding keys
   matching `docs/storage.md`; RFC3339 dates with fractional-second
   tolerance).
@@ -94,8 +96,10 @@ A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
   shared by both apps), `ReaderResource` (scheme-handler routing),
   `ReaderKeymap` (vim-style key state machine), `LibraryLocation` (iOS
   library root: iCloud container resolution with runtime fallback,
-  placeholder materialization for reader assets and covers, coordinated
-  staging of picked files, conflict detection), and the club layer:
+  placeholder materialization, download pass over the library tree,
+  coordinated staging of picked files, conflict detection), `EpubMirror`
+  (eviction-proof copy of opened EPUBs under Application Support), and
+  the club layer:
   `ClubModel` (club list, selection, merged document, auto-publish), `ClubSync` +
   `CloudKitClubSync` (share transport), and `LocalClubSyncEngine` (the
   no-iCloud fallback used by unsigned builds). Unit-tested via
@@ -120,7 +124,8 @@ shared `LibraryModel`; the library root is resolved per launch by
 `LibraryLocation` (ubiquity container paths change between installs),
 falling back to local `Documents/Library` with the reason surfaced in the
 UI. DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`,
-`MARGINS_DELETE_FIXTURE`, `MARGINS_OPEN_FIXTURE`, `MARGINS_CHROME_FIXTURE`)
+`MARGINS_DELETE_FIXTURE`, `MARGINS_OPEN_FIXTURE`, `MARGINS_CHROME_FIXTURE`,
+`MARGINS_EVICT_FIXTURE`, `MARGINS_OFFLINE_FIXTURE`)
 drive deterministic simulator verification flows. EPUBs handed over by
 Files/Mail arrive through `onOpenURL` as
 security-scoped URLs and are staged (`NSFileCoordinator`) before the core
@@ -134,6 +139,34 @@ container as a document scope (the `NSUbiquitousContainer*` keys nested
 under `NSUbiquitousContainers` → the container id, plus
 `UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`). Signing team
 stays unset in the repo — set it locally for device builds.
+
+### iCloud Drive and offline reading
+
+iOS syncs metadata eagerly and content lazily. Three behaviors the app
+has to live with:
+
+1. **Nothing downloads on its own.** A file written elsewhere appears as a
+   `.name.icloud` placeholder until something asks for it
+   (`FileManager.startDownloadingUbiquitousItem` or a coordinated read).
+2. **Local copies get evicted** on remote update and under disk pressure.
+   There is no public API to pin a ubiquity item.
+3. **A coordinated read of a placeholder blocks** until the download
+   finishes or fails — and offline, "fails" is not prompt.
+
+`FileStore` therefore refuses an evicted item instantly
+(`CoreError.notDownloaded`) rather than waiting; an 8 s watchdog cancels
+any coordinated access that still has not been granted. Callers skip,
+return nil, or surface the error. `LibraryLocation` owns every
+`startDownloadingUbiquitousItem` call; the core makes none. Online,
+`AppModel.downloadPass` walks the library for placeholders at launch, on
+foreground, and when connectivity returns. `NWPathMonitor` is advisory:
+it picks copy and triggers passes, never gates an action. A book opened
+or imported on this device is also copied to an eviction-proof EPUB
+mirror under Application Support (excluded from backup, keyed by the
+content-hash id). Club activation is off the library launch path, so
+CloudKit never gates the grid.
+
+Device pass: `docs/testing/ios-offline.md`.
 
 ### Navigation, layout, and the control layer
 
