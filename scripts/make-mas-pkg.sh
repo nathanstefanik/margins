@@ -20,7 +20,7 @@
 #
 # The app bundle is assembled by make-app.sh, then re-signed here with the
 # sandbox/iCloud entitlements and the distribution profile; `productbuild`
-# signs the installer. See docs/packaging-plan.md.
+# signs the installer.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
