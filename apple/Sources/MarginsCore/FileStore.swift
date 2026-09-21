@@ -271,7 +271,7 @@ public enum FileStore {
         for coordinator: NSFileCoordinator
     ) -> DispatchWorkItem {
         let workItem = DispatchWorkItem { coordinator.cancel() }
-        DispatchQueue.global().asyncAfter(
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(
             deadline: .now() + accessDeadline,
             execute: workItem
         )

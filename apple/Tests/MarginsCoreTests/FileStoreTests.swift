@@ -175,7 +175,14 @@ struct FileStoreTests {
         let blockerStarted = DispatchSemaphore(value: 0)
         let releaseBlocker = DispatchSemaphore(value: 0)
         let blockerFinished = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
+        // A private queue, not `DispatchQueue.global()`: under a full
+        // `swift test` run the default pool can sit idle past a
+        // one-second wait, which is what failed this case in CI.
+        let blockerQueue = DispatchQueue(
+            label: "io.github.nathanstefanik.margins.filestore-blocker",
+            qos: .userInitiated
+        )
+        blockerQueue.async {
             let blocker = NSFileCoordinator(filePresenter: nil)
             var coordinationError: NSError?
             blocker.coordinate(
@@ -184,20 +191,17 @@ struct FileStoreTests {
                 error: &coordinationError
             ) { _ in
                 blockerStarted.signal()
-                _ = releaseBlocker.wait(timeout: .now() + 2)
+                _ = releaseBlocker.wait(timeout: .now() + 10)
             }
             blockerFinished.signal()
         }
-        #expect(blockerStarted.wait(timeout: .now() + 1) == .success)
+        try #require(blockerStarted.wait(timeout: .now() + 10) == .success)
 
-        FileStore.accessDeadline = 0.2
+        FileStore.accessDeadline = 0.5
         defer {
             FileStore.accessDeadline = 8
             releaseBlocker.signal()
-            _ = blockerFinished.wait(timeout: .now() + 1)
-        }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {
-            releaseBlocker.signal()
+            _ = blockerFinished.wait(timeout: .now() + 2)
         }
 
         let clock = ContinuousClock()
@@ -214,6 +218,6 @@ struct FileStoreTests {
         } catch {
             Issue.record("expected CoreError.io, got \(error)")
         }
-        #expect(start.duration(to: clock.now) < .milliseconds(500))
+        #expect(start.duration(to: clock.now) < .seconds(2))
     }
 }
