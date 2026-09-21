@@ -48,8 +48,8 @@ enum ReaderLayoutHarnessError: Error, CustomStringConvertible {
 /// macOS-only: the reader page is shared with iOS, but its WKWebView can
 /// only be hosted by a macOS test process. Hosted in a transparent
 /// NSWindow so navigation completes under `swift test`; rAF is still
-/// shimmed. Construction is serialized so two cold WebKit processes
-/// don't start together.
+/// shimmed. Cold WebKit startup *and* the first navigation are serialized
+/// so two suites cannot spawn content processes at the same time.
 ///
 /// All waits are async and bounded. The test harness cannot spin the run
 /// loop synchronously: under `swift test`, the main dispatch queue — which
@@ -95,7 +95,15 @@ final class ReaderLayoutHarness {
         platform: String? = "macos",
         typography: (fontSize: Double, lineHeight: Double, lineWidth: Double, unit: String)? = (110, 1.6, 72, "%")
     ) async throws {
-        try await installWebView()
+        // Hold the process-wide gate through first navigation: the matrix
+        // and integration suites otherwise spawn two WKWebViews at once,
+        // and under CI the first load can sit until the 30s timeout with
+        // an empty console.
+        while Self.installing {
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        Self.installing = true
+        defer { Self.installing = false }
 
         var components = URLComponents()
         components.scheme = "margins-reader"
@@ -112,10 +120,15 @@ final class ReaderLayoutHarness {
         guard let url = components.url else {
             throw ReaderLayoutHarnessError.readerOpenFailed("bad reader URL")
         }
-        pageDidFinish = false
-        navigationError = nil
-        webView.load(URLRequest(url: url))
-        try await waitForNavigation()
+        try await installWebView()
+        do {
+            try await navigate(to: url)
+        } catch let error as ReaderLayoutHarnessError {
+            guard case .timedOut = error else { throw error }
+            dismantle()
+            try await installWebView()
+            try await navigate(to: url)
+        }
 
         guard let typography else { return }
         try await evaluate(
@@ -132,13 +145,15 @@ final class ReaderLayoutHarness {
         window?.setContentSize(size)
     }
 
+    private func navigate(to url: URL) async throws {
+        pageDidFinish = false
+        navigationError = nil
+        webView.load(URLRequest(url: url))
+        try await waitForNavigation()
+    }
+
     private func installWebView() async throws {
         if webView != nil { return }
-        while Self.installing {
-            try await Task.sleep(for: Self.pollInterval)
-        }
-        Self.installing = true
-        defer { Self.installing = false }
 
         let app = NSApplication.shared
         if app.activationPolicy() == .prohibited {
