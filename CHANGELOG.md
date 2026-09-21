@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-21
+
+### Removed
+
+- Development plan documents (`docs/*-plan.md`) that had served their
+  purpose and the `.vscode` editor recommendations; the README links only
+  to living docs now
+
 ## [0.5.0] - 2026-09-21
 
 ### Added
@@ -159,7 +167,8 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.1
 [0.5.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.0
 [0.2.5]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.5
 [0.2.4]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.4
