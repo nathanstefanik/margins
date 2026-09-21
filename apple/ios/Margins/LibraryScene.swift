@@ -96,7 +96,7 @@ struct LibraryScene: View {
                     Button("Delete Book", role: .destructive) {
                         guard let book = bookPendingDeletion else { return }
                         bookPendingDeletion = nil
-                        Task { await library.removeBook(id: book.id) }
+                        Task { await app.removeBook(id: book.id) }
                     }
                     Button("Cancel", role: .cancel) {
                         bookPendingDeletion = nil
@@ -349,7 +349,7 @@ struct LibraryScene: View {
             bookPendingDeletion = book
             if mode == "confirm" {
                 try? await Task.sleep(for: .seconds(1.5))
-                await library.removeBook(id: book.id)
+                await app.removeBook(id: book.id)
                 bookPendingDeletion = nil
             }
         }

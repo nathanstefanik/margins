@@ -243,6 +243,12 @@ public final class Library {
         return try Files.readData(path)
     }
 
+    /// The content-hash id of the file at `path` — the same 24-character
+    /// hex SHA-256 prefix the library uses as a book directory name.
+    public static func contentID(ofFile path: String) throws -> String {
+        try hashFile(path) { _, _ in }
+    }
+
     // MARK: Import
 
     /// Copies an EPUB into the library and records its metadata.

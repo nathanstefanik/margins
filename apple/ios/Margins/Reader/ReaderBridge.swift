@@ -59,11 +59,12 @@ final class KeyHandlingWebView: WKWebView {
 struct IOSReaderWebView: UIViewRepresentable {
     let model: LibraryModel
     let reader: ReaderModel
+    let mirror: EpubMirror
     @Binding var bridge: ReaderBridge?
     var callbacks: ReaderCallbacks = ReaderCallbacks()
 
     func makeCoordinator() -> ReaderBridge {
-        ReaderBridge(model: model, reader: reader)
+        ReaderBridge(model: model, reader: reader, mirror: mirror)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -108,6 +109,7 @@ struct ReaderCallbacks {
 final class ReaderBridge: NSObject {
     private let model: LibraryModel
     private let reader: ReaderModel
+    private let mirror: EpubMirror
     private var webView: WKWebView?
     var callbacks = ReaderCallbacks()
     /// The latest completed text selection, for the edit-menu actions.
@@ -115,9 +117,10 @@ final class ReaderBridge: NSObject {
     /// Set by the scene: any user-driven page turn hides the chrome.
     var onUserPageTurn: (() -> Void)?
 
-    init(model: LibraryModel, reader: ReaderModel) {
+    init(model: LibraryModel, reader: ReaderModel, mirror: EpubMirror) {
         self.model = model
         self.reader = reader
+        self.mirror = mirror
         super.init()
     }
 
@@ -134,7 +137,14 @@ final class ReaderBridge: NSObject {
         let fallbackProvider: @Sendable (String) throws -> Data = { _ in
             throw CoreError.library("library is not open yet")
         }
-        let bytesProvider = (try? model.makeReaderBytesProvider()) ?? fallbackProvider
+        let storeProvider = (try? model.makeReaderBytesProvider()) ?? fallbackProvider
+        let mirror = self.mirror
+        let bytesProvider: @Sendable (String) throws -> Data = { id in
+            if mirror.has(id) {
+                return try Data(contentsOf: URL(fileURLWithPath: mirror.path(for: id)))
+            }
+            return try storeProvider(id)
+        }
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()

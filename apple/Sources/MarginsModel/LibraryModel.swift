@@ -215,16 +215,22 @@ public final class LibraryModel {
     public private(set) var importStatus: String?
 
     /// Imports several EPUBs in turn, surfacing per-file progress for the
-    /// sidebar. One failed file does not stop the rest.
-    public func importEpubs(atPaths paths: [String]) async {
+    /// sidebar. One failed file does not stop the rest. Returns the ids
+    /// that landed; macOS ignores the value.
+    @discardableResult
+    public func importEpubs(atPaths paths: [String]) async -> [String] {
+        var ids: [String] = []
         for (offset, path) in paths.enumerated() {
             let name = URL(fileURLWithPath: path).lastPathComponent
             importStatus = paths.count > 1
                 ? "Importing \(offset + 1) of \(paths.count): \(name)"
                 : "Importing \(name)…"
-            _ = await importEpub(atPath: path)
+            if await importEpub(atPath: path), let id = selectedBookID {
+                ids.append(id)
+            }
         }
         importStatus = nil
+        return ids
     }
 
     /// The reader state this library drives. Wired once at app startup so

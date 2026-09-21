@@ -14,6 +14,7 @@ final class AppModel {
     let clubs: ClubModel
     let libraryLocation: LibraryLocation
     let connectivity = Connectivity()
+    let mirror: EpubMirror
     /// Where the library root resolved to this launch; the scene surfaces
     /// the reason whenever the runtime fallback kicked in.
     let locationSource: LibraryLocation.Source
@@ -56,6 +57,7 @@ final class AppModel {
         library = LibraryModel(dataDir: support.path)
         reader = ReaderModel()
         clubs = ClubModel()
+        mirror = EpubMirror(root: support.appendingPathComponent("epubs", isDirectory: true))
 
         // Wire the reader into the library: removals close the reader, and
         // the debounced position/note savers persist through the store.
@@ -160,10 +162,16 @@ final class AppModel {
         }
     }
 
-    /// True when `books/{id}/source.epub` is on this device. Cheap enough
-    /// to call per grid cell; the badge means the EPUB is not local.
+    /// True when this device can open the book without iCloud: a local
+    /// `source.epub`, or a previously filled mirror copy.
     func isReadableOffline(bookId: String) -> Bool {
-        LibraryLocation.availability(of: library.sourceEpubPath(for: bookId)) == .local
+        mirror.has(bookId)
+            || LibraryLocation.availability(of: library.sourceEpubPath(for: bookId)) == .local
+    }
+
+    func removeBook(id: String) async {
+        await library.removeBook(id: id)
+        mirror.remove(id)
     }
 
     func cancelMaterialization() {
@@ -171,17 +179,23 @@ final class AppModel {
     }
 
     /// Ensures `books/{id}/source.epub` is on disk before the reader
-    /// fetches bytes. Local and missing files pass through (the core owns
-    /// the missing-file error). An evicted item either fails immediately
-    /// when offline or downloads, bounded and cancellable.
+    /// fetches bytes, or that a local mirror copy can stand in. Local
+    /// files fill the mirror and pass through; missing files pass through
+    /// (the core owns the error). An evicted item uses the mirror when
+    /// present, otherwise the Phase 2 download path, then fills.
     @discardableResult
     func prepareForReading(bookId: String) async -> Bool {
         let path = library.sourceEpubPath(for: bookId)
         switch LibraryLocation.availability(of: path) {
-        case .local, .missing:
+        case .local:
+            if !mirror.has(bookId) {
+                try? mirror.fill(bookId: bookId, from: path)
+            }
+            return true
+        case .missing:
             return true
         case .evicted:
-            break
+            if mirror.has(bookId) { return true }
         }
         LibraryLocation.requestDownload(path)
         if !connectivity.isOnline {
@@ -206,6 +220,7 @@ final class AppModel {
         }
         do {
             _ = try await task.value
+            try? mirror.fill(bookId: bookId, from: path)
             return true
         } catch is CancellationError {
             return false
@@ -230,7 +245,10 @@ final class AppModel {
             // The opener's grant does not outlive this call; stage a copy
             // the core can read freely (same path as the document picker).
             let staged = try libraryLocation.stagedCopy(of: picked)
-            await library.importEpubs(atPaths: [staged.path])
+            let ids = await library.importEpubs(atPaths: [staged.path])
+            for id in ids {
+                try? mirror.fill(bookId: id, from: library.sourceEpubPath(for: id))
+            }
             return true
         } catch {
             library.errorMessage = String(describing: error)
