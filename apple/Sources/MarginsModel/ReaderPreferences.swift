@@ -59,7 +59,8 @@ public final class ReaderPreferences {
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        _theme = ReaderTheme(rawValue: defaults.string(forKey: Self.themeKey) ?? "")
+        _theme =
+            ReaderTheme(rawValue: defaults.string(forKey: Self.themeKey) ?? "")
             ?? Self.defaultTheme
 
         #if os(iOS)
@@ -67,10 +68,12 @@ public final class ReaderPreferences {
         // Re-anchor a step saved on an older ladder so the reader's text
         // size does not silently shrink when a smaller rung is added.
         if storedStep > 0,
-           defaults.integer(forKey: Self.fontLadderVersionKey) < Self.fontLadderVersion {
+            defaults.integer(forKey: Self.fontLadderVersionKey) < Self.fontLadderVersion
+        {
             storedStep += 1
         }
-        _fontStep = (1...Self.fontStepsPx.count).contains(storedStep)
+        _fontStep =
+            (1...Self.fontStepsPx.count).contains(storedStep)
             ? storedStep
             : Self.defaultFontStep
         defaults.set(Self.fontLadderVersion, forKey: Self.fontLadderVersionKey)
@@ -91,7 +94,8 @@ public final class ReaderPreferences {
             Self.lineWidthRange.lowerBound,
             Self.lineWidthRange.upperBound
         )
-        _pageLayout = ReaderPageLayout(rawValue: defaults.string(forKey: Self.pageLayoutKey) ?? "")
+        _pageLayout =
+            ReaderPageLayout(rawValue: defaults.string(forKey: Self.pageLayoutKey) ?? "")
             ?? .automatic
         #endif
     }

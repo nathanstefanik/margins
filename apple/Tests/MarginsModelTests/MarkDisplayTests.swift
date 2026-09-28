@@ -1,7 +1,7 @@
-import Testing
 import Foundation
 import MarginsCore
 import MarginsModel
+import Testing
 
 @Suite("MarkDisplay")
 struct MarkDisplayTests {

@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// The book detail: cover, metadata, progress, and **Continue reading**;
 /// a segmented Contents / Notes pair. Contents rows carry note markers,
@@ -111,9 +111,11 @@ struct BookDetailView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        Text("\(ContentsOutline.build(from: meta.chapters).numberedChapterCount) chapters · \(summary?.notesCount ?? 0) annotated")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        Text(
+                            "\(ContentsOutline.build(from: meta.chapters).numberedChapterCount) chapters · \(summary?.notesCount ?? 0) annotated"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
                 }
                 Button {
@@ -169,7 +171,7 @@ struct BookDetailView: View {
 
     private func presentReaderIfPending() {
         guard library.pendingReaderPresent,
-              reader.book?.id == selectedMeta?.id
+            reader.book?.id == selectedMeta?.id
         else { return }
         library.pendingReaderPresent = false
         readerActive = true
@@ -309,12 +311,12 @@ private struct ContentsList: View {
     @ViewBuilder
     private func marker(_ row: OutlineRow) -> some View {
         switch row.kind {
-        case let .chapter(number):
+        case .chapter(let number):
             Text("\(number)")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 30, alignment: .trailing)
-        case let .heading(level):
+        case .heading(let level):
             Color.clear.frame(width: CGFloat(level) * 12, height: 1)
         case .matter:
             EmptyView()
@@ -447,7 +449,8 @@ private struct NotesTab: View {
         VStack(alignment: .leading, spacing: 6) {
             Button {
                 if let meta = library.selectedBook,
-                   let target = meta.chapters.first(where: { $0.key == chapter.chapterKey }) {
+                    let target = meta.chapters.first(where: { $0.key == chapter.chapterKey })
+                {
                     onJump(target, nil)
                 }
             } label: {
@@ -484,7 +487,8 @@ private struct NotesTab: View {
     private func markBlock(_ mark: Mark, chapter: CompiledChapter) -> some View {
         Button {
             if let meta = library.selectedBook,
-               let target = meta.chapters.first(where: { $0.key == chapter.chapterKey }) {
+                let target = meta.chapters.first(where: { $0.key == chapter.chapterKey })
+            {
                 onJump(target, mark.cfi)
             }
         } label: {

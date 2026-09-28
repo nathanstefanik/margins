@@ -47,11 +47,13 @@ enum EpubFixtureBuilder {
         switch cover {
         case .none: coverItem = ""
         case .epub3:
-            coverItem = #"    <item href="cover.png" id="cover" media-type="image/png" properties="cover-image"/>"# + "\n"
+            coverItem =
+                #"    <item href="cover.png" id="cover" media-type="image/png" properties="cover-image"/>"# + "\n"
         case .epub2, .bareImage:
             coverItem = #"    <item href="cover.png" id="cover" media-type="image/png"/>"# + "\n"
         }
-        let coverMeta = cover == .epub2
+        let coverMeta =
+            cover == .epub2
             ? #"    <meta name="cover" content="cover"/>"# + "\n"
             : ""
         let tocItem: String
@@ -60,7 +62,8 @@ enum EpubFixtureBuilder {
         case .ncx:
             tocItem = #"    <item href="toc.ncx" id="ncx" media-type="application/x-dtbncx+xml"/>"# + "\n"
         case .nav:
-            tocItem = #"    <item href="nav.xhtml" id="nav" media-type="application/xhtml+xml" properties="nav"/>"# + "\n"
+            tocItem =
+                #"    <item href="nav.xhtml" id="nav" media-type="application/xhtml+xml" properties="nav"/>"# + "\n"
         }
         let spineTOC = toc == .ncx ? #" toc="ncx""# : ""
 
@@ -69,25 +72,29 @@ enum EpubFixtureBuilder {
         var files: [(String, Data)] = [
             ("mimetype", Data("application/epub+zip".utf8)),
             ("META-INF/container.xml", Data(Self.container.utf8)),
-            ("OEBPS/content.opf", Data("""
-            <?xml version="1.0"?>
-            <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
-              <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-                <dc:title>Sample Book</dc:title>
-                <dc:creator>Test Author</dc:creator>
-                <dc:language>en</dc:language>
-                <dc:identifier id="uid">urn:margins:test</dc:identifier>
-            \(coverMeta)  </metadata>
-              <manifest>
-                <item href="chapter1.xhtml" id="c1" media-type="application/xhtml+xml"/>
-                <item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
-            \(coverItem)\(tocItem)  </manifest>
-              <spine\(spineTOC)>
-                <itemref idref="c1"/>
-                <itemref idref="c2"/>
-              </spine>
-            </package>
-            """.utf8)),
+            (
+                "OEBPS/content.opf",
+                Data(
+                    """
+                    <?xml version="1.0"?>
+                    <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+                      <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                        <dc:title>Sample Book</dc:title>
+                        <dc:creator>Test Author</dc:creator>
+                        <dc:language>en</dc:language>
+                        <dc:identifier id="uid">urn:margins:test</dc:identifier>
+                    \(coverMeta)  </metadata>
+                      <manifest>
+                        <item href="chapter1.xhtml" id="c1" media-type="application/xhtml+xml"/>
+                        <item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+                    \(coverItem)\(tocItem)  </manifest>
+                      <spine\(spineTOC)>
+                        <itemref idref="c1"/>
+                        <itemref idref="c2"/>
+                      </spine>
+                    </package>
+                    """.utf8)
+            ),
             ("OEBPS/chapter1.xhtml", Data(chapterDocument(title: "Introduction", body: "Hello chapter one.").utf8)),
             ("OEBPS/chapter2.xhtml", Data(chapterDocument(title: "The Market", body: "Hello chapter two.").utf8)),
         ]
@@ -121,34 +128,44 @@ enum EpubFixtureBuilder {
         var files: [(String, Data)] = [
             ("mimetype", Data("application/epub+zip".utf8)),
             ("META-INF/container.xml", Data(Self.container.utf8)),
-            ("OEBPS/content.opf", Data("""
-            <?xml version="1.0"?>
-            <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
-              <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-                <dc:title>\(bookTitle)</dc:title>
-                <dc:creator>Test Author</dc:creator>
-                <dc:language>en</dc:language>
-                <dc:identifier id="uid">urn:margins:test</dc:identifier>
-              </metadata>
-              <manifest>
-            \(manifest)  </manifest>
-              <spine>
-            \(spine)  </spine>
-            </package>
-            """.utf8)),
+            (
+                "OEBPS/content.opf",
+                Data(
+                    """
+                    <?xml version="1.0"?>
+                    <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+                      <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                        <dc:title>\(bookTitle)</dc:title>
+                        <dc:creator>Test Author</dc:creator>
+                        <dc:language>en</dc:language>
+                        <dc:identifier id="uid">urn:margins:test</dc:identifier>
+                      </metadata>
+                      <manifest>
+                    \(manifest)  </manifest>
+                      <spine>
+                    \(spine)  </spine>
+                    </package>
+                    """.utf8)
+            ),
         ]
 
         for (index, chapter) in chapters.enumerated() {
-            let titleTag = chapter.documentTitle.isEmpty
+            let titleTag =
+                chapter.documentTitle.isEmpty
                 ? "" : "<title>\(chapter.documentTitle)</title>"
             let headingTag = chapter.heading.isEmpty ? "" : "<h2>\(chapter.heading)</h2>"
-            files.append(("OEBPS/ch\(index).xhtml", Data("""
-            <?xml version="1.0"?>
-            <html xmlns="http://www.w3.org/1999/xhtml">
-            <head>\(titleTag)</head>
-            <body>\(headingTag)<p>Body text.</p></body>
-            </html>
-            """.utf8)))
+            files.append(
+                (
+                    "OEBPS/ch\(index).xhtml",
+                    Data(
+                        """
+                        <?xml version="1.0"?>
+                        <html xmlns="http://www.w3.org/1999/xhtml">
+                        <head>\(titleTag)</head>
+                        <body>\(headingTag)<p>Body text.</p></body>
+                        </html>
+                        """.utf8)
+                ))
         }
 
         return try write(files, to: directory.appendingPathComponent(filename))
@@ -234,49 +251,63 @@ enum EpubFixtureBuilder {
         let spine = chapters.enumerated().map { index, chapter in
             #"    <itemref idref="c\#(index)"\#(chapter.linear ? "" : #" linear="no""#)/>"#
         }.joined(separator: "\n")
-        let guideXML = guide.isEmpty ? "" : """
-          <guide>
-        \(guide.map { #"    <reference type="\#(escape($0.type))" href="\#(escape($0.href))"/>"# }.joined(separator: "\n"))
-          </guide>
+        let guideXML =
+            guide.isEmpty
+            ? ""
+            : """
+              <guide>
+            \(guide.map { #"    <reference type="\#(escape($0.type))" href="\#(escape($0.href))"/>"# }.joined(separator: "\n"))
+              </guide>
 
-        """
+            """
 
         var files: [(String, Data)] = [
             ("mimetype", Data("application/epub+zip".utf8)),
             ("META-INF/container.xml", Data(Self.container.utf8)),
-            ("OEBPS/content.opf", Data("""
-            <?xml version="1.0"?>
-            <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
-              <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-                <dc:title>\(escape(bookTitle))</dc:title>
-                <dc:creator>\(escape(author))</dc:creator>
-                <dc:language>en</dc:language>
-                <dc:identifier id="uid">urn:margins:test</dc:identifier>
-              </metadata>
-              <manifest>
-            \(manifest.joined(separator: "\n"))
-              </manifest>
-            \(guideXML)  <spine\(spineAttr)>
-            \(spine)
-              </spine>
-            </package>
-            """.utf8)),
+            (
+                "OEBPS/content.opf",
+                Data(
+                    """
+                    <?xml version="1.0"?>
+                    <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+                      <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                        <dc:title>\(escape(bookTitle))</dc:title>
+                        <dc:creator>\(escape(author))</dc:creator>
+                        <dc:language>en</dc:language>
+                        <dc:identifier id="uid">urn:margins:test</dc:identifier>
+                      </metadata>
+                      <manifest>
+                    \(manifest.joined(separator: "\n"))
+                      </manifest>
+                    \(guideXML)  <spine\(spineAttr)>
+                    \(spine)
+                      </spine>
+                    </package>
+                    """.utf8)
+            ),
         ]
 
         for chapter in chapters {
-            let titleTag = chapter.documentTitle.isEmpty
+            let titleTag =
+                chapter.documentTitle.isEmpty
                 ? "" : "<title>\(escape(chapter.documentTitle))</title>"
             let headingTag = chapter.heading.isEmpty ? "" : "<h1>\(escape(chapter.heading))</h1>"
-            let body = chapter.markedUpBody
+            let body =
+                chapter.markedUpBody
                 ?? "\(headingTag)<p>\(escape(chapter.body))</p>"
             let type = chapter.epubType.map { #" epub:type="\#(escape($0))""# } ?? ""
-            files.append(("OEBPS/\(chapter.filename)", Data("""
-            <?xml version="1.0"?>
-            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-            <head>\(titleTag)</head>
-            <body\(type)>\(body)</body>
-            </html>
-            """.utf8)))
+            files.append(
+                (
+                    "OEBPS/\(chapter.filename)",
+                    Data(
+                        """
+                        <?xml version="1.0"?>
+                        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+                        <head>\(titleTag)</head>
+                        <body\(type)>\(body)</body>
+                        </html>
+                        """.utf8)
+                ))
         }
 
         switch toc {
@@ -307,13 +338,13 @@ enum EpubFixtureBuilder {
             }.joined(separator: "\n")
         }
         return """
-        <?xml version="1.0"?>
-        <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-          <navMap>
-        \(points(outlines, indent: "    "))
-          </navMap>
-        </ncx>
-        """
+            <?xml version="1.0"?>
+            <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+              <navMap>
+            \(points(outlines, indent: "    "))
+              </navMap>
+            </ncx>
+            """
     }
 
     private static func navXML(
@@ -330,13 +361,13 @@ enum EpubFixtureBuilder {
             body += "  <nav epub:type=\"toc\" role=\"doc-toc\">\n    <ol>\n\(navList(toc))\n    </ol>\n  </nav>\n"
         }
         return """
-        <?xml version="1.0"?>
-        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-        <head><title>Contents</title></head>
-        <body>
-        \(body)</body>
-        </html>
-        """
+            <?xml version="1.0"?>
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+            <head><title>Contents</title></head>
+            <body>
+            \(body)</body>
+            </html>
+            """
     }
 
     private static func navList(_ nodes: [TOCOutline]) -> String {
@@ -386,60 +417,60 @@ enum EpubFixtureBuilder {
     }
 
     private static let container = """
-    <?xml version="1.0"?>
-    <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-      <rootfiles>
-        <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-      </rootfiles>
-    </container>
-    """
+        <?xml version="1.0"?>
+        <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+          <rootfiles>
+            <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+          </rootfiles>
+        </container>
+        """
 
     /// `np-2` reverses the attribute order and the last entry points at a
     /// file that is not in the spine: both are ignored cleanly.
     private static let ncx = """
-    <?xml version="1.0"?>
-    <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
-      <navMap>
-        <navPoint id="np-1" playOrder="1">
-          <navLabel><text>Opening Remarks</text></navLabel>
-          <content src="chapter1.xhtml#start"/>
-          <navPoint playOrder="2" id="np-2">
-            <navLabel><text>A Nested Aside</text></navLabel>
-            <content src="chapter1.xhtml#aside"/>
-          </navPoint>
-        </navPoint>
-        <navPoint id="np-3" playOrder="3">
-          <navLabel><text>Market Day</text></navLabel>
-          <content src="chapter2.xhtml"/>
-        </navPoint>
-        <navPoint id="np-4" playOrder="4">
-          <navLabel><text>Colophon</text></navLabel>
-          <content src="colophon.xhtml#end"/>
-        </navPoint>
-      </navMap>
-    </ncx>
-    """
+        <?xml version="1.0"?>
+        <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+          <navMap>
+            <navPoint id="np-1" playOrder="1">
+              <navLabel><text>Opening Remarks</text></navLabel>
+              <content src="chapter1.xhtml#start"/>
+              <navPoint playOrder="2" id="np-2">
+                <navLabel><text>A Nested Aside</text></navLabel>
+                <content src="chapter1.xhtml#aside"/>
+              </navPoint>
+            </navPoint>
+            <navPoint id="np-3" playOrder="3">
+              <navLabel><text>Market Day</text></navLabel>
+              <content src="chapter2.xhtml"/>
+            </navPoint>
+            <navPoint id="np-4" playOrder="4">
+              <navLabel><text>Colophon</text></navLabel>
+              <content src="colophon.xhtml#end"/>
+            </navPoint>
+          </navMap>
+        </ncx>
+        """
 
     /// The `landmarks` nav comes first on purpose: only the one marked `toc`
     /// may drive the titles.
     private static let navDocument = """
-    <?xml version="1.0"?>
-    <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-    <head><title>Contents</title></head>
-    <body>
-      <nav epub:type="landmarks">
-        <ol><li><a href="chapter1.xhtml">Start Reading</a></li></ol>
-      </nav>
-      <nav epub:type="toc" role="doc-toc">
-        <ol>
-          <li><a href="chapter1.xhtml#start">Opening <em>Remarks</em></a>
-            <ol><li><a href="chapter1.xhtml#aside">A Nested Aside</a></li></ol>
-          </li>
-          <li><a href="chapter2.xhtml">Market Day</a></li>
-          <li><a href="colophon.xhtml#end">Colophon</a></li>
-        </ol>
-      </nav>
-    </body>
-    </html>
-    """
+        <?xml version="1.0"?>
+        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+        <head><title>Contents</title></head>
+        <body>
+          <nav epub:type="landmarks">
+            <ol><li><a href="chapter1.xhtml">Start Reading</a></li></ol>
+          </nav>
+          <nav epub:type="toc" role="doc-toc">
+            <ol>
+              <li><a href="chapter1.xhtml#start">Opening <em>Remarks</em></a>
+                <ol><li><a href="chapter1.xhtml#aside">A Nested Aside</a></li></ol>
+              </li>
+              <li><a href="chapter2.xhtml">Market Day</a></li>
+              <li><a href="colophon.xhtml#end">Colophon</a></li>
+            </ol>
+          </nav>
+        </body>
+        </html>
+        """
 }

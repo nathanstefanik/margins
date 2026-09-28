@@ -82,8 +82,9 @@ struct ReaderLayoutMatrixTests {
                 configuration.rect = harness.webView.bounds
                 let image = try await harness.webView.takeSnapshot(configuration: configuration)
                 if let tiff = image.tiffRepresentation,
-                   let rep = NSBitmapImageRep(data: tiff),
-                   let png = rep.representation(using: .png, properties: [:]) {
+                    let rep = NSBitmapImageRep(data: tiff),
+                    let png = rep.representation(using: .png, properties: [:])
+                {
                     try png.write(
                         to: URL(fileURLWithPath: "/tmp/margins-matrix-\(scenario.name).png")
                     )

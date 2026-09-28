@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 struct BookDetailView: View {
     @Environment(LibraryModel.self) private var model
@@ -168,7 +168,7 @@ struct BookDetailView: View {
         } label: {
             HStack(spacing: 12) {
                 switch row.kind {
-                case let .chapter(number):
+                case .chapter(let number):
                     Text("\(number)")
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -176,7 +176,7 @@ struct BookDetailView: View {
                     Text(row.title)
                         .lineLimit(2)
                         .padding(.vertical, 8)
-                case let .heading(level):
+                case .heading(let level):
                     Text(row.title)
                         .font(.caption.weight(.semibold))
                         .textCase(.uppercase)

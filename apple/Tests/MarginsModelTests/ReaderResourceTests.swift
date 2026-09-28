@@ -1,5 +1,5 @@
-import Testing
 import MarginsModel
+import Testing
 
 @Suite("ReaderResource")
 struct ReaderResourceTests {

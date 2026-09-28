@@ -1,5 +1,5 @@
-import Testing
 import MarginsModel
+import Testing
 
 @Suite("KeyHelp")
 @MainActor
@@ -11,13 +11,13 @@ struct KeyHelpTests {
     func sheetCoversEveryBoundKey() {
         // Keys the keymap could bind: letters, digits, and named keys.
         var candidateKeys: Set<String> = []
-        for value in UInt32(97)...UInt32(122) { // a…z
+        for value in UInt32(97)...UInt32(122) {  // a…z
             candidateKeys.insert(String(Unicode.Scalar(value)!))
         }
-        for value in UInt32(65)...UInt32(90) { // A…Z
+        for value in UInt32(65)...UInt32(90) {  // A…Z
             candidateKeys.insert(String(Unicode.Scalar(value)!))
         }
-        for value in UInt32(48)...UInt32(57) { // 0…9
+        for value in UInt32(48)...UInt32(57) {  // 0…9
             candidateKeys.insert(String(Unicode.Scalar(value)!))
         }
         candidateKeys.formUnion([

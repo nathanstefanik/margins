@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// Translated from the legacy core's compile test module. The snapshot test
 /// is the load-bearing one: markdown output must stay byte-identical to what
@@ -19,7 +20,8 @@ struct CompileTests {
         let dir: String
 
         init(_ chapters: [(key: String, title: String)]) throws {
-            dir = FileManager.default.temporaryDirectory
+            dir =
+                FileManager.default.temporaryDirectory
                 .appendingPathComponent("margins-compile-\(UUID().uuidString)", isDirectory: true)
                 .path
             let spine = chapters.enumerated().map { index, chapter in
@@ -52,20 +54,20 @@ struct CompileTests {
             let updated = fixedDate(1_700_000_000 + Double(index) * 86_400)
             let created = fixedDate(1_699_000_000 + Double(index) * 86_400)
             let frontmatter = """
-            ---
-            book_id: abc123
-            chapter_key: '\(key)'
-            chapter_index: \(index)
-            chapter_title: '\(title)'
-            chapter_href: OEBPS/ch\(index).xhtml
-            epub_cfi: null
-            kind: summary
-            word_count: 0
-            created_at: \(RFC3339.string(from: created))
-            updated_at: \(RFC3339.string(from: updated))
-            ---
+                ---
+                book_id: abc123
+                chapter_key: '\(key)'
+                chapter_index: \(index)
+                chapter_title: '\(title)'
+                chapter_href: OEBPS/ch\(index).xhtml
+                epub_cfi: null
+                kind: summary
+                word_count: 0
+                created_at: \(RFC3339.string(from: created))
+                updated_at: \(RFC3339.string(from: updated))
+                ---
 
-            """
+                """
             let file = "chapters/\(key)-note.md"
             try Files.write(
                 frontmatter + body,
@@ -169,40 +171,40 @@ struct CompileTests {
         // Marks written out of reading order on disk; the last one is
         // page-anchored (no CFI, no percent).
         let marksSection = """
-        \(Marks.sentinel)
+            \(Marks.sentinel)
 
-        <!-- margins:mark id=bbbbbbbbbbb cfi="epubcfi(/6/4!/4/6)" at=2026-09-05T11:00:00Z percent=51.0 -->
-        > later quote
+            <!-- margins:mark id=bbbbbbbbbbb cfi="epubcfi(/6/4!/4/6)" at=2026-09-05T11:00:00Z percent=51.0 -->
+            > later quote
 
-        later thought.
+            later thought.
 
-        <!-- margins:mark id=ccccccccccc cfi="" at=2026-09-05T12:00:00Z -->
+            <!-- margins:mark id=ccccccccccc cfi="" at=2026-09-05T12:00:00Z -->
 
-        page-anchored thought.
+            page-anchored thought.
 
-        <!-- margins:mark id=aaaaaaaaaaa cfi="epubcfi(/6/2!/4/2)" at=2026-09-05T10:00:00Z percent=38.2 -->
-        > a quote
+            <!-- margins:mark id=aaaaaaaaaaa cfi="epubcfi(/6/2!/4/2)" at=2026-09-05T10:00:00Z percent=38.2 -->
+            > a quote
 
-        a thought.
-        """
+            a thought.
+            """
         let content = """
-        ---
-        book_id: abc123
-        chapter_key: '001'
-        chapter_index: 0
-        chapter_title: 'Introduction'
-        chapter_href: OEBPS/ch0.xhtml
-        epub_cfi: null
-        kind: summary
-        word_count: 2
-        created_at: 2026-09-05T09:00:00Z
-        updated_at: 2026-09-05T09:30:00Z
-        ---
+            ---
+            book_id: abc123
+            chapter_key: '001'
+            chapter_index: 0
+            chapter_title: 'Introduction'
+            chapter_href: OEBPS/ch0.xhtml
+            epub_cfi: null
+            kind: summary
+            word_count: 2
+            created_at: 2026-09-05T09:00:00Z
+            updated_at: 2026-09-05T09:30:00Z
+            ---
 
-        Prose body.
+            Prose body.
 
-        \(marksSection)
-        """
+            \(marksSection)
+            """
         try Files.write(
             content, to: book.dir.appendingPathComponent("notes/chapters/001-introduction.md")
         )
@@ -277,36 +279,36 @@ struct CompileTests {
         let compiled = try Compile.bookNotes(bookDir: book.dir)
         let out = Compile.renderMarkdown(compiled)
         let expected = """
-        # Notes — Sample Book
+            # Notes — Sample Book
 
-        *Test Author* · 2/3 chapters annotated · 10 words · last updated Nov 16, 2023
+            *Test Author* · 2/3 chapters annotated · 10 words · last updated Nov 16, 2023
 
-        ## Contents
+            ## Contents
 
-        - [1. Introduction](#1-introduction)
-        - [3. The Market](#3-the-market)
+            - [1. Introduction](#1-introduction)
+            - [3. The Market](#3-the-market)
 
-        ---
+            ---
 
-        ## 1. Introduction
+            ## 1. Introduction
 
-        *6 words · updated Nov 14, 2023*
+            *6 words · updated Nov 14, 2023*
 
-        Plain start.
+            Plain start.
 
-        ### My Heading
-        #### Sub heading
+            ### My Heading
+            #### Sub heading
 
-        ---
+            ---
 
-        ## 3. The Market
+            ## 3. The Market
 
-        *4 words · updated Nov 16, 2023*
+            *4 words · updated Nov 16, 2023*
 
-        Market notes with *emphasis*.
+            Market notes with *emphasis*.
 
 
-        """
+            """
         #expect(out == expected)
     }
 

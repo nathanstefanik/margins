@@ -52,7 +52,8 @@ struct ModelsTests {
         // comparing equal to the same value read back. Sweep a full second
         // at millisecond resolution, plus the stamping helper.
         for millisecond in 0..<1000 {
-            let encoded = millisecond == 0
+            let encoded =
+                millisecond == 0
                 ? "2026-09-05T14:02:11Z"
                 : String(format: "2026-09-05T14:02:11.%03dZ", millisecond)
             let decoded = try #require(RFC3339.date(from: encoded))
@@ -122,12 +123,14 @@ struct ModelsTests {
         #expect(!encoded.contains("cover_path"))
         // `progress_percent` lives in position.json; serde skips it here.
         #expect(!encoded.contains("progress_percent"))
-        #expect(Self.keyNames(encoded) == [
-            "added_at", "author", "chapters", "chapters_version", "cover", "href",
-            "href", "id", "index", "index", "key", "key", "language", "fragment",
-            "source_filename", "title", "title", "title",
-            "level", "level", "matter", "matter", "sections", "sections",
-        ].sorted())
+        #expect(
+            Self.keyNames(encoded)
+                == [
+                    "added_at", "author", "chapters", "chapters_version", "cover", "href",
+                    "href", "id", "index", "index", "key", "key", "language", "fragment",
+                    "source_filename", "title", "title", "title",
+                    "level", "level", "matter", "matter", "sections", "sections",
+                ].sorted())
         // The values survive the trip; only the key order differs from what
         // serde wrote (see `MarginsJSON`).
         #expect(try MarginsJSON.decode(BookMeta.self, from: Data(encoded.utf8)) == meta)
@@ -136,16 +139,16 @@ struct ModelsTests {
     @Test("a book imported before TOC titles existed reads as version 0")
     func chaptersVersionDefaultsToZero() throws {
         let legacy = """
-        {
-          "id": "old",
-          "title": "Old",
-          "author": "Anon",
-          "language": null,
-          "added_at": "2026-01-01T00:00:00Z",
-          "source_filename": "old.epub",
-          "chapters": []
-        }
-        """
+            {
+              "id": "old",
+              "title": "Old",
+              "author": "Anon",
+              "language": null,
+              "added_at": "2026-01-01T00:00:00Z",
+              "source_filename": "old.epub",
+              "chapters": []
+            }
+            """
         let meta = try MarginsJSON.decode(BookMeta.self, from: Data(legacy.utf8))
         #expect(meta.chaptersVersion == 0)
         #expect(meta.cover == nil)
@@ -185,13 +188,13 @@ struct ModelsTests {
     @Test("position.json round-trips, omitting an unknown CFI")
     func positionRoundTrips() throws {
         let raw = """
-        {
-          "chapter_key" : "002",
-          "epub_cfi" : "epubcfi(/6/6!/4/2/1:0)",
-          "percent" : 42.5,
-          "updated_at" : "2026-09-02T10:00:00Z"
-        }
-        """
+            {
+              "chapter_key" : "002",
+              "epub_cfi" : "epubcfi(/6/6!/4/2/1:0)",
+              "percent" : 42.5,
+              "updated_at" : "2026-09-02T10:00:00Z"
+            }
+            """
         // Keys happen to be alphabetical already, so the encoder reproduces
         // the file the legacy core wrote byte for byte.
         let position = try MarginsJSON.decode(ReadingPosition.self, from: Data(raw.utf8))
@@ -211,19 +214,19 @@ struct ModelsTests {
     @Test("an index written before marks existed reads mark_count as 0")
     func notesIndexDefaultsMarkCount() throws {
         let raw = """
-        {
-          "chapters": [
             {
-              "chapter_key": "001",
-              "file": "chapters/001-introduction.md",
-              "chapter_index": 0,
-              "chapter_title": "Introduction",
-              "word_count": 98,
-              "updated_at": "2026-08-29T12:30:00Z"
+              "chapters": [
+                {
+                  "chapter_key": "001",
+                  "file": "chapters/001-introduction.md",
+                  "chapter_index": 0,
+                  "chapter_title": "Introduction",
+                  "word_count": 98,
+                  "updated_at": "2026-08-29T12:30:00Z"
+                }
+              ]
             }
-          ]
-        }
-        """
+            """
         let index = try MarginsJSON.decode(NotesIndex.self, from: Data(raw.utf8))
         let entry = try #require(index.chapters.first)
         #expect(entry.markCount == 0)
@@ -240,10 +243,12 @@ struct ModelsTests {
             )
         ])
         let encoded = String(decoding: try MarginsJSON.encode(index), as: UTF8.self)
-        #expect(Self.keyNames(encoded) == [
-            "chapters", "chapter_key", "file", "chapter_index", "chapter_title",
-            "word_count", "mark_count", "updated_at",
-        ].sorted())
+        #expect(
+            Self.keyNames(encoded)
+                == [
+                    "chapters", "chapter_key", "file", "chapter_index", "chapter_title",
+                    "word_count", "mark_count", "updated_at",
+                ].sorted())
         #expect(encoded.contains("\"updated_at\" : null"))
     }
 
@@ -264,21 +269,21 @@ struct ModelsTests {
     @Test("the library catalog round-trips with relative cover names")
     func libraryIndexRoundTrips() throws {
         let raw = """
-        {
-          "books" : [
             {
-              "added_at" : "2026-09-02T10:00:00Z",
-              "author" : "Fyodor Dostoevsky",
-              "chapter_count" : 42,
-              "cover" : "cover.jpg",
-              "id" : "a1b2c3d4e5f6a1b2c3d4e5f6",
-              "notes_count" : 3,
-              "progress_percent" : 12.5,
-              "title" : "The Brothers Karamazov"
+              "books" : [
+                {
+                  "added_at" : "2026-09-02T10:00:00Z",
+                  "author" : "Fyodor Dostoevsky",
+                  "chapter_count" : 42,
+                  "cover" : "cover.jpg",
+                  "id" : "a1b2c3d4e5f6a1b2c3d4e5f6",
+                  "notes_count" : 3,
+                  "progress_percent" : 12.5,
+                  "title" : "The Brothers Karamazov"
+                }
+              ]
             }
-          ]
-        }
-        """
+            """
         let index = try MarginsJSON.decode(LibraryIndex.self, from: Data(raw.utf8))
         let book = try #require(index.books.first)
         #expect(book.id == book.id)
@@ -317,10 +322,12 @@ struct ModelsTests {
         )
         let encoded = String(decoding: try MarginsJSON.encode(frontmatter), as: UTF8.self)
         // `epub_cfi` is skipped when absent, as serde skipped it.
-        #expect(Self.keyNames(encoded) == [
-            "book_id", "chapter_key", "chapter_index", "chapter_title",
-            "chapter_href", "kind", "word_count", "created_at", "updated_at",
-        ].sorted())
+        #expect(
+            Self.keyNames(encoded)
+                == [
+                    "book_id", "chapter_key", "chapter_index", "chapter_title",
+                    "chapter_href", "kind", "word_count", "created_at", "updated_at",
+                ].sorted())
 
         let decoded = try MarginsJSON.decode(NoteFrontmatter.self, from: Data(encoded.utf8))
         #expect(decoded == frontmatter)
@@ -329,17 +336,17 @@ struct ModelsTests {
     @Test("frontmatter written before timestamps existed still parses")
     func frontmatterToleratesMissingTimestamps() throws {
         let raw = """
-        {
-          "book_id": "a1b2c3",
-          "chapter_key": "001",
-          "chapter_index": 0,
-          "chapter_title": "Introduction",
-          "chapter_href": "OEBPS/chapter01.xhtml",
-          "epub_cfi": null,
-          "kind": "summary",
-          "word_count": 12
-        }
-        """
+            {
+              "book_id": "a1b2c3",
+              "chapter_key": "001",
+              "chapter_index": 0,
+              "chapter_title": "Introduction",
+              "chapter_href": "OEBPS/chapter01.xhtml",
+              "epub_cfi": null,
+              "kind": "summary",
+              "word_count": 12
+            }
+            """
         let frontmatter = try MarginsJSON.decode(NoteFrontmatter.self, from: Data(raw.utf8))
         #expect(frontmatter.epubCfi == nil)
         #expect(frontmatter.createdAt == nil)
@@ -403,32 +410,32 @@ struct ModelsTests {
     /// A `meta.json` in exactly the shape `serde_json::to_string_pretty`
     /// writes it, down to the key order.
     private static let metaJSON = """
-    {
-      "id" : "a1b2c3d4e5f6a1b2c3d4e5f6",
-      "title" : "The Brothers Karamazov",
-      "author" : "Fyodor Dostoevsky",
-      "language" : "en",
-      "added_at" : "2026-09-02T10:00:00Z",
-      "source_filename" : "karamazov.epub",
-      "chapters" : [
         {
-          "key" : "001",
-          "index" : 0,
-          "title" : "Preface",
-          "href" : "OEBPS/28054-h-0.htm.html"
-        },
-        {
-          "key" : "005",
-          "index" : 4,
-          "title" : "Chapter II. He Gets Rid Of His Eldest Son",
-          "href" : "OEBPS/28054-h-3.htm.html",
-          "fragment" : "pgepubid00008"
+          "id" : "a1b2c3d4e5f6a1b2c3d4e5f6",
+          "title" : "The Brothers Karamazov",
+          "author" : "Fyodor Dostoevsky",
+          "language" : "en",
+          "added_at" : "2026-09-02T10:00:00Z",
+          "source_filename" : "karamazov.epub",
+          "chapters" : [
+            {
+              "key" : "001",
+              "index" : 0,
+              "title" : "Preface",
+              "href" : "OEBPS/28054-h-0.htm.html"
+            },
+            {
+              "key" : "005",
+              "index" : 4,
+              "title" : "Chapter II. He Gets Rid Of His Eldest Son",
+              "href" : "OEBPS/28054-h-3.htm.html",
+              "fragment" : "pgepubid00008"
+            }
+          ],
+          "cover" : "cover.jpg",
+          "chapters_version" : 1
         }
-      ],
-      "cover" : "cover.jpg",
-      "chapters_version" : 1
-    }
-    """
+        """
 
     /// Every object key in pretty-printed JSON, sorted. Nesting makes the
     /// order the file happens to carry uninteresting; what these tests pin

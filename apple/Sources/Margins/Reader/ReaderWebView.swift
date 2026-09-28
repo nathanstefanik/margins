@@ -1,6 +1,6 @@
+import MarginsModel
 import SwiftUI
 import WebKit
-import MarginsModel
 
 struct ReaderWebView: NSViewRepresentable {
     let model: LibraryModel

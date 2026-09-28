@@ -120,7 +120,8 @@ public enum Notes {
         // behind, outside `_index.json` and invisible to every reader. Move
         // it to the new name instead: one file per chapter is the contract.
         if let previous = try readIndex(bookDir: bookDir).chapters
-            .first(where: { $0.chapterKey == chapter.key })?.file {
+            .first(where: { $0.chapterKey == chapter.key })?.file
+        {
             let source = notesDir.appendingPathComponent(previous)
             if previous != relativePath, FileStore.isEvicted(source) {
                 throw CoreError.notDownloaded(source)
@@ -188,7 +189,8 @@ public enum Notes {
         let existing = try readNoteFile(bookDir: bookDir, chapter: chapter)
         let now = RFC3339.now()
 
-        var frontmatter = try existing?.frontmatter
+        var frontmatter =
+            try existing?.frontmatter
             ?? blankNote(bookId: readMeta(bookDir: bookDir).id, chapter: chapter).frontmatter
         if existing == nil { frontmatter.createdAt = now }
         frontmatter.updatedAt = now
@@ -355,7 +357,8 @@ public enum Notes {
     /// the indexed file when present, else the name the note would get.
     private static func noteRelativePath(bookDir: String, chapter: ChapterMeta) throws -> String {
         if let entry = try readIndex(bookDir: bookDir).chapters
-            .first(where: { $0.chapterKey == chapter.key }) {
+            .first(where: { $0.chapterKey == chapter.key })
+        {
             return entry.file
         }
         return "chapters/\(chapter.key)-\(slugify(chapter.title)).md"
@@ -380,7 +383,8 @@ public enum Notes {
     ) throws {
         let notesDir = bookDir.appendingPathComponent("notes")
         try Files.createDirectory(notesDir.appendingPathComponent("chapters"))
-        let path = notesDir
+        let path =
+            notesDir
             .appendingPathComponent(try noteRelativePath(bookDir: bookDir, chapter: chapter))
         try FileStore.write(render(frontmatter: frontmatter, body: body, items: items), to: path)
     }

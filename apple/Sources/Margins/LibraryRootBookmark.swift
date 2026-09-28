@@ -28,11 +28,13 @@ enum LibraryRootBookmark {
             )
         else { return }
 
-        if stale, let refreshed = try? url.bookmarkData(
-            options: [.withSecurityScope],
-            includingResourceValuesForKeys: nil,
-            relativeTo: nil
-        ) {
+        if stale,
+            let refreshed = try? url.bookmarkData(
+                options: [.withSecurityScope],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+        {
             UserDefaults.standard.set(refreshed, forKey: defaultsKey)
         }
 

@@ -70,7 +70,8 @@ public enum EpubParser {
         var candidates: [ChapterCandidate] = []
         for (index, item) in spine.enumerated() {
             guard item.linear, let manifestItem = manifest[item.idref],
-                  isContentItem(manifestItem) else { continue }
+                isContentItem(manifestItem)
+            else { continue }
             let fullHref = joinHref(opfDir, manifestItem.href)
             let document = try? readText(archive, fullHref)
             candidates.append(
@@ -106,9 +107,9 @@ public enum EpubParser {
     /// Returns `nil` when the book has no (readable) cover.
     public static func extractCover(path: String) -> CoverImage? {
         guard let archive = try? openArchive(path),
-              let container = try? readText(archive, "META-INF/container.xml"),
-              let opfPath = findOPFPath(container),
-              let opf = try? readText(archive, opfPath)
+            let container = try? readText(archive, "META-INF/container.xml"),
+            let opfPath = findOPFPath(container),
+            let opf = try? readText(archive, opfPath)
         else { return nil }
         return extractCover(archive, opf: opf, opfDir: parentDirectory(opfPath))
     }
@@ -319,7 +320,8 @@ public enum EpubParser {
             guard let close = opf.range(of: ">", range: open.upperBound..<opf.endIndex) else { break }
             let tag = opf[open.upperBound..<close.lowerBound]
             if attributeValue("name", in: tag) == "cover",
-               let content = attributeValue("content", in: tag), !content.isEmpty {
+                let content = attributeValue("content", in: tag), !content.isEmpty
+            {
                 return content
             }
             cursor = close.upperBound
@@ -329,7 +331,7 @@ public enum EpubParser {
 
     static func spineTOCID(_ opf: String) -> String? {
         guard let open = opf.range(of: "<spine"),
-              let close = opf.range(of: ">", range: open.upperBound..<opf.endIndex)
+            let close = opf.range(of: ">", range: open.upperBound..<opf.endIndex)
         else { return nil }
         return attributeValue("toc", in: opf[open.upperBound..<close.lowerBound])
     }
@@ -340,10 +342,11 @@ public enum EpubParser {
         while let equals = tag.range(of: "\(name)=\"", range: cursor..<tag.endIndex) {
             // Must be a whole attribute name, not the tail of another one.
             let before = equals.lowerBound
-            let boundary = before == tag.startIndex
+            let boundary =
+                before == tag.startIndex
                 || tag[tag.index(before: before)].isWhitespace
             guard boundary,
-                  let end = tag.range(of: "\"", range: equals.upperBound..<tag.endIndex)
+                let end = tag.range(of: "\"", range: equals.upperBound..<tag.endIndex)
             else {
                 cursor = equals.upperBound
                 continue
@@ -379,9 +382,9 @@ public enum EpubParser {
 
         for item in candidates {
             guard let mediaType = item.mediaType,
-                  let fileExtension = self.fileExtension(forMediaType: mediaType),
-                  let bytes = try? readData(archive, joinHref(opfDir, item.href)),
-                  !bytes.isEmpty
+                let fileExtension = self.fileExtension(forMediaType: mediaType),
+                let bytes = try? readData(archive, joinHref(opfDir, item.href)),
+                !bytes.isEmpty
             else { continue }
             return CoverImage(bytes: bytes, fileExtension: fileExtension)
         }
@@ -432,7 +435,8 @@ public enum EpubParser {
 
         // NCX: the declared media type first, then the id named by
         // `<spine toc="…">`, then any `.ncx` in the manifest.
-        let ncx = items.first { $0.mediaType == "application/x-dtbncx+xml" }
+        let ncx =
+            items.first { $0.mediaType == "application/x-dtbncx+xml" }
             ?? spineTOCID(opf).flatMap { id in items.first { $0.id == id } }
             ?? items.first { $0.href.lowercased().hasSuffix(".ncx") }
         if let ncx {
@@ -495,9 +499,10 @@ public enum EpubParser {
         let delegate = NavDelegate()
         guard runParser(xml, delegate) else { return [] }
 
-        let chosen = delegate.sections.first {
-            $0.epubType?.split(whereSeparator: \.isWhitespace).contains("toc") == true
-        } ?? delegate.sections.first { $0.role == "doc-toc" }
+        let chosen =
+            delegate.sections.first {
+                $0.epubType?.split(whereSeparator: \.isWhitespace).contains("toc") == true
+            } ?? delegate.sections.first { $0.role == "doc-toc" }
             ?? delegate.sections.first { !$0.anchors.isEmpty }
 
         guard let chosen else { return [] }
@@ -512,17 +517,21 @@ public enum EpubParser {
         _ archive: Archive, opf: String, opfDir: String
     ) -> [String: Matter] {
         let items = parseManifestItems(opf)
-        guard let nav = items.first(where: {
-            $0.properties?.split(whereSeparator: \.isWhitespace).contains("nav") == true
-        }) else { return [:] }
+        guard
+            let nav = items.first(where: {
+                $0.properties?.split(whereSeparator: \.isWhitespace).contains("nav") == true
+            })
+        else { return [:] }
         let path = joinHref(opfDir, nav.href)
         guard let document = try? readText(archive, path) else { return [:] }
 
         let delegate = NavDelegate()
         guard runParser(document, delegate) else { return [:] }
-        guard let landmarks = delegate.sections.first(where: {
-            $0.epubType?.split(whereSeparator: \.isWhitespace).contains("landmarks") == true
-        }) else { return [:] }
+        guard
+            let landmarks = delegate.sections.first(where: {
+                $0.epubType?.split(whereSeparator: \.isWhitespace).contains("landmarks") == true
+            })
+        else { return [:] }
 
         var signals: [String: Matter] = [:]
         for anchor in landmarks.anchors {
@@ -686,9 +695,10 @@ public enum EpubParser {
             case "navPoint":
                 guard let pending = stack.popLast() else { return }
                 if let src = pending.src,
-                   let entry = EpubParser.tocEntry(
-                       baseDir: baseDir, src: src, label: pending.label, level: pending.level
-                   ) {
+                    let entry = EpubParser.tocEntry(
+                        baseDir: baseDir, src: src, label: pending.label, level: pending.level
+                    )
+                {
                     entries.insert(entry, at: pending.slot)
                 }
             case "navLabel":
@@ -879,7 +889,8 @@ public enum EpubParser {
             for index in stride(from: count - 1, through: lastBody + 1, by: -1) {
                 if matters[index] == .back { continue }
                 guard matters[index] == nil, !structural[index],
-                      backMatter(titles[index]) != nil else { break }
+                    backMatter(titles[index]) != nil
+                else { break }
                 matters[index] = .back
             }
             for index in (lastBody + 1)..<count where matters[index] == nil {
@@ -910,7 +921,8 @@ public enum EpubParser {
         }
         let words = trimmed.split(whereSeparator: \.isWhitespace)
         if !words.isEmpty, words.count <= 4,
-           trimmed.uppercased() == trimmed, trimmed.contains(where: \.isLetter) {
+            trimmed.uppercased() == trimmed, trimmed.contains(where: \.isLetter)
+        {
             return .front
         }
         return nil
@@ -967,13 +979,13 @@ public enum EpubParser {
         for token in tokens {
             switch token {
             case "titlepage", "halftitlepage", "copyright-page", "toc", "dedication",
-                 "acknowledgments", "acknowledgements", "epigraph", "foreword", "preface",
-                 "introduction", "landmarks", "loi", "lot":
+                "acknowledgments", "acknowledgements", "epigraph", "foreword", "preface",
+                "introduction", "landmarks", "loi", "lot":
                 return .front
             case "part", "chapter", "volume", "prologue", "epilogue":
                 return .body
             case "afterword", "appendix", "bibliography", "colophon", "endnotes",
-                 "footnotes", "glossary", "index", "notes":
+                "footnotes", "glossary", "index", "notes":
                 return .back
             default:
                 continue
@@ -1004,8 +1016,8 @@ public enum EpubParser {
         case "text": return .body
         case "cover": return .cover
         case "title-page", "toc", "copyright-page", "acknowledgements",
-             "acknowledgments", "dedication", "epigraph", "foreword", "preface",
-             "loi", "lot":
+            "acknowledgments", "dedication", "epigraph", "foreword", "preface",
+            "loi", "lot":
             return .front
         case "bibliography", "glossary", "index", "notes", "colophon": return .back
         default: return nil
@@ -1018,7 +1030,8 @@ public enum EpubParser {
         let scan = String(document.prefix(documentTypeScanLimit))
         for tag in ["body", "section"] {
             if let range = tagBodyRange(named: tag, in: scan),
-               let type = attributeValue("epub:type", in: range) {
+                let type = attributeValue("epub:type", in: range)
+            {
                 return type
             }
         }
@@ -1029,8 +1042,9 @@ public enum EpubParser {
     /// `wrap0000.html`).
     static func isCoverByShape(_ document: String) -> Bool {
         guard let body = bodyContent(document) else { return false }
-        guard body.range(of: "<img", options: .caseInsensitive) != nil
-            || body.range(of: "<svg", options: .caseInsensitive) != nil
+        guard
+            body.range(of: "<img", options: .caseInsensitive) != nil
+                || body.range(of: "<svg", options: .caseInsensitive) != nil
         else { return false }
         let text = cleanText(String(body)) ?? ""
         return text.count < coverShapeTextLimit
@@ -1057,7 +1071,8 @@ public enum EpubParser {
         ) {
             let after = open.upperBound
             if after == text.endIndex || text[after].isWhitespace
-                || text[after] == ">" || text[after] == "/" {
+                || text[after] == ">" || text[after] == "/"
+            {
                 guard let close = text.range(of: ">", range: after..<text.endIndex) else {
                     return nil
                 }
@@ -1122,9 +1137,10 @@ public enum EpubParser {
         ofTagNamed name: String, closing: Bool, in document: String, from start: String.Index
     ) -> Range<String.Index>? {
         let opener = closing ? "</" : "<"
-        guard let hit = document.range(
-            of: opener + name, options: .caseInsensitive, range: start..<document.endIndex
-        ), let close = document.range(of: ">", range: hit.upperBound..<document.endIndex)
+        guard
+            let hit = document.range(
+                of: opener + name, options: .caseInsensitive, range: start..<document.endIndex
+            ), let close = document.range(of: ">", range: hit.upperBound..<document.endIndex)
         else { return nil }
         return hit.lowerBound..<close.upperBound
     }
@@ -1153,11 +1169,13 @@ public enum EpubParser {
         // (`<title>"Cover"</title>`); one pair around the whole title is
         // punctuation, not part of the name. A title that quotes itself
         // (`"A" and "B"`) keeps its marks.
-        let quoted = (collapsed.hasPrefix("\"") && collapsed.hasSuffix("\""))
+        let quoted =
+            (collapsed.hasPrefix("\"") && collapsed.hasSuffix("\""))
             || (collapsed.hasPrefix("\u{201C}") && collapsed.hasSuffix("\u{201D}"))
         if quoted, collapsed.count >= 2 {
             let inner = String(collapsed.dropFirst().dropLast())
-            let innerHasQuotes = collapsed.hasPrefix("\"")
+            let innerHasQuotes =
+                collapsed.hasPrefix("\"")
                 ? inner.contains("\"")
                 : inner.contains("\u{201C}") || inner.contains("\u{201D}")
             if !innerHasQuotes {
@@ -1177,10 +1195,11 @@ public enum EpubParser {
         while let start = text.range(of: "&", range: cursor..<text.endIndex) {
             out += text[cursor..<start.lowerBound]
             // Entity names are short; a `&` with no `;` close by is literal.
-            let limit = text.index(start.lowerBound, offsetBy: 12, limitedBy: text.endIndex)
+            let limit =
+                text.index(start.lowerBound, offsetBy: 12, limitedBy: text.endIndex)
                 ?? text.endIndex
             guard let end = text.range(of: ";", range: start.upperBound..<limit),
-                  let decoded = decodeEntity(String(text[start.upperBound..<end.lowerBound]))
+                let decoded = decodeEntity(String(text[start.upperBound..<end.lowerBound]))
             else {
                 out += "&"
                 cursor = start.upperBound
@@ -1259,7 +1278,8 @@ public enum EpubParser {
     /// declared it (nav/NCX srcs are relative to that file, not the OPF),
     /// collapsing `.` and `..`.
     static func resolveRelative(_ baseDir: String, _ href: String) -> String {
-        var stack: [Substring] = href.hasPrefix("/")
+        var stack: [Substring] =
+            href.hasPrefix("/")
             ? []
             : baseDir.split(separator: "/", omittingEmptySubsequences: true)
         for part in href.split(separator: "/", omittingEmptySubsequences: false) {
@@ -1287,8 +1307,10 @@ public enum EpubParser {
         var index = 0
         while index < bytes.count {
             if bytes[index] == UInt8(ascii: "%"), index + 2 < bytes.count,
-               let byte = UInt8(String(decoding: bytes[(index + 1)...(index + 2)], as: UTF8.self),
-                                radix: 16) {
+                let byte = UInt8(
+                    String(decoding: bytes[(index + 1)...(index + 2)], as: UTF8.self),
+                    radix: 16)
+            {
                 out.append(byte)
                 index += 3
                 continue

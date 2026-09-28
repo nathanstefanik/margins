@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// Translated from the legacy core's library test module. The
 /// recurring concern is that a book directory is either whole or absent: an
@@ -525,9 +526,10 @@ struct LibraryTests {
         )
 
         try harness.library.importEpub(atPath: epub)
-        #expect(Files.isFile(
-            harness.library.bookDir(meta.id).appendingPathComponent("source.epub")
-        ))
+        #expect(
+            Files.isFile(
+                harness.library.bookDir(meta.id).appendingPathComponent("source.epub")
+            ))
     }
 
     @Test("setting the root switches the active library")

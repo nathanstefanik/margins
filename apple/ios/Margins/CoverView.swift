@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// A book's cover. Local files load immediately; an evicted iCloud cover
 /// requests a download and keeps the placeholder; a missing cover is the

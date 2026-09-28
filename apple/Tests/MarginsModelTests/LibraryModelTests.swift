@@ -1,7 +1,7 @@
 import Foundation
-import Testing
 import MarginsCore
 import MarginsModel
+import Testing
 
 @Suite("Library model")
 struct LibraryModelTests {
@@ -52,7 +52,8 @@ struct LibraryModelTests {
     @Test("openPassage carries an outline section fragment through to the reader")
     @MainActor
     func openPassageCarriesSectionFragment() async throws {
-        let fixture = repoRoot
+        let fixture =
+            repoRoot
             .appendingPathComponent("fixtures", isDirectory: true)
             .appendingPathComponent("dostoyevsky_the_karamazov_brothers.epub")
             .path

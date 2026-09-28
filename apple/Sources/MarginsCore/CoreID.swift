@@ -11,7 +11,8 @@ public enum CoreID {
 
     public static func newID() -> String {
         let now = Date().timeIntervalSince1970
-        let milliseconds = max(Int((now * 1000).rounded(.down)), epochMilliseconds)
+        let milliseconds =
+            max(Int((now * 1000).rounded(.down)), epochMilliseconds)
             - epochMilliseconds
         var value = UInt64(milliseconds) << 10 | UInt64(randomTenBits(at: now))
         var id = [Character](repeating: "0", count: 10)

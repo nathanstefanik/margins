@@ -277,7 +277,8 @@ public final class Library {
         let finalDir = bookDir(bookID)
 
         if FileStore.isFile(finalDir.appendingPathComponent("meta.json")),
-           Files.isFile(finalDir.appendingPathComponent("source.epub")) {
+            Files.isFile(finalDir.appendingPathComponent("source.epub"))
+        {
             let existing = try getBook(id: bookID)
             progress(100, "already-imported")
             return existing
@@ -405,23 +406,23 @@ public final class Library {
 
     private func writeBookReadme(bookDir: String, meta: BookMeta) throws {
         let readme = """
-        # \(meta.title)
+            # \(meta.title)
 
-        Author: \(meta.author)
-        Book ID: `\(meta.id)`
+            Author: \(meta.author)
+            Book ID: `\(meta.id)`
 
-        ## Notes layout
+            ## Notes layout
 
-        Chapter summaries and annotations live in `notes/chapters/` as \
-        Markdown files with YAML frontmatter. Each file is self-contained \
-        and agent-friendly.
+            Chapter summaries and annotations live in `notes/chapters/` as \
+            Markdown files with YAML frontmatter. Each file is self-contained \
+            and agent-friendly.
 
-        - `meta.json` — book metadata and chapter spine
-        - `notes/_index.json` — machine-readable note index
-        - `notes/chapters/*.md` — one file per chapter note
-        - `source.epub` — imported EPUB copy
+            - `meta.json` — book metadata and chapter spine
+            - `notes/_index.json` — machine-readable note index
+            - `notes/chapters/*.md` — one file per chapter note
+            - `source.epub` — imported EPUB copy
 
-        """
+            """
         try Files.write(readme, to: bookDir.appendingPathComponent("README.md"))
     }
 
@@ -482,7 +483,7 @@ func copyFile(from source: String, to destination: String, progress: (Int64, Int
     defer { try? reader.close() }
 
     guard FileManager.default.createFile(atPath: destination, contents: nil),
-          let writer = FileHandle(forWritingAtPath: destination)
+        let writer = FileHandle(forWritingAtPath: destination)
     else {
         throw CoreError.io("io error: could not write \(destination)")
     }

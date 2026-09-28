@@ -1,6 +1,7 @@
 import Foundation
 import MarginsCore
 import os
+
 #if os(macOS)
 import Security
 #endif
@@ -73,14 +74,15 @@ public enum ClubSyncError: Error, LocalizedError, Sendable, Equatable {
         case .invalidCode: return "That invite code doesn't look right."
         case .unknownCode: return "No club uses that invite code."
         case .expiredCode: return "That invite code has expired."
-        case let .bookMissing(title):
+        case .bookMissing(let title):
             return "Import \"\(title)\" into your library, then join the club."
         case .notSignedIn: return "Sign in to iCloud to use book clubs."
         case .sharingUnavailable:
             return "Book club sharing is unavailable right now. Try again later."
         case .sharingSchemaMissing:
-            return "Book club sharing isn't set up in this app's iCloud database yet. The CloudKit sharing types still need to be deployed."
-        case let .transport(message): return message
+            return
+                "Book club sharing isn't set up in this app's iCloud database yet. The CloudKit sharing types still need to be deployed."
+        case .transport(let message): return message
         }
     }
 }
@@ -144,7 +146,7 @@ public struct ClubSync: Sendable {
     public static func cloudKitIsUsable() -> Bool {
         #if os(macOS)
         guard FileManager.default.ubiquityIdentityToken != nil,
-              let task = SecTaskCreateFromSelf(nil)
+            let task = SecTaskCreateFromSelf(nil)
         else { return false }
         let value = SecTaskCopyValueForEntitlement(
             task,
@@ -164,7 +166,8 @@ public struct ClubSync: Sendable {
     /// than silently turning the club local for the session.
     public static func automatic(store: CoreStore) async -> ClubSync {
         guard cloudKitIsUsable() else {
-            let identity = (try? await store.clubIdentity())
+            let identity =
+                (try? await store.clubIdentity())
                 ?? ClubIdentity(memberId: "local")
             return ClubSync(
                 store: store,
@@ -223,10 +226,11 @@ public struct ClubSync: Sendable {
     /// `cloudkit.share`) are absent from the deployed environment. The
     /// message text is the only structured signal the transport wraps.
     private static func isMissingShareSchema(_ error: any Error) -> Bool {
-        let message = switch error {
-        case let ClubSyncError.transport(text): text
-        default: String(describing: error)
-        }
+        let message =
+            switch error {
+            case ClubSyncError.transport(let text): text
+            default: String(describing: error)
+            }
         let lowered = message.lowercased()
         return lowered.contains("production schema")
             || lowered.contains("development schema")

@@ -1,6 +1,6 @@
 import AppKit
-import WebKit
 import MarginsModel
+import WebKit
 
 /// Routes keyboard and trackpad input for the whole app.
 ///
@@ -231,7 +231,7 @@ final class ShellKeyboardController {
             return true
         case .dropBookmark:
             guard reader.isOpen, let book = reader.book,
-                  let position = reader.currentPosition()
+                let position = reader.currentPosition()
             else { return false }
             Task {
                 await model.addBookmark(bookId: book.id, position: position, reader: reader)

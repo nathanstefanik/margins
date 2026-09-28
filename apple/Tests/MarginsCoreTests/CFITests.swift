@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// `CFI.swift` is intentionally partial: it exists so the club view can
 /// decide whether two members marked the same passage. These tests pin the

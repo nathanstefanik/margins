@@ -1,6 +1,6 @@
 import AppKit
-import UniformTypeIdentifiers
 import MarginsModel
+import UniformTypeIdentifiers
 
 /// The shared ⌘O / `o` import flow. Multi-select is fine: each EPUB is
 /// imported in turn with progress surfaced in the sidebar.

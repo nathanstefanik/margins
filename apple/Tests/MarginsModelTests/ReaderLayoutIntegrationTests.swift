@@ -104,20 +104,23 @@ struct ReaderLayoutIntegrationTests {
             ("{mode:'double',widthPx:727,glyphWidthPx:8,lineWidthCh:72,previousPages:1}", 1),
         ]
         for (options, expected) in cases {
-            let pages = try await harness.evaluate(
-                "window.readerResolveLayout(\(options)).pages"
-            ) as? Int
+            let pages =
+                try await harness.evaluate(
+                    "window.readerResolveLayout(\(options)).pages"
+                ) as? Int
             #expect(pages == expected, "policy case \(options)")
         }
         // The viewer cap keeps the selected measure: single page = 48 +
         // lineWidthCh * glyph; two pages add the gutter and a second page.
-        let singleWidth = try await harness.evaluate(
-            "window.readerResolveLayout({mode:'single',widthPx:1400,glyphWidthPx:8,lineWidthCh:72}).viewerWidthPx"
-        ) as? Double
+        let singleWidth =
+            try await harness.evaluate(
+                "window.readerResolveLayout({mode:'single',widthPx:1400,glyphWidthPx:8,lineWidthCh:72}).viewerWidthPx"
+            ) as? Double
         #expect(singleWidth == 624)
-        let doubleWidth = try await harness.evaluate(
-            "window.readerResolveLayout({mode:'double',widthPx:1400,glyphWidthPx:8,lineWidthCh:72}).viewerWidthPx"
-        ) as? Double
+        let doubleWidth =
+            try await harness.evaluate(
+                "window.readerResolveLayout({mode:'double',widthPx:1400,glyphWidthPx:8,lineWidthCh:72}).viewerWidthPx"
+            ) as? Double
         #expect(doubleWidth == 1240)
     }
 
@@ -171,12 +174,14 @@ struct ReaderLayoutIntegrationTests {
         try await harness.evaluate("readerSetPageLayout('single')")
         let geometry = try await harness.waitForDivisor(1)
         // Centered: equal space on both sides.
-        let margins = try await harness.evaluate(
-            "window.innerWidth - document.getElementById('viewer').getBoundingClientRect().right"
-        ) as? Double
-        let left = try await harness.evaluate(
-            "document.getElementById('viewer').getBoundingClientRect().left"
-        ) as? Double
+        let margins =
+            try await harness.evaluate(
+                "window.innerWidth - document.getElementById('viewer').getBoundingClientRect().right"
+            ) as? Double
+        let left =
+            try await harness.evaluate(
+                "document.getElementById('viewer').getBoundingClientRect().left"
+            ) as? Double
         #expect(abs((margins ?? 0) - (left ?? 0)) < 1)
         #expect(geometry.viewerWidth < geometry.innerWidth)
         let rects = try await harness.visibleParagraphRects()
@@ -489,9 +494,10 @@ struct ReaderLayoutIntegrationTests {
         #expect(visibleIframes == 1)
         #expect(try await harness.visibleParagraphIDs().isEmpty == false)
         // No error page replaced the reader.
-        let body = try await harness.evaluate(
-            "document.querySelector('.reader-error') ? 'error' : 'ok'"
-        ) as? String
+        let body =
+            try await harness.evaluate(
+                "document.querySelector('.reader-error') ? 'error' : 'ok'"
+            ) as? String
         #expect(body == "ok")
     }
 

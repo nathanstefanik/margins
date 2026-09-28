@@ -66,7 +66,8 @@ public enum Marks {
                 header = nil
                 let rawText = joinBlock(comment: comment, content: content)
                 if let partial = parseComment(comment),
-                   let (quote, body) = splitQuoteBody(content) {
+                    let (quote, body) = splitQuoteBody(content)
+                {
                     let mark = Mark(
                         id: partial.id, cfi: partial.cfi, at: partial.at,
                         percent: partial.percent, quote: quote, body: body
@@ -139,7 +140,7 @@ public enum Marks {
     @discardableResult
     public static func update(_ mark: Mark, in items: inout [MarkItem]) -> Bool {
         for index in items.indices {
-            guard case let .mark(existing, _) = items[index], existing.id == mark.id else {
+            guard case .mark(let existing, _) = items[index], existing.id == mark.id else {
                 continue
             }
             items[index] = .mark(mark, raw: canonicalBlock(mark))
@@ -154,7 +155,7 @@ public enum Marks {
     public static func delete(id: String, from items: inout [MarkItem]) -> Bool {
         let before = items.count
         items.removeAll { item in
-            guard case let .mark(mark, _) = item else { return false }
+            guard case .mark(let mark, _) = item else { return false }
             return mark.id == id
         }
         return items.count != before
@@ -164,7 +165,7 @@ public enum Marks {
     /// when they need reading order).
     public static func marks(_ items: [MarkItem]) -> [Mark] {
         items.compactMap { item in
-            guard case let .mark(mark, _) = item else { return nil }
+            guard case .mark(let mark, _) = item else { return nil }
             return mark
         }
     }
@@ -187,7 +188,7 @@ public enum Marks {
         case (nil, nil): return false
         case (nil, _): return true
         case (_, nil): return false
-        case let (a?, b?): return a < b
+        case (let a?, let b?): return a < b
         }
     }
 
@@ -207,9 +208,9 @@ public enum Marks {
     private static func markCommentLine(_ line: Substring) -> Substring? {
         let trimmed = line.trimmed
         guard let afterOpen = trimmed.strippingPrefix("<!--")?.trimmedStart,
-              let attributes = afterOpen.strippingPrefix("margins:mark"),
-              let first = attributes.first, first.isWhitespace,
-              trimmed.hasSuffix("-->")
+            let attributes = afterOpen.strippingPrefix("margins:mark"),
+            let first = attributes.first, first.isWhitespace,
+            trimmed.hasSuffix("-->")
         else { return nil }
         return trimmed
     }
@@ -226,7 +227,7 @@ public enum Marks {
     /// `.raw`); a malformed `cfi`/`percent` degrades gracefully.
     private static func parseComment(_ comment: String) -> PartialMark? {
         guard let inner = comment.trimmed.strippingPrefix("<!--")?.strippingSuffix("-->")?.trimmed,
-              let attributes = inner.strippingPrefix("margins:mark")?.trimmed
+            let attributes = inner.strippingPrefix("margins:mark")?.trimmed
         else { return nil }
 
         var id: String?
@@ -262,7 +263,8 @@ public enum Marks {
             }
             var key = ""
             while index < attributes.endIndex,
-                  attributes[index] != "=", !attributes[index].isWhitespace {
+                attributes[index] != "=", !attributes[index].isWhitespace
+            {
                 key.append(attributes[index])
                 index = attributes.index(after: index)
             }
@@ -273,7 +275,7 @@ public enum Marks {
                 }
                 continue
             }
-            index = attributes.index(after: index) // '='
+            index = attributes.index(after: index)  // '='
 
             var value = ""
             if index < attributes.endIndex, attributes[index] == "\"" {
@@ -316,7 +318,8 @@ public enum Marks {
     }
 
     private static func commentPrefix(_ mark: Mark) -> String {
-        var prefix = "<!-- margins:mark id=\(mark.id) cfi=\"\(mark.cfi ?? "")\""
+        var prefix =
+            "<!-- margins:mark id=\(mark.id) cfi=\"\(mark.cfi ?? "")\""
             + " at=\(RFC3339.secondsString(from: mark.at))"
         if let percent = mark.percent {
             prefix += String(format: " percent=%.1f", percent)
@@ -334,8 +337,8 @@ public enum MarkItem: Sendable, Equatable {
     /// The block's bytes as they belong in the file.
     public var rawText: String {
         switch self {
-        case let .mark(_, raw): return raw
-        case let .raw(text): return text
+        case .mark(_, let raw): return raw
+        case .raw(let text): return text
         }
     }
 }

@@ -342,7 +342,8 @@ struct ClubDetailView: View {
     }
 
     private func hiddenText(_ chapter: ClubChapter) -> String {
-        let who = chapter.hiddenMemberCount == 1
+        let who =
+            chapter.hiddenMemberCount == 1
             ? "1 other member's" : "\(chapter.hiddenMemberCount) other members'"
         return "\(who) notes are hidden until you finish this chapter."
     }

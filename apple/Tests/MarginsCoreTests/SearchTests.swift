@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// Translated from the legacy core's search test module. Two
 /// things are under test throughout: the ranking is deterministic and

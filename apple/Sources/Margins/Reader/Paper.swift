@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 /// The reading surface's paper palette, mirroring the palettes in
 /// `reader.html` / `reader.js`.

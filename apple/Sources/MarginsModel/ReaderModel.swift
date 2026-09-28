@@ -166,7 +166,7 @@ public final class ReaderModel {
 
     private func moveChapter(_ delta: Int) -> ChapterMeta? {
         guard let book, let chapter,
-              let index = book.chapters.firstIndex(where: { $0.key == chapter.key })
+            let index = book.chapters.firstIndex(where: { $0.key == chapter.key })
         else { return nil }
         let target = index + delta
         guard book.chapters.indices.contains(target) else { return nil }
@@ -199,11 +199,11 @@ public final class ReaderModel {
         // crossing a chapter boundary) falls back to start-page progress.
         let verifiedEndPage: Int? = {
             guard let endPage,
-                  let endHref,
-                  let endChapter = book.flatMap({ Self.chapter(forHref: endHref, in: $0) }),
-                  endChapter.key == startChapter?.key,
-                  endPage >= page,
-                  endPage <= safeTotal
+                let endHref,
+                let endChapter = book.flatMap({ Self.chapter(forHref: endHref, in: $0) }),
+                endChapter.key == startChapter?.key,
+                endPage >= page,
+                endPage <= safeTotal
             else { return nil }
             return endPage
         }()
@@ -258,13 +258,13 @@ public final class ReaderModel {
         chapters: [ChapterMeta]
     ) -> ChapterMeta? {
         guard let previousProgress,
-              newProgress != nil,
-              previousKey != newKey,
-              previousProgress.totalPages > 0,
-              previousProgress.page >= previousProgress.totalPages,
-              let finishedIndex = chapters.firstIndex(where: { $0.key == previousKey }),
-              let newIndex = chapters.firstIndex(where: { $0.key == newKey }),
-              newIndex == finishedIndex + 1
+            newProgress != nil,
+            previousKey != newKey,
+            previousProgress.totalPages > 0,
+            previousProgress.page >= previousProgress.totalPages,
+            let finishedIndex = chapters.firstIndex(where: { $0.key == previousKey }),
+            let newIndex = chapters.firstIndex(where: { $0.key == newKey }),
+            newIndex == finishedIndex + 1
         else { return nil }
         return chapters[finishedIndex]
     }
@@ -278,9 +278,10 @@ public final class ReaderModel {
     /// only; the persisted value is clamped again by the core.
     public var bookPercent: Double? {
         guard let book, let chapter, let progress,
-              let position = book.chapters.firstIndex(where: { $0.key == chapter.key })
+            let position = book.chapters.firstIndex(where: { $0.key == chapter.key })
         else { return nil }
-        let fraction = progress.totalPages > 0
+        let fraction =
+            progress.totalPages > 0
             ? Double(progress.page) / Double(progress.totalPages)
             : 0
         let percent = (Double(position) + fraction) / Double(book.chapters.count) * 100
@@ -296,7 +297,8 @@ public final class ReaderModel {
         if let computed = bookPercent {
             percent = computed
         } else if let index = book.chapters.firstIndex(where: { $0.key == chapter.key }),
-                  !book.chapters.isEmpty {
+            !book.chapters.isEmpty
+        {
             percent = Double(index) / Double(book.chapters.count) * 100
         } else {
             return nil
@@ -439,7 +441,7 @@ public final class ReaderModel {
     public nonisolated static func noteHeaderText(chapterIndex: Int, chapterTitle: String?) -> String {
         let prefix = "Ch. \(chapterIndex + 1)"
         guard let title = chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !title.isEmpty
+            !title.isEmpty
         else { return prefix }
         return "\(prefix) · \(title)"
     }

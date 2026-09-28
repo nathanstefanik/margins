@@ -1,7 +1,7 @@
 import Foundation
-import Testing
 import MarginsCore
 import MarginsModel
+import Testing
 
 @Suite("SearchResults")
 struct SearchResultsTests {

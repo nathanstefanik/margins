@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 import MarginsCore
+import Testing
 
 @Suite("Core store")
 struct BridgeTests {

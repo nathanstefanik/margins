@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsCore
+import SwiftUI
 
 struct BookRowView: View {
     let book: BookSummary

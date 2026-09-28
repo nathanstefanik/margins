@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// The Clubs tab: the reader's private book clubs, one book each. Content is
 /// a plain system list; controls float on the toolbar, per the iOS 26
@@ -73,7 +73,7 @@ struct ClubsScene: View {
                     Text(clubs.errorMessage ?? "")
                 }
                 #if DEBUG
-                .task { await runDebugSeams() }
+            .task { await runDebugSeams() }
                 #endif
         }
     }

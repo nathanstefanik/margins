@@ -161,7 +161,8 @@ public struct Club: Codable, Sendable, Equatable, Hashable, Identifiable {
         inviteCode = try container.decode(String.self, forKey: .inviteCode)
         createdAt = try container.decodeDate(forKey: .createdAt)
         members = try container.decode([ClubMember].self, forKey: .members)
-        ownerMemberId = try container.decodeIfPresent(String.self, forKey: .ownerMemberId)
+        ownerMemberId =
+            try container.decodeIfPresent(String.self, forKey: .ownerMemberId)
             ?? members.first(where: \.isAdmin)?.id
             ?? members.first?.id
             ?? ""

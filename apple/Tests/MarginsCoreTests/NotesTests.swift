@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// Translated from the legacy core's notes test module, plus golden files
 /// the legacy core wrote before the port. The theme running through the marks
@@ -17,7 +18,8 @@ struct NotesTests {
         let chapter: ChapterMeta
 
         init() throws {
-            dir = FileManager.default.temporaryDirectory
+            dir =
+                FileManager.default.temporaryDirectory
                 .appendingPathComponent("margins-notes-\(UUID().uuidString)", isDirectory: true).path
             chapter = ChapterMeta(
                 key: "001", index: 0, title: "Introduction", href: "OEBPS/chapter1.xhtml"
@@ -57,7 +59,8 @@ struct NotesTests {
         /// after a retitle rename.
         func marksRegion(_ chapterKey: String = "001") throws -> String {
             let index = try Notes.readIndex(bookDir: dir)
-            let file = index.chapters.first { $0.chapterKey == chapterKey }?.file
+            let file =
+                index.chapters.first { $0.chapterKey == chapterKey }?.file
                 ?? "chapters/\(chapterKey)-\(Notes.slugify(chapter.title)).md"
             let raw = try Files.read(dir.appendingPathComponent("notes").appendingPathComponent(file))
             guard let start = raw.range(of: Marks.sentinel) else { return "" }
@@ -69,19 +72,19 @@ struct NotesTests {
         func writeMarkedNote(body: String, marksRegion: String) throws {
             let file = "chapters/\(chapter.key)-\(Notes.slugify(chapter.title)).md"
             let content = """
-            ---
-            book_id: abc123
-            chapter_key: '\(chapter.key)'
-            chapter_index: \(chapter.index)
-            chapter_title: \(chapter.title)
-            chapter_href: \(chapter.href)
-            kind: summary
-            word_count: 3
-            ---
+                ---
+                book_id: abc123
+                chapter_key: '\(chapter.key)'
+                chapter_index: \(chapter.index)
+                chapter_title: \(chapter.title)
+                chapter_href: \(chapter.href)
+                kind: summary
+                word_count: 3
+                ---
 
-            \(body)
-            \(marksRegion)
-            """
+                \(body)
+                \(marksRegion)
+                """
             try Files.write(
                 content, to: dir.appendingPathComponent("notes").appendingPathComponent(file)
             )
@@ -100,19 +103,19 @@ struct NotesTests {
     }
 
     private static let twoMarkSection = """
-    \(Marks.sentinel)
+        \(Marks.sentinel)
 
-    <!-- margins:mark id=baaaaaaaaaa cfi="epubcfi(/6/2!/4/2)" at=2026-09-05T10:00:00Z percent=12.5 -->
-    > first quote
+        <!-- margins:mark id=baaaaaaaaaa cfi="epubcfi(/6/2!/4/2)" at=2026-09-05T10:00:00Z percent=12.5 -->
+        > first quote
 
-    first thought.
+        first thought.
 
-    <!-- margins:mark id=bbbbbbbbbbb cfi="epubcfi(/6/4!/4/6)" at=2026-09-05T11:00:00Z percent=48.0 -->
-    > second quote
+        <!-- margins:mark id=bbbbbbbbbbb cfi="epubcfi(/6/4!/4/6)" at=2026-09-05T11:00:00Z percent=48.0 -->
+        > second quote
 
-    second thought.
+        second thought.
 
-    """
+        """
 
     // MARK: Text helpers
 
@@ -136,7 +139,8 @@ struct NotesTests {
     @Test("save and load round-trip, updating the index")
     func saveAndLoadRoundTrip() throws {
         let book = try Book()
-        let body = "This is a chapter summary with about twenty words so we can check "
+        let body =
+            "This is a chapter summary with about twenty words so we can check "
             + "persistence of content and word count."
 
         let saved = try Notes.saveChapterNote(
@@ -457,16 +461,16 @@ struct NotesTests {
         let book = try Book()
         // First save carries prose plus a marks section (body-authoritative).
         let markedBody = """
-        Original prose.
+            Original prose.
 
-        \(Marks.sentinel)
+            \(Marks.sentinel)
 
-        <!-- margins:mark id=baaaaaaaaaa cfi="epubcfi(/6/2)" at=2026-09-05T10:00:00Z percent=12.5 -->
-        > quote
+            <!-- margins:mark id=baaaaaaaaaa cfi="epubcfi(/6/2)" at=2026-09-05T10:00:00Z percent=12.5 -->
+            > quote
 
-        thought.
+            thought.
 
-        """
+            """
         let frontmatter = try Notes.loadChapterNote(bookDir: book.dir, chapterKey: "001").frontmatter
         try Notes.saveChapterNote(
             bookDir: book.dir, chapter: book.chapter, frontmatter: frontmatter, body: markedBody
@@ -482,9 +486,10 @@ struct NotesTests {
             bookDir: book.dir, chapter: retitled, frontmatter: frontmatter, body: "Second draft."
         )
 
-        #expect(Files.isFile(
-            book.dir.appendingPathComponent("notes/chapters/001-opening-remarks.md")
-        ))
+        #expect(
+            Files.isFile(
+                book.dir.appendingPathComponent("notes/chapters/001-opening-remarks.md")
+            ))
         #expect(try book.marksRegion() == before)
 
         let index = try Notes.readIndex(bookDir: book.dir)
@@ -501,15 +506,15 @@ struct NotesTests {
         try book.writeMarkedNote(
             body: "Prose.",
             marksRegion: """
-            \(Marks.sentinel)
+                \(Marks.sentinel)
 
-            stray line
+                stray line
 
-            <!-- margins:mark id= oops -->
-            > broken
+                <!-- margins:mark id= oops -->
+                > broken
 
-            \(blocks)
-            """
+                \(blocks)
+                """
         )
         let before = try book.marksRegion()
 
@@ -531,13 +536,14 @@ struct NotesTests {
         let plain = try Notes.loadChapterNote(bookDir: book, chapterKey: "001")
         #expect(plain.frontmatter.chapterTitle == "Introduction")
         #expect(plain.frontmatter.wordCount == 11)
-        #expect(plain.body == """
-        # Introduction — Summary
+        #expect(
+            plain.body == """
+                # Introduction — Summary
 
-        Your notes on this chapter.
+                Your notes on this chapter.
 
-        A second paragraph.
-        """)
+                A second paragraph.
+                """)
         #expect(plain.marks.isEmpty)
 
         let marked = try Notes.loadChapterNote(bookDir: book, chapterKey: "002")

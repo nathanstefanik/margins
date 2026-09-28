@@ -1,7 +1,7 @@
-import Testing
 import Foundation
 import MarginsCore
 import MarginsModel
+import Testing
 
 @Suite("ContentsOutline")
 struct ContentsOutlineTests {
@@ -29,21 +29,29 @@ struct ContentsOutlineTests {
         let outline = ContentsOutline.build(from: [
             chapter(key: "001", title: "Cover", matter: .cover),
             chapter(key: "002", title: "The Brothers Karamazov", matter: .front),
-            chapter(key: "003", title: "PART I", sections: [
-                ChapterSection(title: "PART I", level: 0),
-                ChapterSection(title: "Book I. The History Of A Family", level: 1),
-            ]),
-            chapter(key: "004", title: "Chapter I. They Arrive At The Monastery", sections: [
-                ChapterSection(title: "Chapter I. They Arrive At The Monastery", fragment: "c1", level: 2),
-                ChapterSection(title: "Chapter II. He Gets Rid Of His Eldest Son", fragment: "c2", level: 2),
-            ]),
-            chapter(key: "005", title: "Book II. An Unfortunate Gathering", sections: [
-                ChapterSection(title: "Book II. An Unfortunate Gathering", level: 1),
-                ChapterSection(title: "Chapter III. The Women", fragment: "c3", level: 2),
-            ]),
-            chapter(key: "006", title: "Chapter IV. The Fourth", sections: [
-                ChapterSection(title: "Chapter IV. The Fourth", fragment: "c4", level: 2),
-            ]),
+            chapter(
+                key: "003", title: "PART I",
+                sections: [
+                    ChapterSection(title: "PART I", level: 0),
+                    ChapterSection(title: "Book I. The History Of A Family", level: 1),
+                ]),
+            chapter(
+                key: "004", title: "Chapter I. They Arrive At The Monastery",
+                sections: [
+                    ChapterSection(title: "Chapter I. They Arrive At The Monastery", fragment: "c1", level: 2),
+                    ChapterSection(title: "Chapter II. He Gets Rid Of His Eldest Son", fragment: "c2", level: 2),
+                ]),
+            chapter(
+                key: "005", title: "Book II. An Unfortunate Gathering",
+                sections: [
+                    ChapterSection(title: "Book II. An Unfortunate Gathering", level: 1),
+                    ChapterSection(title: "Chapter III. The Women", fragment: "c3", level: 2),
+                ]),
+            chapter(
+                key: "006", title: "Chapter IV. The Fourth",
+                sections: [
+                    ChapterSection(title: "Chapter IV. The Fourth", fragment: "c4", level: 2)
+                ]),
             chapter(key: "100", title: "FOOTNOTES", matter: .back),
         ])
 
@@ -65,15 +73,16 @@ struct ContentsOutlineTests {
                 "Chapter IV. The Fourth",
             ]
         )
-        #expect(outline.body.map(\.kind) == [
-            .heading(level: 0),
-            .heading(level: 1),
-            .chapter(number: 1),
-            .chapter(number: 2),
-            .heading(level: 1),
-            .chapter(number: 3),
-            .chapter(number: 4),
-        ])
+        #expect(
+            outline.body.map(\.kind) == [
+                .heading(level: 0),
+                .heading(level: 1),
+                .chapter(number: 1),
+                .chapter(number: 2),
+                .heading(level: 1),
+                .chapter(number: 3),
+                .chapter(number: 4),
+            ])
         #expect(outline.numberedChapterCount == 4)
     }
 
@@ -93,32 +102,45 @@ struct ContentsOutlineTests {
                 matter: index == 0 ? .cover : .front
             )
         }
-        chapters.append(chapter(key: "017", title: "Part One", sections: [
-            ChapterSection(title: "Part One", level: 0),
-            ChapterSection(title: "Book One: The Story of a Family", level: 1),
-        ]))
-        chapters.append(chapter(key: "018", title: "1. Fyodor Pavlovich Karamazov", sections: [
-            ChapterSection(title: "1. Fyodor Pavlovich Karamazov", fragment: "c1", level: 2),
-        ]))
-        chapters.append(chapter(key: "019", title: "2. The Old Buffoon", sections: [
-            ChapterSection(title: "2. The Old Buffoon", fragment: "c2", level: 2),
-        ]))
-        chapters.append(chapter(key: "020", title: "3. The Women", sections: [
-            ChapterSection(title: "3. The Women", fragment: "c3", level: 2),
-        ]))
+        chapters.append(
+            chapter(
+                key: "017", title: "Part One",
+                sections: [
+                    ChapterSection(title: "Part One", level: 0),
+                    ChapterSection(title: "Book One: The Story of a Family", level: 1),
+                ]))
+        chapters.append(
+            chapter(
+                key: "018", title: "1. Fyodor Pavlovich Karamazov",
+                sections: [
+                    ChapterSection(title: "1. Fyodor Pavlovich Karamazov", fragment: "c1", level: 2)
+                ]))
+        chapters.append(
+            chapter(
+                key: "019", title: "2. The Old Buffoon",
+                sections: [
+                    ChapterSection(title: "2. The Old Buffoon", fragment: "c2", level: 2)
+                ]))
+        chapters.append(
+            chapter(
+                key: "020", title: "3. The Women",
+                sections: [
+                    ChapterSection(title: "3. The Women", fragment: "c3", level: 2)
+                ]))
         chapters.append(chapter(key: "021", title: "Explanatory Notes", matter: .back))
         chapters.append(chapter(key: "022", title: "Index", matter: .back))
 
         let outline = ContentsOutline.build(from: chapters)
 
         #expect(outline.front.count == frontTitles.count)
-        #expect(outline.body.map(\.kind) == [
-            .heading(level: 0),
-            .heading(level: 1),
-            .chapter(number: 1),
-            .chapter(number: 2),
-            .chapter(number: 3),
-        ])
+        #expect(
+            outline.body.map(\.kind) == [
+                .heading(level: 0),
+                .heading(level: 1),
+                .chapter(number: 1),
+                .chapter(number: 2),
+                .chapter(number: 3),
+            ])
         #expect(outline.body.first?.title == "Part One")
         #expect(outline.body.first?.jumpFragment == nil)
         #expect(outline.body[2].jumpFragment == "c1")
@@ -135,11 +157,12 @@ struct ContentsOutlineTests {
         ])
         #expect(outline.front.isEmpty)
         #expect(outline.back.isEmpty)
-        #expect(outline.body.map(\.kind) == [
-            .chapter(number: 1),
-            .chapter(number: 2),
-            .chapter(number: 3),
-        ])
+        #expect(
+            outline.body.map(\.kind) == [
+                .chapter(number: 1),
+                .chapter(number: 2),
+                .chapter(number: 3),
+            ])
         #expect(outline.numberedChapters.map(\.title) == ["One", "Two", "Three"])
     }
 
@@ -147,16 +170,19 @@ struct ContentsOutlineTests {
     func bodyOnlyOutline() {
         let outline = ContentsOutline.build(from: [
             chapter(key: "001", title: "Part", sections: [ChapterSection(title: "Part", level: 0)]),
-            chapter(key: "002", title: "Chapter", sections: [
-                ChapterSection(title: "Chapter", fragment: "c", level: 1),
-            ]),
+            chapter(
+                key: "002", title: "Chapter",
+                sections: [
+                    ChapterSection(title: "Chapter", fragment: "c", level: 1)
+                ]),
         ])
         #expect(outline.front.isEmpty)
         #expect(outline.back.isEmpty)
-        #expect(outline.body.map(\.kind) == [
-            .heading(level: 0),
-            .chapter(number: 1),
-        ])
+        #expect(
+            outline.body.map(\.kind) == [
+                .heading(level: 0),
+                .chapter(number: 1),
+            ])
     }
 
     @Test("uniform section levels are all numbered")
@@ -164,33 +190,42 @@ struct ContentsOutlineTests {
         // Every row sits at the same depth, so none is a container: the
         // outline numbers them rather than showing a list of bare headings.
         let outline = ContentsOutline.build(from: [
-            chapter(key: "001", title: "Alpha", sections: [
-                ChapterSection(title: "Alpha", level: 0),
-                ChapterSection(title: "Beta", level: 0),
-            ]),
-            chapter(key: "002", title: "Gamma", sections: [
-                ChapterSection(title: "Gamma", level: 0),
-            ]),
+            chapter(
+                key: "001", title: "Alpha",
+                sections: [
+                    ChapterSection(title: "Alpha", level: 0),
+                    ChapterSection(title: "Beta", level: 0),
+                ]),
+            chapter(
+                key: "002", title: "Gamma",
+                sections: [
+                    ChapterSection(title: "Gamma", level: 0)
+                ]),
         ])
-        #expect(outline.body.map(\.kind) == [
-            .chapter(number: 1),
-            .chapter(number: 2),
-            .chapter(number: 3),
-        ])
+        #expect(
+            outline.body.map(\.kind) == [
+                .chapter(number: 1),
+                .chapter(number: 2),
+                .chapter(number: 3),
+            ])
     }
 
     @Test("a front-matter page the TOC names several times is still one row")
     func multiSectionMatterCollapses() {
         let outline = ContentsOutline.build(from: [
             chapter(key: "001", title: "Cover", matter: .cover),
-            chapter(key: "002", title: "The Brothers Karamazov", matter: .front, sections: [
-                ChapterSection(title: "The Brothers Karamazov", fragment: "a", level: 0),
-                ChapterSection(title: "Translated from the Russian of", fragment: "b", level: 0),
-                ChapterSection(title: "The Lowell Press New York", fragment: "c", level: 0),
-            ]),
-            chapter(key: "003", title: "Chapter One", sections: [
-                ChapterSection(title: "Chapter One", fragment: "c1", level: 0),
-            ]),
+            chapter(
+                key: "002", title: "The Brothers Karamazov", matter: .front,
+                sections: [
+                    ChapterSection(title: "The Brothers Karamazov", fragment: "a", level: 0),
+                    ChapterSection(title: "Translated from the Russian of", fragment: "b", level: 0),
+                    ChapterSection(title: "The Lowell Press New York", fragment: "c", level: 0),
+                ]),
+            chapter(
+                key: "003", title: "Chapter One",
+                sections: [
+                    ChapterSection(title: "Chapter One", fragment: "c1", level: 0)
+                ]),
         ])
         #expect(outline.front.count == 2)
         #expect(outline.front.last?.title == "The Brothers Karamazov")
@@ -200,7 +235,8 @@ struct ContentsOutlineTests {
 
     @Test("the Karamazov fixture builds the outline the UI shows")
     func karamazovFixtureOutline() throws {
-        let path = repoRoot
+        let path =
+            repoRoot
             .appendingPathComponent("fixtures", isDirectory: true)
             .appendingPathComponent("dostoyevsky_the_karamazov_brothers.epub")
             .path
@@ -243,7 +279,7 @@ struct ContentsOutlineTests {
         )
         // Numbering starts at 1 and is contiguous across parts and books.
         let numbers = outline.numberedChapters.compactMap { row -> Int? in
-            if case let .chapter(number) = row.kind { return number }
+            if case .chapter(let number) = row.kind { return number }
             return nil
         }
         #expect(numbers == Array(1...numbers.count))
@@ -252,10 +288,12 @@ struct ContentsOutlineTests {
     @Test("rows carry stable ids and section anchors")
     func rowIdentityAndAnchors() {
         let outline = ContentsOutline.build(from: [
-            chapter(key: "009", title: "Book II", sections: [
-                ChapterSection(title: "Book II", fragment: "book2", level: 1),
-                ChapterSection(title: "Chapter I", fragment: "ch1", level: 2),
-            ]),
+            chapter(
+                key: "009", title: "Book II",
+                sections: [
+                    ChapterSection(title: "Book II", fragment: "book2", level: 1),
+                    ChapterSection(title: "Chapter I", fragment: "ch1", level: 2),
+                ])
         ])
         #expect(outline.body.map(\.id) == ["009#0", "009#1"])
         #expect(outline.body.map(\.jumpFragment) == ["book2", "ch1"])

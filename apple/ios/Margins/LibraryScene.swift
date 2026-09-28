@@ -1,7 +1,7 @@
-import SwiftUI
-import UniformTypeIdentifiers
 import MarginsCore
 import MarginsModel
+import SwiftUI
+import UniformTypeIdentifiers
 
 /// The app's tab anatomy: **Library** and **Search**, one information
 /// architecture that adapts from a compact floating tab bar to a regular
@@ -102,7 +102,9 @@ struct LibraryScene: View {
                         bookPendingDeletion = nil
                     }
                 } message: {
-                    Text("Remove \"\(bookPendingDeletion?.title ?? "")\" and its notes from the library? The original EPUB file is untouched.")
+                    Text(
+                        "Remove \"\(bookPendingDeletion?.title ?? "")\" and its notes from the library? The original EPUB file is untouched."
+                    )
                 }
                 .alert(
                     "Something went wrong",
@@ -135,7 +137,9 @@ struct LibraryScene: View {
                 libraryStatusHeader
                 if !library.books.isEmpty {
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 104, maximum: 160), spacing: DesignTokens.Spacing.gridCell)],
+                        columns: [
+                            GridItem(.adaptive(minimum: 104, maximum: 160), spacing: DesignTokens.Spacing.gridCell)
+                        ],
                         spacing: DesignTokens.Spacing.grid
                     ) {
                         ForEach(library.books) { book in
@@ -367,9 +371,9 @@ struct LibraryScene: View {
             try? await Task.sleep(for: .milliseconds(200))
         }
         guard clubs.clubs.isEmpty,
-              let summary = library.books.first,
-              let meta = await library.getBook(id: summary.id),
-              let chapter = meta.chapters.first
+            let summary = library.books.first,
+            let meta = await library.getBook(id: summary.id),
+            let chapter = meta.chapters.first
         else { return }
         await library.saveChapterNoteText(
             bookId: meta.id, chapterKey: chapter.key,
@@ -393,8 +397,8 @@ struct LibraryScene: View {
     /// library to import a fixture without driving the document picker.
     private func importFixtureIfRequested() async {
         guard library.books.isEmpty,
-              let fixture = ProcessInfo.processInfo.environment["MARGINS_IMPORT_FIXTURE"],
-              FileManager.default.fileExists(atPath: fixture)
+            let fixture = ProcessInfo.processInfo.environment["MARGINS_IMPORT_FIXTURE"],
+            FileManager.default.fileExists(atPath: fixture)
         else { return }
         await library.importEpubs(atPaths: [fixture])
     }

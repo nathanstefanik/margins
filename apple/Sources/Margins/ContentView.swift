@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 /// The sidebar width the window opens with. The system default is
 /// narrower, which leaves the reading surface lopsided against the

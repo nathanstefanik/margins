@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 struct DetailArea: View {
     @Environment(LibraryModel.self) private var model
