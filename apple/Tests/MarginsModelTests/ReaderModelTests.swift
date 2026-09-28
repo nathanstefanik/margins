@@ -1,7 +1,7 @@
-import Testing
 import Foundation
 import MarginsCore
 import MarginsModel
+import Testing
 
 @Suite("ReaderModel")
 @MainActor
@@ -12,7 +12,7 @@ struct ReaderModelTests {
             title: "Test Book",
             author: "Author",
             language: "en",
-            addedAt: Date(timeIntervalSince1970: 1_767_225_600), // 2026-01-01T00:00:00Z
+            addedAt: Date(timeIntervalSince1970: 1_767_225_600),  // 2026-01-01T00:00:00Z
             sourceFilename: "test.epub",
             chapters: [
                 ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml", fragment: nil),
@@ -27,8 +27,9 @@ struct ReaderModelTests {
     func jumpTargetUsesTheFragment() {
         let book = makeBook()
         // No TOC entry for the file: the top of the file is the chapter.
-        #expect(book.chapters[0].jumpTarget == "one.xhtml")        // With one, the jump carries the anchor so a file holding several
+        // With one, the jump carries the anchor so a file holding several
         // chapters still lands on the right heading.
+        #expect(book.chapters[0].jumpTarget == "one.xhtml")
         #expect(book.chapters[1].jumpTarget == "two.xhtml#part-two")
     }
 

@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// The merged-view contract: snapshots in, one document out, with spoiler
 /// gating and passage clustering applied. Pure, so everything runs without
@@ -103,14 +104,18 @@ struct ClubCompileTests {
         let notes = ClubCompile.compile(
             club: club([member("alice", "Alice", .admin), member("bob", "Bob")]),
             snapshots: [
-                snapshot("alice", "Alice", [
-                    chapter("001", index: 0, body: "Alice one."),
-                    chapter("002", index: 1, body: "Alice two."),
-                ]),
-                snapshot("bob", "Bob", [
-                    chapter("001", index: 0, body: "Bob one."),
-                    chapter("002", index: 1, body: "Bob two."),
-                ]),
+                snapshot(
+                    "alice", "Alice",
+                    [
+                        chapter("001", index: 0, body: "Alice one."),
+                        chapter("002", index: 1, body: "Alice two."),
+                    ]),
+                snapshot(
+                    "bob", "Bob",
+                    [
+                        chapter("001", index: 0, body: "Bob one."),
+                        chapter("002", index: 1, body: "Bob two."),
+                    ]),
             ],
             viewerId: "alice",
             viewerChapterIndex: 1
@@ -195,39 +200,51 @@ struct ClubCompileTests {
                 member("carol", "Carol"),
             ]),
             snapshots: [
-                snapshot("alice", "Alice", [
-                    chapter("001", index: 0, marks: [
-                        mark(
-                            "aaaaaaaaaa",
-                            cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:42)",
-                            percent: 10,
-                            quote: "It is a truth universally acknowledged",
-                            body: "Alice's thought"
-                        )
-                    ])
-                ]),
-                snapshot("bob", "Bob", [
-                    chapter("001", index: 0, marks: [
-                        mark(
-                            "bbbbbbbbbb",
-                            cfi: "epubcfi(/6/14!/4/2/10,/1:10,/1:50)",
-                            percent: 10.2,
-                            quote: "truth universally acknowledged",
-                            body: "Bob's thought"
-                        )
-                    ])
-                ]),
-                snapshot("carol", "Carol", [
-                    chapter("001", index: 0, marks: [
-                        mark(
-                            "cccccccccc",
-                            cfi: "epubcfi(/6/14!/4/2/30,/1:0,/1:10)",
-                            percent: 40,
-                            quote: "Elsewhere",
-                            body: "Carol's thought"
-                        )
-                    ])
-                ]),
+                snapshot(
+                    "alice", "Alice",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark(
+                                    "aaaaaaaaaa",
+                                    cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:42)",
+                                    percent: 10,
+                                    quote: "It is a truth universally acknowledged",
+                                    body: "Alice's thought"
+                                )
+                            ])
+                    ]),
+                snapshot(
+                    "bob", "Bob",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark(
+                                    "bbbbbbbbbb",
+                                    cfi: "epubcfi(/6/14!/4/2/10,/1:10,/1:50)",
+                                    percent: 10.2,
+                                    quote: "truth universally acknowledged",
+                                    body: "Bob's thought"
+                                )
+                            ])
+                    ]),
+                snapshot(
+                    "carol", "Carol",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark(
+                                    "cccccccccc",
+                                    cfi: "epubcfi(/6/14!/4/2/30,/1:0,/1:10)",
+                                    percent: 40,
+                                    quote: "Elsewhere",
+                                    body: "Carol's thought"
+                                )
+                            ])
+                    ]),
             ],
             viewerId: "alice",
             viewerChapterIndex: 0,
@@ -248,16 +265,24 @@ struct ClubCompileTests {
         let notes = ClubCompile.compile(
             club: club([member("alice", "Alice", .admin), member("bob", "Bob")]),
             snapshots: [
-                snapshot("alice", "Alice", [
-                    chapter("001", index: 0, marks: [
-                        mark("aaaaaaaaaa", quote: "Same Passage", body: "A")
-                    ])
-                ]),
-                snapshot("bob", "Bob", [
-                    chapter("001", index: 0, marks: [
-                        mark("bbbbbbbbbb", quote: "  same   passage ", body: "B")
-                    ])
-                ]),
+                snapshot(
+                    "alice", "Alice",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark("aaaaaaaaaa", quote: "Same Passage", body: "A")
+                            ])
+                    ]),
+                snapshot(
+                    "bob", "Bob",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark("bbbbbbbbbb", quote: "  same   passage ", body: "B")
+                            ])
+                    ]),
             ],
             viewerId: "alice",
             viewerChapterIndex: 0,
@@ -273,24 +298,32 @@ struct ClubCompileTests {
         let notes = ClubCompile.compile(
             club: club([member("alice", "Alice", .admin), member("bob", "Bob")]),
             snapshots: [
-                snapshot("alice", "Alice", [
-                    chapter("001", index: 0, marks: [
-                        mark(
-                            "aaaaaaaaaa",
-                            cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:5)",
-                            quote: "First fragment"
-                        )
-                    ])
-                ]),
-                snapshot("bob", "Bob", [
-                    chapter("001", index: 0, marks: [
-                        mark(
-                            "bbbbbbbbbb",
-                            cfi: "epubcfi(/6/14!/4/2/10,/1:10,/1:20)",
-                            quote: "Second fragment"
-                        )
-                    ])
-                ]),
+                snapshot(
+                    "alice", "Alice",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark(
+                                    "aaaaaaaaaa",
+                                    cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:5)",
+                                    quote: "First fragment"
+                                )
+                            ])
+                    ]),
+                snapshot(
+                    "bob", "Bob",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark(
+                                    "bbbbbbbbbb",
+                                    cfi: "epubcfi(/6/14!/4/2/10,/1:10,/1:20)",
+                                    quote: "Second fragment"
+                                )
+                            ])
+                    ]),
             ],
             viewerId: "alice",
             viewerChapterIndex: 0,
@@ -307,26 +340,34 @@ struct ClubCompileTests {
         let notes = ClubCompile.compile(
             club: club([member("alice", "Alice", .admin), member("bob", "Bob")]),
             snapshots: [
-                snapshot("alice", "Alice", [
-                    chapter("001", index: 0, marks: [
-                        mark(
-                            "aaaaaaaaaa",
-                            cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:5)",
-                            quote: "Yes",
-                            body: "A"
-                        )
-                    ])
-                ]),
-                snapshot("bob", "Bob", [
-                    chapter("001", index: 0, marks: [
-                        mark(
-                            "bbbbbbbbbb",
-                            cfi: "epubcfi(/6/14!/4/2/30,/1:0,/1:5)",
-                            quote: "Yes",
-                            body: "B"
-                        )
-                    ])
-                ]),
+                snapshot(
+                    "alice", "Alice",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark(
+                                    "aaaaaaaaaa",
+                                    cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:5)",
+                                    quote: "Yes",
+                                    body: "A"
+                                )
+                            ])
+                    ]),
+                snapshot(
+                    "bob", "Bob",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark(
+                                    "bbbbbbbbbb",
+                                    cfi: "epubcfi(/6/14!/4/2/30,/1:0,/1:5)",
+                                    quote: "Yes",
+                                    body: "B"
+                                )
+                            ])
+                    ]),
             ],
             viewerId: "alice",
             viewerChapterIndex: 0,
@@ -342,12 +383,16 @@ struct ClubCompileTests {
             club: club([member("alice", "Alice", .admin), member("bob", "Bob")]),
             snapshots: [
                 snapshot("alice", "Alice", [chapter("001", index: 0, body: "Alice.")]),
-                snapshot("bob", "Bob", [
-                    chapter("001", index: 0, marks: [
-                        mark("bbbbbbbbbb", quote: "Bob secret one"),
-                        mark("cccccccccc", quote: "Bob secret two"),
-                    ])
-                ]),
+                snapshot(
+                    "bob", "Bob",
+                    [
+                        chapter(
+                            "001", index: 0,
+                            marks: [
+                                mark("bbbbbbbbbb", quote: "Bob secret one"),
+                                mark("cccccccccc", quote: "Bob secret two"),
+                            ])
+                    ]),
             ],
             viewerId: "alice",
             viewerChapterIndex: 0
@@ -366,35 +411,39 @@ struct ClubCompileTests {
         ClubCompile.compile(
             club: club([member("alice", "Alice", .admin), member("bob", "Bob")]),
             snapshots: [
-                snapshot("alice", "Alice", [
-                    chapter(
-                        "001", index: 0, body: "Alice long-form body.",
-                        marks: [
-                            mark(
-                                "aaaaaaaaaa",
-                                cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:42)",
-                                percent: 10,
-                                quote: "It is a truth",
-                                body: "Alice's thought"
-                            )
-                        ]
-                    )
-                ]),
-                snapshot("bob", "Bob", [
-                    chapter(
-                        "001", index: 0, body: "Bob long-form body.",
-                        marks: [
-                            mark(
-                                "bbbbbbbbbb",
-                                cfi: "epubcfi(/6/14!/4/2/10,/1:10,/1:50)",
-                                percent: 10,
-                                quote: "truth",
-                                body: ""
-                            )
-                        ]
-                    ),
-                    chapter("002", index: 1, body: "Bob hidden body."),
-                ]),
+                snapshot(
+                    "alice", "Alice",
+                    [
+                        chapter(
+                            "001", index: 0, body: "Alice long-form body.",
+                            marks: [
+                                mark(
+                                    "aaaaaaaaaa",
+                                    cfi: "epubcfi(/6/14!/4/2/10,/1:0,/1:42)",
+                                    percent: 10,
+                                    quote: "It is a truth",
+                                    body: "Alice's thought"
+                                )
+                            ]
+                        )
+                    ]),
+                snapshot(
+                    "bob", "Bob",
+                    [
+                        chapter(
+                            "001", index: 0, body: "Bob long-form body.",
+                            marks: [
+                                mark(
+                                    "bbbbbbbbbb",
+                                    cfi: "epubcfi(/6/14!/4/2/10,/1:10,/1:50)",
+                                    percent: 10,
+                                    quote: "truth",
+                                    body: ""
+                                )
+                            ]
+                        ),
+                        chapter("002", index: 1, body: "Bob hidden body."),
+                    ]),
             ],
             viewerId: "alice",
             viewerChapterIndex: 1

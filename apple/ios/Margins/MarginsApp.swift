@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 @main
 struct MarginsApp: App {

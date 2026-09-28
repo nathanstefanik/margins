@@ -10,7 +10,7 @@ let package = Package(
     name: "Margins",
     platforms: [
         .macOS(.v14),
-        .iOS(.v26)
+        .iOS(.v26),
     ],
     // Library products consumed by the iOS app's Xcode project
     // (apple/ios/Margins.xcodeproj); the macOS app links the targets
@@ -21,7 +21,7 @@ let package = Package(
     ],
     dependencies: [
         // EPUB archive reading/writing for the core.
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20"),
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20")
     ],
     targets: [
         // The core: models, EPUB parsing, library, notes, marks, compile,
@@ -29,7 +29,7 @@ let package = Package(
         .target(
             name: "MarginsCore",
             dependencies: [
-                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
             ]
         ),
         // UI-agnostic model layer for the library browser (import, remove,

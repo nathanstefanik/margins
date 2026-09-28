@@ -1,6 +1,6 @@
 import Foundation
-import Observation
 import MarginsCore
+import Observation
 
 /// Model layer for private book clubs, shared by both frontends. Owns the
 /// club list, selection, the merged club document, and the create/join
@@ -68,11 +68,12 @@ public final class ClubModel {
     public func activate(store: CoreStore, engine: (any ClubSyncEngine)? = nil) async {
         self.store = store
         spoilerProtection = (try? await store.clubSpoilerProtection()) ?? true
-        let sync = if let engine {
-            ClubSync(store: store, engine: engine)
-        } else {
-            await ClubSync.automatic(store: store)
-        }
+        let sync =
+            if let engine {
+                ClubSync(store: store, engine: engine)
+            } else {
+                await ClubSync.automatic(store: store)
+            }
         self.sync = sync
         supportsSharing = sync.supportsSharing
 

@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// The reader scene: the epub.js page full-bleed, with tap zones for
 /// paging, a horizontally-swiping page turn, hardware-key support, and
@@ -63,15 +63,15 @@ struct ReaderScene: View {
                 model: library, reader: reader, mirror: app.mirror,
                 bridge: $bridge, callbacks: callbacks
             )
-                .accessibilityAction(named: Text("Show controls")) {
-                    chromeVisible = true
-                }
-                .accessibilityAction(named: Text("New note")) {
-                    newNote()
-                }
-                .accessibilityAction(named: Text("Bookmark this page")) {
-                    bookmarkPage()
-                }
+            .accessibilityAction(named: Text("Show controls")) {
+                chromeVisible = true
+            }
+            .accessibilityAction(named: Text("New note")) {
+                newNote()
+            }
+            .accessibilityAction(named: Text("Bookmark this page")) {
+                bookmarkPage()
+            }
             if let finished = finishedChapter {
                 notePrompt(for: finished)
                     .transition(promptTransition)
@@ -126,21 +126,25 @@ struct ReaderScene: View {
             }
         }
         .sheet(isPresented: $marksPresented) {
-            MarksSheet(onEditChapterNote: {
-                marksPresented = false
-                editorPresented = true
-            }, onOpen: { mark in
-                marksPresented = false
-                jumpToMark(mark)
-            })
+            MarksSheet(
+                onEditChapterNote: {
+                    marksPresented = false
+                    editorPresented = true
+                },
+                onOpen: { mark in
+                    marksPresented = false
+                    jumpToMark(mark)
+                })
         }
         .sheet(isPresented: $editorPresented) {
             ChapterNoteEditorSheet()
         }
         .sheet(isPresented: $capturePresented) {
-            CaptureSheet(selection: captureSelection, bridge: bridge, onCommitted: { _ in
-                flash()
-            })
+            CaptureSheet(
+                selection: captureSelection, bridge: bridge,
+                onCommitted: { _ in
+                    flash()
+                })
         }
         .onChange(of: scenePhase) {
             // iOS suspends the app without warning: never lose position
@@ -160,10 +164,13 @@ struct ReaderScene: View {
         .task(id: reader.book?.id) {
             await library.loadBookmarks(reader: reader)
         }
-        .onChange(of: reader.progress, { oldValue, newValue in
-            detectChapterFinish(to: newValue)
-            restoreHighlightsIfReady()
-        })
+        .onChange(
+            of: reader.progress,
+            { oldValue, newValue in
+                detectChapterFinish(to: newValue)
+                restoreHighlightsIfReady()
+            }
+        )
         .onAppear {
             appliedJumpGeneration = library.passageJumpGeneration
             loadedBookId = reader.book?.id
@@ -257,9 +264,9 @@ struct ReaderScene: View {
     /// rendition.
     private func restoreHighlightsIfReady() {
         guard let key = reader.chapter?.key,
-              noteLoadedFor == key,
-              highlightsRestoredFor != key,
-              reader.progress != nil
+            noteLoadedFor == key,
+            highlightsRestoredFor != key,
+            reader.progress != nil
         else { return }
         highlightsRestoredFor = key
         bridge?.restoreHighlights(reader.noteMarks.compactMap(\.cfi))
@@ -403,13 +410,13 @@ struct ReaderScene: View {
         // `reader.chapter` has already followed the relocation; the
         // previous snapshot holds the chapter that was just left.
         guard let previous = previousTurn,
-              let finished = ReaderModel.finishedChapter(
-                  previousKey: previous.key,
-                  previousProgress: previous.progress,
-                  newKey: reader.chapter?.key ?? "",
-                  newProgress: newProgress,
-                  chapters: reader.book?.chapters ?? []
-              )
+            let finished = ReaderModel.finishedChapter(
+                previousKey: previous.key,
+                previousProgress: previous.progress,
+                newKey: reader.chapter?.key ?? "",
+                newProgress: newProgress,
+                chapters: reader.book?.chapters ?? []
+            )
         else { return }
         let silencedKey = "notePrompt.dismissed.\(reader.book?.id ?? "").\(finished.key)"
         if !UserDefaults.standard.bool(forKey: silencedKey) {
@@ -514,7 +521,8 @@ struct ReaderScene: View {
         guard let book = reader.book else { return }
         chromeVisible = false
         if bookmark.chapterKey == reader.chapter?.key,
-           let cfi = bookmark.epubCfi, !cfi.isEmpty {
+            let cfi = bookmark.epubCfi, !cfi.isEmpty
+        {
             bridge?.jumpToChapter(cfi)
             return
         }
@@ -532,7 +540,7 @@ struct ReaderScene: View {
     /// reload the scheme URL (it carries the book id and resume CFI).
     private func applyPassageJumpIfNeeded() {
         guard bridge != nil,
-              appliedJumpGeneration != library.passageJumpGeneration
+            appliedJumpGeneration != library.passageJumpGeneration
         else { return }
         appliedJumpGeneration = library.passageJumpGeneration
         let bookId = reader.book?.id
@@ -663,12 +671,12 @@ private struct TOCSheet: View {
     @ViewBuilder
     private func rowMarker(_ row: OutlineRow) -> some View {
         switch row.kind {
-        case let .chapter(number):
+        case .chapter(let number):
             Text("\(number)")
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 32, alignment: .trailing)
-        case let .heading(level):
+        case .heading(let level):
             Color.clear.frame(width: CGFloat(level) * 10, height: 1)
         case .matter:
             EmptyView()

@@ -21,11 +21,11 @@ public enum ReaderResource: String, CaseIterable, Sendable {
             name.removeFirst()
         }
         guard !name.isEmpty,
-              !name.contains("/"),
-              !name.contains(".."),
-              !name.contains("\\"),
-              !name.contains("%"),
-              let resource = ReaderResource(rawValue: name)
+            !name.contains("/"),
+            !name.contains(".."),
+            !name.contains("\\"),
+            !name.contains("%"),
+            let resource = ReaderResource(rawValue: name)
         else {
             return nil
         }

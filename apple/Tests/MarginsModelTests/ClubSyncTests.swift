@@ -1,7 +1,8 @@
 import Foundation
 import MarginsCore
-@testable import MarginsModel
 import Testing
+
+@testable import MarginsModel
 
 /// Two accounts, one shared world: the in-memory stand-in for CloudKit that
 /// phase 3's exit criteria can't exercise without real iCloud accounts.
@@ -54,7 +55,8 @@ struct InMemoryClubSyncEngine: ClubSyncEngine {
         if failsShare {
             throw shareFailure
         }
-        let url = await world.shareURL(clubId: club.id)
+        let url =
+            await world.shareURL(clubId: club.id)
             ?? URL(string: "https://example.com/share/\(club.id)")!
         await world.setShareURL(url, clubId: club.id)
         await world.put(club)

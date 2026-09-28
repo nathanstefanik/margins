@@ -1,6 +1,6 @@
-import Testing
 import Foundation
 import MarginsModel
+import Testing
 
 @Suite("ReaderPreferences")
 @MainActor

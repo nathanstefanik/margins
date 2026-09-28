@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 /// Thin, unobtrusive progress footer under the page: the current chapter
 /// title and the position within the chapter. Styled with the paper palette

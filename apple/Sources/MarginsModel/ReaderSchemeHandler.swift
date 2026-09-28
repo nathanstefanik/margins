@@ -27,17 +27,20 @@ public final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
             let data: Data
             switch resource {
             case .bookEpub:
-                let bookID = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                let bookID =
+                    URLComponents(url: url, resolvingAgainstBaseURL: false)?
                     .queryItems?
                     .first { $0.name == "book" }?
                     .value ?? ""
                 data = try bytesProvider(bookID)
             default:
-                guard let fileURL = Bundle.module.url(
-                    forResource: resource.fileName,
-                    withExtension: resource.fileExtension,
-                    subdirectory: "reader"
-                ) else {
+                guard
+                    let fileURL = Bundle.module.url(
+                        forResource: resource.fileName,
+                        withExtension: resource.fileExtension,
+                        subdirectory: "reader"
+                    )
+                else {
                     throw ReaderError.missingBundledResource(resource.rawValue)
                 }
                 data = try Data(contentsOf: fileURL)
@@ -48,17 +51,19 @@ public final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
             // need the plain URLResponse — HTTP there breaks the load.
             let response: URLResponse
             if resource == .bookEpub {
-                response = HTTPURLResponse(
-                    url: url,
-                    statusCode: 200,
-                    httpVersion: "HTTP/1.1",
-                    headerFields: ["Content-Length": "\(data.count)"]
-                ) ?? URLResponse(
-                    url: url,
-                    mimeType: resource.mimeType,
-                    expectedContentLength: data.count,
-                    textEncodingName: nil
-                )
+                response =
+                    HTTPURLResponse(
+                        url: url,
+                        statusCode: 200,
+                        httpVersion: "HTTP/1.1",
+                        headerFields: ["Content-Length": "\(data.count)"]
+                    )
+                    ?? URLResponse(
+                        url: url,
+                        mimeType: resource.mimeType,
+                        expectedContentLength: data.count,
+                        textEncodingName: nil
+                    )
             } else {
                 response = URLResponse(
                     url: url,

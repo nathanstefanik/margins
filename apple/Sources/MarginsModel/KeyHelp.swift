@@ -33,47 +33,55 @@ extension ReaderKeymap {
     /// sheet cannot drift from the keymap.
     public static func helpGroups() -> [KeyHelpGroup] {
         [
-            KeyHelpGroup(name: "Library", entries: [
-                KeyHelpEntry(keys: ["j", "k"], description: "Move selection"),
-                KeyHelpEntry(keys: ["Enter"], description: "Open selected book"),
-                KeyHelpEntry(keys: ["N"], description: "Compiled notes page"),
-                KeyHelpEntry(keys: ["t"], description: "Toggle outline / contents"),
-                KeyHelpEntry(keys: ["l", "Escape"], description: "Back to the book (notes page)"),
-                KeyHelpEntry(keys: ["o"], description: "Import EPUB"),
-                KeyHelpEntry(keys: ["/"], description: "Search notes"),
-                KeyHelpEntry(keys: ["?"], description: "Keyboard shortcuts"),
-            ]),
-            KeyHelpGroup(name: "Reader", entries: [
-                KeyHelpEntry(keys: ["j", "k"], description: "Turn pages"),
-                KeyHelpEntry(keys: [" ", "ArrowRight", "PageDown"], description: "Next page"),
-                KeyHelpEntry(keys: ["ArrowLeft", "PageUp"], description: "Previous page"),
-                KeyHelpEntry(keys: ["g", "g"], description: "First page of chapter"),
-                KeyHelpEntry(keys: ["G"], description: "Last page of chapter"),
-                KeyHelpEntry(keys: ["n"], description: "Next chapter"),
-                KeyHelpEntry(keys: ["p"], description: "Previous chapter"),
-                KeyHelpEntry(keys: ["i", "Enter"], description: "Open and focus notes"),
-                KeyHelpEntry(keys: ["b"], description: "Bookmark this page"),
-                KeyHelpEntry(keys: ["B"], description: "Bookmarks list"),
-                KeyHelpEntry(keys: ["Escape"], description: "Close notes pane; again → library"),
-                KeyHelpEntry(keys: ["l"], description: "Back to library"),
-                KeyHelpEntry(keys: ["/"], description: "Search notes"),
-                KeyHelpEntry(keys: ["o"], description: "Import EPUB"),
-                KeyHelpEntry(keys: ["?"], description: "Keyboard shortcuts"),
-            ]),
-            KeyHelpGroup(name: "Notes", entries: [
-                KeyHelpEntry(keys: ["Escape"], description: "Back to the book (pane stays open)"),
-                KeyHelpEntry(keys: ["⌘S"], description: "Save note (autosaved anyway)"),
-            ]),
-            KeyHelpGroup(name: "Global", entries: [
-                KeyHelpEntry(keys: ["⌘O"], description: "Import EPUB"),
-                KeyHelpEntry(keys: ["⌘F"], description: "Find"),
-                KeyHelpEntry(keys: ["⌘="], description: "Bigger text"),
-                KeyHelpEntry(keys: ["⌘-"], description: "Smaller text"),
-                KeyHelpEntry(keys: ["⌘0"], description: "Reset text size"),
-                KeyHelpEntry(keys: ["⌘,"], description: "Settings"),
-                KeyHelpEntry(keys: ["⌘B"], description: "Toggle the library sidebar"),
-                KeyHelpEntry(keys: ["Trackpad"], description: "Two-finger scroll turns pages"),
-            ]),
+            KeyHelpGroup(
+                name: "Library",
+                entries: [
+                    KeyHelpEntry(keys: ["j", "k"], description: "Move selection"),
+                    KeyHelpEntry(keys: ["Enter"], description: "Open selected book"),
+                    KeyHelpEntry(keys: ["N"], description: "Compiled notes page"),
+                    KeyHelpEntry(keys: ["t"], description: "Toggle outline / contents"),
+                    KeyHelpEntry(keys: ["l", "Escape"], description: "Back to the book (notes page)"),
+                    KeyHelpEntry(keys: ["o"], description: "Import EPUB"),
+                    KeyHelpEntry(keys: ["/"], description: "Search notes"),
+                    KeyHelpEntry(keys: ["?"], description: "Keyboard shortcuts"),
+                ]),
+            KeyHelpGroup(
+                name: "Reader",
+                entries: [
+                    KeyHelpEntry(keys: ["j", "k"], description: "Turn pages"),
+                    KeyHelpEntry(keys: [" ", "ArrowRight", "PageDown"], description: "Next page"),
+                    KeyHelpEntry(keys: ["ArrowLeft", "PageUp"], description: "Previous page"),
+                    KeyHelpEntry(keys: ["g", "g"], description: "First page of chapter"),
+                    KeyHelpEntry(keys: ["G"], description: "Last page of chapter"),
+                    KeyHelpEntry(keys: ["n"], description: "Next chapter"),
+                    KeyHelpEntry(keys: ["p"], description: "Previous chapter"),
+                    KeyHelpEntry(keys: ["i", "Enter"], description: "Open and focus notes"),
+                    KeyHelpEntry(keys: ["b"], description: "Bookmark this page"),
+                    KeyHelpEntry(keys: ["B"], description: "Bookmarks list"),
+                    KeyHelpEntry(keys: ["Escape"], description: "Close notes pane; again → library"),
+                    KeyHelpEntry(keys: ["l"], description: "Back to library"),
+                    KeyHelpEntry(keys: ["/"], description: "Search notes"),
+                    KeyHelpEntry(keys: ["o"], description: "Import EPUB"),
+                    KeyHelpEntry(keys: ["?"], description: "Keyboard shortcuts"),
+                ]),
+            KeyHelpGroup(
+                name: "Notes",
+                entries: [
+                    KeyHelpEntry(keys: ["Escape"], description: "Back to the book (pane stays open)"),
+                    KeyHelpEntry(keys: ["⌘S"], description: "Save note (autosaved anyway)"),
+                ]),
+            KeyHelpGroup(
+                name: "Global",
+                entries: [
+                    KeyHelpEntry(keys: ["⌘O"], description: "Import EPUB"),
+                    KeyHelpEntry(keys: ["⌘F"], description: "Find"),
+                    KeyHelpEntry(keys: ["⌘="], description: "Bigger text"),
+                    KeyHelpEntry(keys: ["⌘-"], description: "Smaller text"),
+                    KeyHelpEntry(keys: ["⌘0"], description: "Reset text size"),
+                    KeyHelpEntry(keys: ["⌘,"], description: "Settings"),
+                    KeyHelpEntry(keys: ["⌘B"], description: "Toggle the library sidebar"),
+                    KeyHelpEntry(keys: ["Trackpad"], description: "Two-finger scroll turns pages"),
+                ]),
         ]
     }
 }

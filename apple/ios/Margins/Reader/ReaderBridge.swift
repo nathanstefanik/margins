@@ -1,9 +1,9 @@
+import MarginsCore
+import MarginsModel
+import OSLog
 import SwiftUI
 import UIKit
 import WebKit
-import OSLog
-import MarginsCore
-import MarginsModel
 
 /// Hardware-key page turns: the WKWebView is first responder when
 /// reading, so arrow/space presses are intercepted here before the web
@@ -158,37 +158,37 @@ final class ReaderBridge: NSObject {
         // be invisible.
         let consoleScript = WKUserScript(
             source: """
-            (function() {
-                var send = function(level, text) {
-                    try { window.webkit.messageHandlers.reader.postMessage({ type: 'console', level: level, text: text }); } catch (e) {}
-                };
-                var forward = function(level) {
-                    var orig = console[level];
-                    console[level] = function() {
-                        send(level, Array.prototype.join.call(arguments, ' '));
-                        orig.apply(console, arguments);
+                (function() {
+                    var send = function(level, text) {
+                        try { window.webkit.messageHandlers.reader.postMessage({ type: 'console', level: level, text: text }); } catch (e) {}
                     };
-                };
-                forward('log');
-                forward('error');
-                window.onerror = function(msg, src, line, col) {
-                    send('onerror', msg + ' @' + src + ':' + line + ':' + col);
-                };
-                window.addEventListener('unhandledrejection', function(event) {
-                    var reason = event.reason && (event.reason.stack || event.reason.message || event.reason);
-                    send('unhandledrejection', String(reason));
-                });
-                setTimeout(function() {
-                    var v = document.getElementById('viewer');
-                    var r = v && v.getBoundingClientRect();
-                    var iframes = document.querySelectorAll('iframe');
-                    var ir = iframes.length ? iframes[0].getBoundingClientRect() : null;
-                    send('diag', 'viewer=' + JSON.stringify(r) + ' iframes=' + iframes.length
-                        + ' iframe0=' + JSON.stringify(ir)
-                        + ' bodyH=' + document.body.scrollHeight + ' innerH=' + window.innerHeight);
-                }, 3000);
-            })();
-            """,
+                    var forward = function(level) {
+                        var orig = console[level];
+                        console[level] = function() {
+                            send(level, Array.prototype.join.call(arguments, ' '));
+                            orig.apply(console, arguments);
+                        };
+                    };
+                    forward('log');
+                    forward('error');
+                    window.onerror = function(msg, src, line, col) {
+                        send('onerror', msg + ' @' + src + ':' + line + ':' + col);
+                    };
+                    window.addEventListener('unhandledrejection', function(event) {
+                        var reason = event.reason && (event.reason.stack || event.reason.message || event.reason);
+                        send('unhandledrejection', String(reason));
+                    });
+                    setTimeout(function() {
+                        var v = document.getElementById('viewer');
+                        var r = v && v.getBoundingClientRect();
+                        var iframes = document.querySelectorAll('iframe');
+                        var ir = iframes.length ? iframes[0].getBoundingClientRect() : null;
+                        send('diag', 'viewer=' + JSON.stringify(r) + ' iframes=' + iframes.length
+                            + ' iframe0=' + JSON.stringify(ir)
+                            + ' bodyH=' + document.body.scrollHeight + ' innerH=' + window.innerHeight);
+                    }, 3000);
+                })();
+                """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )
@@ -228,7 +228,8 @@ final class ReaderBridge: NSObject {
         applyTheme()
 
         if let book = reader.book, reader.chapter != nil,
-           let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget) {
+            let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget)
+        {
             webView.load(URLRequest(url: url))
         }
         return webView
@@ -246,7 +247,7 @@ final class ReaderBridge: NSObject {
 
     static func javaScriptLiteral(_ value: String) -> String {
         guard let data = try? JSONEncoder().encode(value),
-              let literal = String(data: data, encoding: .utf8)
+            let literal = String(data: data, encoding: .utf8)
         else { return "''" }
         return literal
     }
@@ -273,7 +274,7 @@ final class ReaderBridge: NSObject {
     /// a passage jump switches books while the webview is already showing.
     func loadCurrentBook() {
         guard let book = reader.book, reader.chapter != nil,
-              let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget)
+            let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget)
         else { return }
         webView?.load(URLRequest(url: url))
     }
@@ -379,7 +380,8 @@ extension ReaderBridge: WKNavigationDelegate {
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
         if let url = navigationAction.request.url,
-           url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto" {
+            url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto"
+        {
             UIApplication.shared.open(url)
             decisionHandler(.cancel)
             return
@@ -411,12 +413,14 @@ extension ReaderBridge: WKScriptMessageHandler {
             // simulator launches here, and these lines are the reader's
             // only failure signal.
             let text = "\(body["text"] ?? "")"
-            Logger(subsystem: "io.github.nathanstefanik.margins", category: "reader-js").log("\(text, privacy: .public)")
+            Logger(subsystem: "io.github.nathanstefanik.margins", category: "reader-js").log(
+                "\(text, privacy: .public)")
             print("[reader-js][\(body["level"] ?? "")] \(text)")
         case "selected":
             if let cfiRange = body["cfiRange"] as? String,
-               let text = body["text"] as? String,
-               !cfiRange.isEmpty {
+                let text = body["text"] as? String,
+                !cfiRange.isEmpty
+            {
                 latestSelection = ReaderSelection(cfiRange: cfiRange, text: text)
             }
         case "relocated":
@@ -432,7 +436,8 @@ extension ReaderBridge: WKScriptMessageHandler {
             )
         case "tap":
             if let x = (body["x"] as? NSNumber)?.doubleValue,
-               let width = (body["width"] as? NSNumber)?.doubleValue {
+                let width = (body["width"] as? NSNumber)?.doubleValue
+            {
                 print("[reader] page tap at \(x)/\(width)")
                 callbacks.userTap(CGPoint(x: x, y: 0), width)
             }

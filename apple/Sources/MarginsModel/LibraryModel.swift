@@ -1,6 +1,6 @@
 import Foundation
-import Observation
 import MarginsCore
+import Observation
 
 /// Model layer for the library browser. Owns the core store, the book
 /// list, selection, and the import/remove flows.
@@ -222,7 +222,8 @@ public final class LibraryModel {
         var ids: [String] = []
         for (offset, path) in paths.enumerated() {
             let name = URL(fileURLWithPath: path).lastPathComponent
-            importStatus = paths.count > 1
+            importStatus =
+                paths.count > 1
                 ? "Importing \(offset + 1) of \(paths.count): \(name)"
                 : "Importing \(name)…"
             if await importEpub(atPath: path), let id = selectedBookID {
@@ -288,8 +289,9 @@ public final class LibraryModel {
         var target = book.chapters[0]
         var cfi: String?
         if let store,
-           let position = try? await store.readingPosition(bookId: book.id),
-           let saved = book.chapters.first(where: { $0.key == position.chapterKey }) {
+            let position = try? await store.readingPosition(bookId: book.id),
+            let saved = book.chapters.first(where: { $0.key == position.chapterKey })
+        {
             target = saved
             cfi = position.epubCfi
         }
@@ -787,9 +789,9 @@ public final class LibraryModel {
     /// those pins onto the real page so the chrome and jumps match.
     public func stampBookmarkPositions(reader: ReaderModel) async {
         guard let book = reader.book,
-              let chapter = reader.chapter,
-              let position = reader.currentPosition(),
-              !(position.epubCfi?.isEmpty ?? true)
+            let chapter = reader.chapter,
+            let position = reader.currentPosition(),
+            !(position.epubCfi?.isEmpty ?? true)
         else { return }
         let incomplete = reader.bookmarks.filter {
             $0.chapterKey == chapter.key && ($0.epubCfi == nil || $0.epubCfi?.isEmpty == true)

@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// Translated from the legacy core's EPUB parser test module.
 /// Most of these are about where a chapter's *name* comes from: the TOC

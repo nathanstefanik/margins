@@ -1,7 +1,7 @@
 import Foundation
-import Testing
 import MarginsCore
 import MarginsModel
+import Testing
 
 @Suite("Notes")
 struct NotesTests {
@@ -262,7 +262,7 @@ struct NotesTests {
     func chapterChangeFlushesNote() async throws {
         let spy = SaveSpy()
         let reader = ReaderModel()
-        reader.noteSaveDebounce = 10 // nothing debounced can fire in this test
+        reader.noteSaveDebounce = 10  // nothing debounced can fire in this test
         reader.noteSaver = { bookId, chapterKey, body in
             spy.record(bookId, chapterKey, body)
         }
@@ -335,7 +335,7 @@ struct NotesTests {
         )
         #expect(!reader.isNoteDirty)
         #expect(reader.noteSaveStatus == .saved)
-        try await Task.sleep(for: .milliseconds(50)) // let the detached save land
+        try await Task.sleep(for: .milliseconds(50))  // let the detached save land
     }
 
     @Test("closeNotes flushes pending edits and hides the pane")
@@ -395,7 +395,7 @@ struct NotesTests {
             title: "Test Book",
             author: "Author",
             language: "en",
-            addedAt: Date(timeIntervalSince1970: 1_767_225_600), // 2026-01-01T00:00:00Z
+            addedAt: Date(timeIntervalSince1970: 1_767_225_600),  // 2026-01-01T00:00:00Z
             sourceFilename: "test.epub",
             chapters: [
                 ChapterMeta(key: "ch1", index: 0, title: "One", href: "one.xhtml", fragment: nil),

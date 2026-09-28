@@ -12,7 +12,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 let canvas: CGFloat = 1024
-let macArtwork = CGRect(x: 100, y: 100, width: 824, height: 824) // Big Sur grid
+let macArtwork = CGRect(x: 100, y: 100, width: 824, height: 824)  // Big Sur grid
 let cornerRadius: CGFloat = 185.4
 
 // Palette (matches the reading surface: cream paper, ink, warm note).
@@ -109,9 +109,11 @@ func drawIcon(scale: CGFloat, artwork: CGRect, cornerRadius: CGFloat, border: Bo
 }
 
 func writePNG(_ image: CGImage, to url: URL) throws {
-    guard let destination = CGImageDestinationCreateWithURL(
-        url as CFURL, UTType.png.identifier as CFString, 1, nil
-    ) else {
+    guard
+        let destination = CGImageDestinationCreateWithURL(
+            url as CFURL, UTType.png.identifier as CFString, 1, nil
+        )
+    else {
         throw NSError(domain: "make-icon", code: 1)
     }
     CGImageDestinationAddImage(destination, image, nil)
@@ -148,7 +150,8 @@ print("iconset written to \(iconset.path)")
 // rejects alpha in marketing icons).
 let appiconset = URL(fileURLWithPath: "apple/ios/Margins/Assets.xcassets/AppIcon.appiconset")
 try FileManager.default.createDirectory(at: appiconset, withIntermediateDirectories: true)
-let iosIcon = drawIcon(scale: 1, artwork: CGRect(x: 0, y: 0, width: canvas, height: canvas), cornerRadius: 0, border: false, opaque: true)
+let iosIcon = drawIcon(
+    scale: 1, artwork: CGRect(x: 0, y: 0, width: canvas, height: canvas), cornerRadius: 0, border: false, opaque: true)
 try writePNG(iosIcon, to: appiconset.appendingPathComponent("icon1024.png"))
 let catalogInfo = #"{"info":{"author":"xcode","version":1}}"#
 try catalogInfo.write(
@@ -157,20 +160,20 @@ try catalogInfo.write(
     encoding: .utf8
 )
 let appiconContents = """
-{
-  "images" : [
     {
-      "filename" : "icon1024.png",
-      "idiom" : "universal",
-      "platform" : "ios",
-      "size" : "1024x1024"
+      "images" : [
+        {
+          "filename" : "icon1024.png",
+          "idiom" : "universal",
+          "platform" : "ios",
+          "size" : "1024x1024"
+        }
+      ],
+      "info" : {
+        "author" : "xcode",
+        "version" : 1
+      }
     }
-  ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
-  }
-}
-"""
+    """
 try appiconContents.write(to: appiconset.appendingPathComponent("Contents.json"), atomically: true, encoding: .utf8)
 print("iOS app icon written to \(appiconset.path)")

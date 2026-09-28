@@ -9,7 +9,7 @@ enum Fixtures {
     static func url(_ path: String) throws -> URL {
         let root = Bundle.module.resourceURL?.appendingPathComponent("Fixtures")
         guard let candidate = root?.appendingPathComponent(path),
-              FileManager.default.fileExists(atPath: candidate.path)
+            FileManager.default.fileExists(atPath: candidate.path)
         else {
             throw FixtureError.missing(path)
         }
@@ -33,7 +33,7 @@ enum Fixtures {
 
         var description: String {
             switch self {
-            case let .missing(path): return "fixture not found: \(path)"
+            case .missing(let path): return "fixture not found: \(path)"
             }
         }
     }

@@ -1,7 +1,7 @@
-import SwiftUI
-import UniformTypeIdentifiers
 import MarginsCore
 import MarginsModel
+import SwiftUI
+import UniformTypeIdentifiers
 
 /// New club: name it, pick the one book it reads, set the name others see.
 struct CreateClubSheet: View {

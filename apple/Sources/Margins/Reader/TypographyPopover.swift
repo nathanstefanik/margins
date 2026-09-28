@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 /// Books-style typography popover: page theme (cream paper or dark), text
 /// size (A−/A+), line width, and line height. Few controls, all backed by

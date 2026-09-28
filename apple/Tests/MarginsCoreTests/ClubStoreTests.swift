@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// The local club store is the documented on-disk layout:
 /// `{root}/{club_id}/club.json` + `{root}/{club_id}/members/{member_id}.json`.

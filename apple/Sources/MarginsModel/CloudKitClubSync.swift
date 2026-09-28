@@ -73,7 +73,7 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
 
         let recordID = CKRecord.ID(recordName: club.id, zoneID: zoneID)
         if let existing = try? await existingShare(rootRecordID: recordID, in: privateDB),
-           let url = existing.url
+            let url = existing.url
         {
             zoneCache[club.id] = zoneID
             return ClubShare(clubId: club.id, url: url)
@@ -107,7 +107,7 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         }
         // Reading the share back covers a save result without its URL.
         guard let saved = try? await existingShare(rootRecordID: recordID, in: privateDB),
-              let url = saved.url
+            let url = saved.url
         else {
             throw ClubSyncError.transport("CloudKit did not return a share URL.")
         }
@@ -149,7 +149,8 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
     public func publishClub(_ club: Club) async throws {
         let zoneID = try await zoneID(forClubId: club.id)
         let (database, recordID) = databaseAndRecordID(zone: zoneID, recordName: club.id)
-        let record = (try? await fetchRecord(recordID, in: database))
+        let record =
+            (try? await fetchRecord(recordID, in: database))
             ?? CKRecord(recordType: RecordType.club, recordID: recordID)
         record["clubId"] = club.id as CKRecordValue
         record["payload"] = try payload(of: club) as NSData
@@ -163,7 +164,8 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         let (database, recordID) = databaseAndRecordID(
             zone: zoneID, recordName: Self.snapshotRecordName(snapshot.memberId)
         )
-        let record = (try? await fetchRecord(recordID, in: database))
+        let record =
+            (try? await fetchRecord(recordID, in: database))
             ?? CKRecord(recordType: RecordType.snapshot, recordID: recordID)
         record["clubId"] = clubId as CKRecordValue
         record["memberId"] = snapshot.memberId as CKRecordValue
@@ -203,13 +205,13 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
 
     public func removeParticipant(clubId: String, memberId: String) async throws {
         guard let zoneID = try? await zoneID(forClubId: clubId),
-              let share = try? await existingShare(
-                  rootRecordID: CKRecord.ID(recordName: clubId, zoneID: zoneID),
-                  in: privateDB
-              ),
-              let participant = share.participants.first(where: {
-                  $0.userIdentity.userRecordID?.recordName == memberId
-              })
+            let share = try? await existingShare(
+                rootRecordID: CKRecord.ID(recordName: clubId, zoneID: zoneID),
+                in: privateDB
+            ),
+            let participant = share.participants.first(where: {
+                $0.userIdentity.userRecordID?.recordName == memberId
+            })
         else { return }
         // A link share (`publicPermission` other than `.none`) has no
         // per-participant list to modify, so CloudKit cannot revoke one
@@ -237,9 +239,11 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
     }
 
     public func lookupInvite(code: String) async throws -> ClubInvite? {
-        guard let record = try? await fetchRecord(
-            CKRecord.ID(recordName: code), in: publicDB
-        ) else { return nil }
+        guard
+            let record = try? await fetchRecord(
+                CKRecord.ID(recordName: code), in: publicDB
+            )
+        else { return nil }
         return try decodeInvite(record, code: code)
     }
 
@@ -275,9 +279,10 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
     /// the cached zone when present and otherwise query each shared zone.
     private func sharedClubRecord(id: String) async throws -> CKRecord? {
         if let cached = zoneCache[id],
-           let record = try? await fetchRecord(
-               CKRecord.ID(recordName: id, zoneID: cached), in: sharedDB
-           ) {
+            let record = try? await fetchRecord(
+                CKRecord.ID(recordName: id, zoneID: cached), in: sharedDB
+            )
+        {
             return record
         }
         let query = CKQuery(
@@ -356,8 +361,8 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         rootRecordID: CKRecord.ID, in database: CKDatabase
     ) async throws -> CKShare? {
         guard let root = try? await fetchRecord(rootRecordID, in: database),
-              let reference = root.share,
-              let shareRecord = try? await fetchRecord(reference.recordID, in: database)
+            let reference = root.share,
+            let shareRecord = try? await fetchRecord(reference.recordID, in: database)
         else { return nil }
         return shareRecord as? CKShare
     }
@@ -411,7 +416,7 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
                 savePolicy: .changedKeys, atomically: true
             )
             for value in result.saveResults.values {
-                if case let .success(saved) = value, let savedShare = saved as? CKShare {
+                if case .success(let saved) = value, let savedShare = saved as? CKShare {
                     return savedShare
                 }
             }
@@ -435,12 +440,13 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
             return "CloudKit returned no record: \(recordName)"
         }
         guard let ckError = error as? CKError,
-              let partials = ckError.partialErrorsByItemID,
-              !partials.isEmpty
+            let partials = ckError.partialErrorsByItemID,
+            !partials.isEmpty
         else {
             return error.localizedDescription
         }
-        let details = partials
+        let details =
+            partials
             .map { key, value in
                 "\(key): \((value as? CKError)?.localizedDescription ?? value.localizedDescription)"
             }
@@ -454,7 +460,7 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
             (continuation: CheckedContinuation<Void, any Error>) in
             privateDB.delete(withRecordZoneID: zoneID) { _, error in
                 if let ckError = error as? CKError,
-                   ckError.code == .zoneNotFound || ckError.code == .unknownItem
+                    ckError.code == .zoneNotFound || ckError.code == .unknownItem
                 {
                     continuation.resume(returning: ())
                 } else if let error {
@@ -487,10 +493,11 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
         var collected: [CKRecord] = []
         var cursor: CKQueryOperation.Cursor?
         repeat {
-            let page: (
-                matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
-                queryCursor: CKQueryOperation.Cursor?
-            )
+            let page:
+                (
+                    matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
+                    queryCursor: CKQueryOperation.Cursor?
+                )
             if let cursor {
                 page = try await database.records(continuingMatchFrom: cursor)
             } else if let zoneID {
@@ -522,12 +529,12 @@ public actor CloudKitClubSyncEngine: ClubSyncEngine {
 
     private func decodeInvite(_ record: CKRecord, code: String) throws -> ClubInvite {
         guard let clubId = record["clubId"] as? String,
-              let clubName = record["clubName"] as? String,
-              let bookId = record["bookId"] as? String,
-              let bookTitle = record["bookTitle"] as? String,
-              let rawURL = record["shareURL"] as? String,
-              let url = URL(string: rawURL),
-              let expiresAt = record["expiresAt"] as? Date
+            let clubName = record["clubName"] as? String,
+            let bookId = record["bookId"] as? String,
+            let bookTitle = record["bookTitle"] as? String,
+            let rawURL = record["shareURL"] as? String,
+            let url = URL(string: rawURL),
+            let expiresAt = record["expiresAt"] as? Date
         else {
             throw ClubSyncError.transport("Malformed invite record: \(code)")
         }

@@ -78,7 +78,7 @@ public enum SearchHighlighter {
         for range in ranges.sorted(by: { $0.start < $1.start }) {
             let start = Int(range.start)
             let end = Int(range.end)
-            guard start >= cursor else { continue } // defensive: skip overlaps
+            guard start >= cursor else { continue }  // defensive: skip overlaps
             append(cursor, start, attrs: nil)
             append(start, end, attrs: highlight)
             cursor = end

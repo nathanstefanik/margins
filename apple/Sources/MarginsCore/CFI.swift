@@ -32,8 +32,10 @@ public enum CFI {
     /// including ranges spanning different elements.
     public static func parse(_ raw: String) -> CFIRange? {
         let trimmed = raw.trimmed
-        guard let inner = trimmed.strippingPrefix("epubcfi(")?
-            .strippingSuffix(")") else { return nil }
+        guard
+            let inner = trimmed.strippingPrefix("epubcfi(")?
+                .strippingSuffix(")")
+        else { return nil }
 
         let parts = inner.split(separator: ",", omittingEmptySubsequences: false)
             .map(String.init)
@@ -43,10 +45,10 @@ public enum CFI {
             return CFIRange(element: element, startOffset: offset, endOffset: offset)
         case 3:
             guard let (parent, _) = parsePath(parts[0]),
-                  let (startPath, startOffset) = parsePath(parts[1]),
-                  let (endPath, endOffset) = parsePath(parts[2]),
-                  !startPath.isEmpty, !endPath.isEmpty,
-                  startPath.dropLast() == endPath.dropLast()
+                let (startPath, startOffset) = parsePath(parts[1]),
+                let (endPath, endOffset) = parsePath(parts[2]),
+                !startPath.isEmpty, !endPath.isEmpty,
+                startPath.dropLast() == endPath.dropLast()
             else { return nil }
             return CFIRange(
                 element: parent + startPath, startOffset: startOffset, endOffset: endOffset
@@ -63,14 +65,17 @@ public enum CFI {
     public static func overlaps(_ a: CFIRange, _ b: CFIRange) -> Bool {
         if a.element == b.element {
             guard let aStart = a.startOffset, let aEnd = a.endOffset,
-                  let bStart = b.startOffset, let bEnd = b.endOffset
+                let bStart = b.startOffset, let bEnd = b.endOffset
             else { return true }
-            let aLow = min(aStart, aEnd), aHigh = max(aStart, aEnd)
-            let bLow = min(bStart, bEnd), bHigh = max(bStart, bEnd)
+            let aLow = min(aStart, aEnd)
+            let aHigh = max(aStart, aEnd)
+            let bLow = min(bStart, bEnd)
+            let bHigh = max(bStart, bEnd)
             return aLow <= bHigh && bLow <= aHigh
         }
         guard a.element.count != b.element.count else { return false }
-        let (shorter, longer) = a.element.count < b.element.count
+        let (shorter, longer) =
+            a.element.count < b.element.count
             ? (a.element, b.element) : (b.element, a.element)
         return longer.starts(with: shorter)
     }

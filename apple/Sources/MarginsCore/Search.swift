@@ -101,10 +101,12 @@ final class SearchEngine {
                 }
                 guard matchesAll else { continue }
 
-                var score = Self.chapterTitleWeight * titleFrequency
+                var score =
+                    Self.chapterTitleWeight * titleFrequency
                     + Self.bodyWeight * bodyFrequency
                 if chapter.titleTokens.isPhraseMatch(terms)
-                    || chapter.note?.bodyTokens.isPhraseMatch(terms) == true {
+                    || chapter.note?.bodyTokens.isPhraseMatch(terms) == true
+                {
                     score += Self.phraseBonus
                 }
 
@@ -163,9 +165,9 @@ final class SearchEngine {
         for bookDir in (try? Files.contents(ofDirectory: booksDir)) ?? [] {
             let id = (bookDir as NSString).lastPathComponent
             guard !id.hasPrefix("."), Files.isDirectory(bookDir),
-                  let metaModified = Files.modificationDate(
-                      bookDir.appendingPathComponent("meta.json")
-                  )
+                let metaModified = Files.modificationDate(
+                    bookDir.appendingPathComponent("meta.json")
+                )
             else { continue }
             present.insert(id)
 
@@ -173,7 +175,8 @@ final class SearchEngine {
                 bookDir.appendingPathComponent("notes/_index.json")
             )
             let cached = books[id]
-            let rebuild = cached == nil
+            let rebuild =
+                cached == nil
                 || cached!.metaModified != metaModified
                 || cached!.notesIndexModified != notesIndexModified
             if rebuild {
@@ -188,10 +191,10 @@ final class SearchEngine {
                 let path = bookDir.appendingPathComponent("notes")
                     .appendingPathComponent(note.file)
                 guard let modified = Files.modificationDate(path), modified != note.modified,
-                      let updated = IndexedNote(
-                          path: path, file: note.file,
-                          chapterKey: indexed.chapters[position].key
-                      )
+                    let updated = IndexedNote(
+                        path: path, file: note.file,
+                        chapterKey: indexed.chapters[position].key
+                    )
                 else { continue }
                 indexed.chapters[position].note = updated
             }
@@ -208,9 +211,11 @@ final class SearchEngine {
     ) -> (String, [MatchRange]) {
         let characters = Array(body)
         let tokens = Tokenizer.tokenize(body)
-        guard let first = tokens.first(where: { token in
-            terms.contains { token.text.hasPrefix($0) }
-        }) else { return ("", []) }
+        guard
+            let first = tokens.first(where: { token in
+                terms.contains { token.text.hasPrefix($0) }
+            })
+        else { return ("", []) }
 
         // The token's UTF-16 offset, converted to a character index.
         var matchStart = characters.count
@@ -252,12 +257,13 @@ private struct IndexedBook {
     init?(bookDir: String) {
         let metaPath = bookDir.appendingPathComponent("meta.json")
         guard let data = try? Files.readData(metaPath),
-              let meta = try? MarginsJSON.decode(BookMeta.self, from: data),
-              let metaModified = Files.modificationDate(metaPath)
+            let meta = try? MarginsJSON.decode(BookMeta.self, from: data),
+            let metaModified = Files.modificationDate(metaPath)
         else { return nil }
 
         let notesIndexPath = bookDir.appendingPathComponent("notes/_index.json")
-        let notesIndex = (try? Files.readData(notesIndexPath))
+        let notesIndex =
+            (try? Files.readData(notesIndexPath))
             .flatMap { try? MarginsJSON.decode(NotesIndex.self, from: $0) }
             ?? NotesIndex(chapters: [])
         let notesByKey = Dictionary(
@@ -312,7 +318,7 @@ private struct IndexedNote {
     /// chapter stays searchable by title).
     init?(path: String, file: String, chapterKey: String) {
         guard let note = try? Notes.parseNoteFile(path: path, chapterKey: chapterKey),
-              let modified = Files.modificationDate(path)
+            let modified = Files.modificationDate(path)
         else { return nil }
         self.body = note.body
         self.bodyTokens = Tokenizer.tokenize(note.body)

@@ -1,7 +1,8 @@
 import Foundation
 import MarginsCore
-@testable import MarginsModel
 import Testing
+
+@testable import MarginsModel
 
 /// The UI-facing club model, driven through the local-only engine so the
 /// whole flow runs without iCloud.

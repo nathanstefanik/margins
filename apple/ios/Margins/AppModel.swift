@@ -1,7 +1,7 @@
 import Foundation
-import Observation
 import MarginsCore
 import MarginsModel
+import Observation
 
 /// App-level glue for the iOS target: resolves the library location once
 /// per launch (ubiquity container paths change between installs) and owns
@@ -200,7 +200,8 @@ final class AppModel {
         }
         LibraryLocation.requestDownload(path)
         if !connectivity.isOnline {
-            let title = library.books.first(where: { $0.id == bookId })?.title
+            let title =
+                library.books.first(where: { $0.id == bookId })?.title
                 ?? library.selectedBook.flatMap { $0.id == bookId ? $0.title : nil }
                 ?? "This book"
             library.errorMessage =

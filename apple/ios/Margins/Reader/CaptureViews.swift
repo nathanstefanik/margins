@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// Quick capture: from reading to typing in one deliberate gesture, and
 /// back without thinking about saving. Small sheet, keyboard up, focused
@@ -52,8 +52,9 @@ struct CaptureSheet: View {
                 Spacer(minLength: 8)
                 Button("Save", action: commit)
                     .buttonStyle(.borderedProminent)
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        && (selection?.text.isEmpty ?? true))
+                    .disabled(
+                        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            && (selection?.text.isEmpty ?? true))
             }
         }
         .padding()
@@ -273,13 +274,18 @@ struct ChapterNoteEditorSheet: View {
                         .foregroundStyle(.red)
                 }
                 ZStack(alignment: .topLeading) {
-                    TextEditor(text: Binding(
-                        get: { reader.noteBody },
-                        set: { reader.noteBody = $0 }
-                    ))
+                    TextEditor(
+                        text: Binding(
+                            get: { reader.noteBody },
+                            set: { reader.noteBody = $0 }
+                        )
+                    )
                     .focused($editorFocused)
                     .scrollContentBackground(.hidden)
-                    .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: DesignTokens.Radius.control, style: .continuous))
+                    .background(
+                        .quaternary.opacity(0.4),
+                        in: .rect(cornerRadius: DesignTokens.Radius.control, style: .continuous)
+                    )
                     .padding(4)
                     if reader.noteBody.isEmpty {
                         Text("What did this chapter leave you with…")
@@ -340,7 +346,9 @@ struct ChapterNoteEditorSheet: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(6)
-                            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
+                            .background(
+                                .quaternary.opacity(0.4),
+                                in: .rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
                         }
                     }
                 }

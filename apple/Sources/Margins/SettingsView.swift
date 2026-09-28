@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 /// Real Settings content: the reader's typography defaults and the library
 /// root. Both drive the same persisted state the reading surface uses.
@@ -43,9 +43,11 @@ struct SettingsView: View {
                         set: { value in Task { await clubs.setSpoilerProtection(value) } }
                     )
                 )
-                Text("Hide another member's notes for the chapter you're reading and every later chapter. Your own notes always stay visible.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Hide another member's notes for the chapter you're reading and every later chapter. Your own notes always stay visible."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 LabeledContent("Sharing") {
                     Text(clubs.supportsSharing ? "iCloud" : "This Mac only")
                 }
@@ -129,9 +131,11 @@ struct SettingsView: View {
                         Task { await RootPanel.run(model: model) }
                     }
                 }
-                Text("Books, notes, covers, and reading positions live here. Point it at a synced folder to share the library between machines.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Books, notes, covers, and reading positions live here. Point it at a synced folder to share the library between machines."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

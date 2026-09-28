@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 enum FileStoreTestIsolation {
     private static let lock = NSLock()

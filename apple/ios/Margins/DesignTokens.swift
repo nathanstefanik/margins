@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 /// The iOS app's shared design constants. Everything visual that is not a
 /// system style lives here so the app stays coherent and easy to tune:

@@ -84,8 +84,10 @@ public enum RFC3339 {
             }
             text = String(raw[..<dot] + raw[end...])
             if !digits.isEmpty {
-                milliseconds = Int(digits.prefix(3)
-                    .padding(toLength: 3, withPad: "0", startingAt: 0)) ?? 0
+                milliseconds =
+                    Int(
+                        digits.prefix(3)
+                            .padding(toLength: 3, withPad: "0", startingAt: 0)) ?? 0
             }
         }
 
@@ -1223,10 +1225,10 @@ public enum CoreError: Error, LocalizedError, Sendable, Equatable, Hashable {
 
     public var message: String {
         switch self {
-        case let .config(message), let .library(message), let .notes(message),
-             let .epub(message), let .io(message), let .other(message):
+        case .config(let message), .library(let message), .notes(let message),
+            .epub(let message), .io(let message), .other(let message):
             return message
-        case let .notDownloaded(path):
+        case .notDownloaded(let path):
             return "\((path as NSString).lastPathComponent) has not downloaded from iCloud yet"
         }
     }

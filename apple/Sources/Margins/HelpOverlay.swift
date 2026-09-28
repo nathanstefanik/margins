@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 /// The `?` cheat sheet: every vim-style key, grouped by context, generated
 /// from the keymap's help model. Presented in-window with the same scrim

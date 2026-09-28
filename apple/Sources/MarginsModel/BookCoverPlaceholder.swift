@@ -7,7 +7,8 @@ public enum BookCoverPlaceholder {
     /// Up to two uppercase initials from the leading words of `title`
     /// (e.g. "The Brothers Karamazov" → "BK"). Empty for an empty title.
     public static func initials(for title: String) -> String {
-        let words = title
+        let words =
+            title
             .split(whereSeparator: { $0.isWhitespace || $0.isNewline })
             .filter { $0.contains(where: \.isLetter) }
         let letters = words.prefix(2).compactMap { $0.first(where: \.isLetter) }
@@ -18,10 +19,10 @@ public enum BookCoverPlaceholder {
     /// title (FNV-1a so equal titles always map to the same tint).
     public static func tintIndex(for title: String, paletteSize: Int) -> Int {
         guard paletteSize > 0 else { return 0 }
-        var hash: UInt64 = 0xcbf29ce484222325
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
         for scalar in title.unicodeScalars {
             hash ^= UInt64(scalar.value)
-            hash = hash &* 0x100000001b3
+            hash = hash &* 0x100_0000_01b3
         }
         return Int(hash % UInt64(paletteSize))
     }

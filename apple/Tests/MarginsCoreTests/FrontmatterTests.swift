@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// The YAML frontmatter codec (docs/apple-only-plan.md Phase 2 step 3).
 ///
@@ -22,14 +23,14 @@ struct FrontmatterTests {
     func scalarsRoundTrip() throws {
         for (value, _) in Self.scalarCases {
             let yaml = """
-            book_id: abc
-            chapter_key: '001'
-            chapter_index: 0
-            chapter_title: \(Frontmatter.scalar(value))
-            chapter_href: OEBPS/one.xhtml
-            kind: summary
-            word_count: 0
-            """
+                book_id: abc
+                chapter_key: '001'
+                chapter_index: 0
+                chapter_title: \(Frontmatter.scalar(value))
+                chapter_href: OEBPS/one.xhtml
+                kind: summary
+                word_count: 0
+                """
             #expect(try Frontmatter.decode(yaml).chapterTitle == value, "input: \(value)")
         }
     }
@@ -42,30 +43,30 @@ struct FrontmatterTests {
         let value = "multi\nline"
         #expect(Frontmatter.scalar(value) == "\"multi\\nline\"")
         let yaml = """
-        book_id: abc
-        chapter_key: '001'
-        chapter_index: 0
-        chapter_title: \(Frontmatter.scalar(value))
-        chapter_href: OEBPS/one.xhtml
-        kind: summary
-        word_count: 0
-        """
+            book_id: abc
+            chapter_key: '001'
+            chapter_index: 0
+            chapter_title: \(Frontmatter.scalar(value))
+            chapter_href: OEBPS/one.xhtml
+            kind: summary
+            word_count: 0
+            """
         #expect(try Frontmatter.decode(yaml).chapterTitle == value)
     }
 
     @Test("a block scalar written by serde_yaml still parses")
     func blockScalarsParse() throws {
         let yaml = """
-        book_id: abc
-        chapter_key: '001'
-        chapter_index: 0
-        chapter_title: |-
-          multi
-          line
-        chapter_href: OEBPS/one.xhtml
-        kind: summary
-        word_count: 0
-        """
+            book_id: abc
+            chapter_key: '001'
+            chapter_index: 0
+            chapter_title: |-
+              multi
+              line
+            chapter_href: OEBPS/one.xhtml
+            kind: summary
+            word_count: 0
+            """
         #expect(try Frontmatter.decode(yaml).chapterTitle == "multi\nline")
     }
 
@@ -112,15 +113,15 @@ struct FrontmatterTests {
     @Test("unknown keys are ignored")
     func unknownKeysAreIgnored() throws {
         let yaml = """
-        book_id: abc
-        chapter_key: '001'
-        chapter_index: 0
-        chapter_title: One
-        chapter_href: OEBPS/one.xhtml
-        kind: summary
-        word_count: 4
-        invented_by_a_future_version: 7
-        """
+            book_id: abc
+            chapter_key: '001'
+            chapter_index: 0
+            chapter_title: One
+            chapter_href: OEBPS/one.xhtml
+            kind: summary
+            word_count: 4
+            invented_by_a_future_version: 7
+            """
         #expect(try Frontmatter.decode(yaml).wordCount == 4)
     }
 

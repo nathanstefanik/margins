@@ -1,8 +1,8 @@
 import AppKit
-import Observation
-import WebKit
 import MarginsCore
 import MarginsModel
+import Observation
+import WebKit
 
 /// Owns the reader's WKWebView: builds it, loads the reader page, and
 /// enforces the navigation policy (external links go to the system browser).
@@ -49,7 +49,8 @@ final class ReaderController: NSObject {
         applyTheme()
 
         if let book = reader.book, reader.chapter != nil,
-           let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget) {
+            let url = readerURL(bookID: book.id, chapterHref: reader.displayTarget)
+        {
             loadedBookID = book.id
             webView.load(URLRequest(url: url))
         }
@@ -66,7 +67,7 @@ final class ReaderController: NSObject {
 
     static func javaScriptLiteral(_ value: String) -> String {
         guard let data = try? JSONEncoder().encode(value),
-              let literal = String(data: data, encoding: .utf8)
+            let literal = String(data: data, encoding: .utf8)
         else { return "''" }
         return literal
     }
@@ -77,7 +78,7 @@ final class ReaderController: NSObject {
     @discardableResult
     static func evaluateInReader(_ script: String) -> Bool {
         guard let contentView = NSApp.keyWindow?.contentView,
-              let webView = findWebView(in: contentView)
+            let webView = findWebView(in: contentView)
         else { return false }
         webView.evaluateJavaScript(script, completionHandler: nil)
         return true
@@ -214,7 +215,8 @@ extension ReaderController: WKNavigationDelegate {
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
         if let url = navigationAction.request.url,
-           url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto" {
+            url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto"
+        {
             NSWorkspace.shared.open(url)
             decisionHandler(.cancel)
             return
@@ -239,10 +241,12 @@ extension ReaderController: WKScriptMessageHandler {
         guard message.name == "reader", let body = message.body as? [String: Any] else { return }
         switch body["type"] as? String {
         case "relocated":
-            let page = (body["page"] as? NSNumber)?.intValue
+            let page =
+                (body["page"] as? NSNumber)?.intValue
                 ?? (body["page"] as? Int)
                 ?? 1
-            let totalPages = (body["totalPages"] as? NSNumber)?.intValue
+            let totalPages =
+                (body["totalPages"] as? NSNumber)?.intValue
                 ?? (body["totalPages"] as? Int)
                 ?? 0
             reader.relocated(

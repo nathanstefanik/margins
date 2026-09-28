@@ -1,7 +1,7 @@
 import Foundation
-import Testing
 import MarginsCore
 import MarginsModel
+import Testing
 
 @Suite("Notes page")
 struct NotesPageTests {
@@ -9,7 +9,7 @@ struct NotesPageTests {
         chaptersWithNotes: Int = 3,
         chapterCount: Int = 5,
         totalWords: Int = 1240,
-        lastUpdatedAt: Date? = Date(timeIntervalSince1970: 1_788_264_000) // 2026-09-01T12:00:00Z
+        lastUpdatedAt: Date? = Date(timeIntervalSince1970: 1_788_264_000)  // 2026-09-01T12:00:00Z
     ) -> CompiledNotes {
         CompiledNotes(
             bookId: "book-1",

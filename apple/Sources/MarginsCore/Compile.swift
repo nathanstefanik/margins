@@ -29,9 +29,11 @@ public enum Compile {
         var lastUpdatedAt: Date?
 
         for entry in index.chapters {
-            guard let note = try? Notes.parseNoteFile(
-                path: notesDir.appendingPathComponent(entry.file), chapterKey: entry.chapterKey
-            ) else { continue }
+            guard
+                let note = try? Notes.parseNoteFile(
+                    path: notesDir.appendingPathComponent(entry.file), chapterKey: entry.chapterKey
+                )
+            else { continue }
 
             firstCreatedAt = earlier(firstCreatedAt, note.frontmatter.createdAt)
             lastUpdatedAt = later(lastUpdatedAt, note.frontmatter.updatedAt)
@@ -108,8 +110,10 @@ public enum Compile {
             sections += notes.emptyChapters.map { (chapter: $0, isStub: true) }
         }
         sections = sections.enumerated()
-            .sorted { ($0.element.chapter.chapterIndex, $0.offset)
-                < ($1.element.chapter.chapterIndex, $1.offset) }
+            .sorted {
+                ($0.element.chapter.chapterIndex, $0.offset)
+                    < ($1.element.chapter.chapterIndex, $1.offset)
+            }
             .map(\.element)
 
         guard !sections.isEmpty else { return out + "_No notes yet._\n" }
@@ -121,7 +125,8 @@ public enum Compile {
                 let anchor = tocAnchor(
                     section.chapter.chapterIndex, section.chapter.chapterTitle, seen: &seen
                 )
-                out += "- [\(section.chapter.chapterIndex + 1). "
+                out +=
+                    "- [\(section.chapter.chapterIndex + 1). "
                     + "\(escapeMarkdown(section.chapter.chapterTitle))](#\(anchor))\n"
             }
             out += "\n"
@@ -226,7 +231,8 @@ public enum Compile {
         body.lines.map { line -> String in
             let hashes = line.prefix { $0 == "#" }.count
             let rest = line.dropFirst(hashes)
-            let isHeading = (1...6).contains(hashes)
+            let isHeading =
+                (1...6).contains(hashes)
                 && (rest.isEmpty || rest.hasPrefix(" ") || rest.hasPrefix("\t"))
             guard isHeading else { return String(line) }
             return String(repeating: "#", count: min(hashes + 2, 6)) + rest

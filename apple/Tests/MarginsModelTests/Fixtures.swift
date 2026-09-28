@@ -1,10 +1,10 @@
 import Foundation
 
 let repoRoot = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent() // MarginsModelTests/
-    .deletingLastPathComponent() // Tests/
-    .deletingLastPathComponent() // apple/
-    .deletingLastPathComponent() // repo root
+    .deletingLastPathComponent()  // MarginsModelTests/
+    .deletingLastPathComponent()  // Tests/
+    .deletingLastPathComponent()  // apple/
+    .deletingLastPathComponent()  // repo root
 
 /// A fresh, empty data directory for one test.
 func makeTempDataDir() throws -> String {

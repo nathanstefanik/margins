@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// In-window list of named location pins for the open book. Same scrim
 /// pattern as search and the cheat sheet; Esc (via the shell monitor)

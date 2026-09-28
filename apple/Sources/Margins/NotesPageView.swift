@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// The compiled notes page: every chapter note in spine order, with a
 /// stats header, an outline view (chapter/title list) and a contents view
@@ -281,7 +281,7 @@ struct NotesPageView: View {
 
     private func openChapter(_ chapter: CompiledChapter) {
         guard let book = model.selectedBook, book.id == notes.bookId,
-              let meta = book.chapters.first(where: { $0.key == chapter.chapterKey })
+            let meta = book.chapters.first(where: { $0.key == chapter.chapterKey })
         else { return }
         reader.open(book: book, chapter: meta)
     }

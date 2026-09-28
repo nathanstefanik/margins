@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// Translated from the legacy core's marks test module. The
 /// marks section is the one place where byte identity is the contract:
@@ -36,7 +37,7 @@ struct MarksTests {
         #expect(parsed.first == original)
 
         // Canonical bytes are stable: serialize(parse(canonical)) == canonical.
-        guard case let .mark(_, raw) = try #require(items.first) else {
+        guard case .mark(_, let raw) = try #require(items.first) else {
             Issue.record("expected a mark block")
             return
         }
@@ -48,13 +49,13 @@ struct MarksTests {
         let highlight = mark("b01j8q3k2m", quote: "just a quote")
         let note = mark("b01j8q3k3n", body: "thought only")
         let text = """
-        \(Marks.sentinel)
+            \(Marks.sentinel)
 
-        \(Marks.canonicalBlock(highlight))
+            \(Marks.canonicalBlock(highlight))
 
-        \(Marks.canonicalBlock(note))
+            \(Marks.canonicalBlock(note))
 
-        """
+            """
         let parsed = Marks.marks(Marks.parseSection(text))
 
         #expect(parsed.count == 2)
@@ -67,16 +68,16 @@ struct MarksTests {
     @Test("unparsable blocks are preserved verbatim")
     func unparsableBlocksArePreserved() {
         let section = """
-        \(Marks.sentinel)
+            \(Marks.sentinel)
 
-        some stray text
+            some stray text
 
-        <!-- margins:mark id= no-at -->
-        > broken
+            <!-- margins:mark id= no-at -->
+            > broken
 
-        \(Marks.canonicalBlock(mark("b01j8q3k4p", quote: "q", body: "b")))
+            \(Marks.canonicalBlock(mark("b01j8q3k4p", quote: "q", body: "b")))
 
-        """
+            """
         let items = Marks.parseSection(section)
 
         #expect(items.count == 3)
@@ -93,11 +94,11 @@ struct MarksTests {
     @Test("a sentinel inside a mark body is just text")
     func sentinelInsideABodyIsText() {
         let section = """
-        \(Marks.sentinel)
+            \(Marks.sentinel)
 
-        \(Marks.canonicalBlock(mark("b01j8q3k5q", body: "see \(Marks.sentinel) below")))
+            \(Marks.canonicalBlock(mark("b01j8q3k5q", body: "see \(Marks.sentinel) below")))
 
-        """
+            """
         let parsed = Marks.marks(Marks.parseSection(section))
         #expect(parsed.count == 1)
         #expect(parsed[0].body.contains(Marks.sentinel))
@@ -143,15 +144,15 @@ struct MarksTests {
     @Test("quoted attribute values parse with spaces and parentheses")
     func quotedAttributesParse() {
         let section = """
-        \(Marks.sentinel)
+            \(Marks.sentinel)
 
-        <!-- margins:mark id=b01j8q3k6r cfi="epubcfi(/6/14!/4/2/10,/1:0,/1:42)" \
-        at=2026-09-05T14:02:11Z percent=38.2 -->
-        > q
+            <!-- margins:mark id=b01j8q3k6r cfi="epubcfi(/6/14!/4/2/10,/1:0,/1:42)" \
+            at=2026-09-05T14:02:11Z percent=38.2 -->
+            > q
 
-        b
+            b
 
-        """
+            """
         let parsed = Marks.marks(Marks.parseSection(section))
         #expect(parsed.count == 1)
         #expect(parsed[0].cfi == "epubcfi(/6/14!/4/2/10,/1:0,/1:42)")
@@ -207,7 +208,8 @@ struct MarksTests {
     func commentEndInsideACfiSurvives() {
         // `-->` inside a quoted cfi is unusual but must not break parsing:
         // the line-suffix strip takes the final comment end.
-        let section = "<!-- margins:mark id=aa at=2026-09-05T10:00:00Z cfi=\"epubcfi(a-->b)\" -->"
+        let section =
+            "<!-- margins:mark id=aa at=2026-09-05T10:00:00Z cfi=\"epubcfi(a-->b)\" -->"
             + "\n> q\n\nb\n"
         let parsed = Marks.marks(Marks.parseSection(section))
         #expect(parsed.count == 1)

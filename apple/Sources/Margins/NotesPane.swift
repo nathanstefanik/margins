@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 struct NotesPane: View {
     @Environment(LibraryModel.self) private var model
@@ -151,10 +151,12 @@ struct NotesPane: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(ReaderModel.noteHeaderText(
-                chapterIndex: reader.chapter.map { Int($0.index) } ?? 0,
-                chapterTitle: reader.chapter?.title
-            ))
+            Text(
+                ReaderModel.noteHeaderText(
+                    chapterIndex: reader.chapter.map { Int($0.index) } ?? 0,
+                    chapterTitle: reader.chapter?.title
+                )
+            )
             .font(.headline)
             .lineLimit(1)
             .truncationMode(.tail)

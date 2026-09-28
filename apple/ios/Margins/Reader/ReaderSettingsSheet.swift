@@ -1,5 +1,5 @@
-import SwiftUI
 import MarginsModel
+import SwiftUI
 
 /// Where the hamburger menu can send the reader. The scene presents the
 /// matching sheet once the menu has dismissed.
@@ -63,16 +63,24 @@ struct ReaderSettingsSheet: View {
                     .pickerStyle(.segmented)
                 }
                 Section {
-                    Button { onSelect(.contents) } label: {
+                    Button {
+                        onSelect(.contents)
+                    } label: {
                         Label("Contents", systemImage: "list.bullet")
                     }
-                    Button { onSelect(.bookmarks) } label: {
+                    Button {
+                        onSelect(.bookmarks)
+                    } label: {
                         Label("Bookmarks", systemImage: "bookmark")
                     }
-                    Button { onSelect(.marks) } label: {
+                    Button {
+                        onSelect(.marks)
+                    } label: {
                         Label("Marks", systemImage: "highlighter")
                     }
-                    Button { onSelect(.chapterNote) } label: {
+                    Button {
+                        onSelect(.chapterNote)
+                    } label: {
                         Label("Chapter note", systemImage: "square.and.pencil")
                     }
                 }

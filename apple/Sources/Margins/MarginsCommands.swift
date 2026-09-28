@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 struct MarginsCommands: Commands {
     let model: LibraryModel
@@ -18,7 +18,8 @@ struct MarginsCommands: Commands {
         CommandGroup(replacing: .sidebar) {
             Button("Toggle Sidebar") {
                 guard let sidebarVisibility else { return }
-                sidebarVisibility.wrappedValue = sidebarVisibility.wrappedValue == .detailOnly
+                sidebarVisibility.wrappedValue =
+                    sidebarVisibility.wrappedValue == .detailOnly
                     ? .all
                     : .detailOnly
             }
@@ -153,7 +154,8 @@ struct MarginsCommands: Commands {
         if reader.isOpen {
             reader.close()
         }
-        let notes = model.compiledNotes?.bookId == id
+        let notes =
+            model.compiledNotes?.bookId == id
             ? model.compiledNotes
             : await model.loadCompiledNotes(bookId: id)
         guard let notes else { return }

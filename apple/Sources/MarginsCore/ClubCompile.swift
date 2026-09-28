@@ -32,7 +32,8 @@ public enum ClubMarks {
             return root
         }
         func union(_ a: Int, _ b: Int) {
-            let rootA = find(a), rootB = find(b)
+            let rootA = find(a)
+            let rootB = find(b)
             guard rootA != rootB else { return }
             parent[max(rootA, rootB)] = min(rootA, rootB)
         }
@@ -40,7 +41,7 @@ public enum ClubMarks {
         for i in ordered.indices {
             for j in (i + 1)..<ordered.count {
                 switch (ranges[i], ranges[j]) {
-                case let (a?, b?):
+                case (let a?, let b?):
                     // Both CFIs parsed: only real overlap clusters them.
                     if CFI.overlaps(a, b) { union(i, j) }
                 case (nil, _), (_, nil):
@@ -157,7 +158,8 @@ public enum ClubCompile {
         let membersById = Dictionary(
             club.members.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first }
         )
-        let active = snapshots
+        let active =
+            snapshots
             .filter { membersById[$0.memberId] != nil }
             .sorted { $0.memberId < $1.memberId }
 
@@ -176,17 +178,21 @@ public enum ClubCompile {
                 let hasMarks = !chapter.marks.isEmpty
                 guard hasBody || hasMarks else { continue }
 
-                let hidden = !isSelf && isHidden(
-                    chapterIndex: chapter.chapterIndex,
-                    viewerChapterIndex: viewerChapterIndex,
-                    policy: spoilerPolicy
-                )
+                let hidden =
+                    !isSelf
+                    && isHidden(
+                        chapterIndex: chapter.chapterIndex,
+                        viewerChapterIndex: viewerChapterIndex,
+                        policy: spoilerPolicy
+                    )
 
-                var accumulator = byKey[chapter.chapterKey] ?? ChapterAccumulator(
-                    chapterKey: chapter.chapterKey,
-                    chapterIndex: chapter.chapterIndex,
-                    chapterTitle: chapter.chapterTitle
-                )
+                var accumulator =
+                    byKey[chapter.chapterKey]
+                    ?? ChapterAccumulator(
+                        chapterKey: chapter.chapterKey,
+                        chapterIndex: chapter.chapterIndex,
+                        chapterTitle: chapter.chapterTitle
+                    )
                 if hidden {
                     accumulator.hiddenMembers.insert(member.id)
                     if hasBody { accumulator.hiddenContributions += 1 }
@@ -244,9 +250,11 @@ public enum ClubCompile {
             chapterCount = (chapters.map(\.chapterIndex).max() ?? -1) + 1
         }
         let snapshotTitle = active.first { !$0.bookTitle.isEmpty }
-        let title = club.bookTitle.isEmpty
+        let title =
+            club.bookTitle.isEmpty
             ? (snapshotTitle?.bookTitle ?? "") : club.bookTitle
-        let author = club.bookAuthor.isEmpty
+        let author =
+            club.bookAuthor.isEmpty
             ? (snapshotTitle?.bookAuthor ?? "") : club.bookAuthor
 
         var notes = ClubNotes(
@@ -309,7 +317,8 @@ public enum ClubCompile {
         out += "\n\n"
 
         if notes.spoilerProtected {
-            out += "> Spoiler protection is on: another member's notes are shown only for "
+            out +=
+                "> Spoiler protection is on: another member's notes are shown only for "
                 + "chapters you have finished.\n\n"
         }
         guard !notes.chapters.isEmpty else { return out + "_No notes yet._\n" }
@@ -321,7 +330,8 @@ public enum ClubCompile {
                 let anchor = Compile.tocAnchor(
                     chapter.chapterIndex, chapter.chapterTitle, seen: &seen
                 )
-                out += "- [\(chapter.chapterIndex + 1). "
+                out +=
+                    "- [\(chapter.chapterIndex + 1). "
                     + "\(Compile.escapeMarkdown(chapter.chapterTitle))](#\(anchor))\n"
             }
             out += "\n"
@@ -329,7 +339,8 @@ public enum ClubCompile {
 
         for chapter in notes.chapters {
             out += "---\n\n"
-            out += "## \(chapter.chapterIndex + 1). "
+            out +=
+                "## \(chapter.chapterIndex + 1). "
                 + "\(Compile.escapeMarkdown(chapter.chapterTitle))\n"
 
             if chapter.othersHidden, options.includeHiddenPlaceholder {
@@ -390,7 +401,8 @@ public enum ClubCompile {
     }
 
     private static func hiddenPlaceholder(_ chapter: ClubChapter) -> String {
-        let who = chapter.hiddenMemberCount == 1
+        let who =
+            chapter.hiddenMemberCount == 1
             ? "1 other member's" : "\(chapter.hiddenMemberCount) other members'"
         return "_\(who) notes are hidden until you finish this chapter._"
     }

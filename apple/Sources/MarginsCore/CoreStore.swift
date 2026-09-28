@@ -445,8 +445,8 @@ public actor CoreStore {
     /// "nothing read yet".
     private func currentChapterIndex(bookId: String) -> Int? {
         guard let position = library.readPosition(bookID: bookId),
-              let meta = try? library.getBook(id: bookId),
-              let chapter = meta.chapters.first(where: { $0.key == position.chapterKey })
+            let meta = try? library.getBook(id: bookId),
+            let chapter = meta.chapters.first(where: { $0.key == position.chapterKey })
         else { return nil }
         return chapter.index
     }

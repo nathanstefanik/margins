@@ -1,7 +1,7 @@
 import AppKit
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// A book's cover at a fixed ~2:3 size. Books with a cover show the image;
 /// the rest get a deterministic placeholder — letterpress-style initials on

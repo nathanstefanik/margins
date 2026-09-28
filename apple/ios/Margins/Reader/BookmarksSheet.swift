@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// Book-wide pins: drop from the reader chrome, manage here. Tap jumps;
 /// swipe deletes; rename and restamp live on the row menu.

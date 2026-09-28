@@ -34,7 +34,7 @@ public struct OutlineRow: Identifiable, Equatable, Sendable {
     /// chapters, containers as headings, matter by its title alone.
     public var accessibilityLabel: String {
         switch kind {
-        case let .chapter(number): "Chapter \(number), \(title)"
+        case .chapter(let number): "Chapter \(number), \(title)"
         case .heading: "\(title), heading"
         case .matter: title
         }
@@ -154,7 +154,7 @@ public struct ContentsOutline: Equatable, Sendable {
         guard !body.isEmpty else { return body }
 
         func level(_ row: OutlineRow) -> Int {
-            if case let .heading(level) = row.kind { return level }
+            if case .heading(let level) = row.kind { return level }
             return row.section?.level ?? row.chapter.level
         }
 

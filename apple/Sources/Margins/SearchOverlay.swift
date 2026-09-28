@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// Non-modal Spotlight-style command palette inside the main window. The
 /// field keeps keyboard focus for the whole lifetime: ↑/↓ (or ⌃N/⌃P) move a
@@ -57,10 +57,13 @@ struct SearchOverlay: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search notes…", text: Binding(
-                get: { controller.query },
-                set: { controller.setQuery($0) }
-            ))
+            TextField(
+                "Search notes…",
+                text: Binding(
+                    get: { controller.query },
+                    set: { controller.setQuery($0) }
+                )
+            )
             .textFieldStyle(.plain)
             .font(.title3)
             .focused($fieldFocused)
@@ -263,27 +266,33 @@ struct SearchOverlay: View {
     private func mainLine(_ hit: NoteSearchHit) -> some View {
         switch hit.kind {
         case .noteContent:
-            Text(SearchHighlighter.attributed(
-                hit.snippet,
-                ranges: hit.snippetRanges,
-                highlight: highlightAttributes
-            ))
+            Text(
+                SearchHighlighter.attributed(
+                    hit.snippet,
+                    ranges: hit.snippetRanges,
+                    highlight: highlightAttributes
+                )
+            )
             .font(.callout)
             .lineLimit(1)
         case .chapterTitle:
-            Text(SearchHighlighter.attributed(
-                hit.chapterTitle,
-                ranges: hit.titleRanges,
-                highlight: highlightAttributes
-            ))
+            Text(
+                SearchHighlighter.attributed(
+                    hit.chapterTitle,
+                    ranges: hit.titleRanges,
+                    highlight: highlightAttributes
+                )
+            )
             .font(.callout)
             .lineLimit(1)
         case .bookTarget:
-            Text(SearchHighlighter.attributed(
-                hit.bookTitle,
-                ranges: hit.titleRanges,
-                highlight: highlightAttributes
-            ))
+            Text(
+                SearchHighlighter.attributed(
+                    hit.bookTitle,
+                    ranges: hit.titleRanges,
+                    highlight: highlightAttributes
+                )
+            )
             .font(.callout)
             .lineLimit(1)
         }

@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 struct SidebarView: View {
     @Environment(LibraryModel.self) private var model
@@ -16,9 +16,11 @@ struct SidebarView: View {
                 ForEach(model.books) { book in
                     BookRowView(book: book)
                         .tag(book.id)
-                        .simultaneousGesture(TapGesture().onEnded {
-                            Task { await clubs.selectClub(id: nil) }
-                        })
+                        .simultaneousGesture(
+                            TapGesture().onEnded {
+                                Task { await clubs.selectClub(id: nil) }
+                            }
+                        )
                         .onTapGesture(count: 2) {
                             Task { await model.openBookResuming(id: book.id) }
                         }
@@ -59,7 +61,9 @@ struct SidebarView: View {
                 removeBook(book)
             }
         } message: { book in
-            Text("Remove \"\(book.title)\" and its notes from the library? The original EPUB file on disk is not touched.")
+            Text(
+                "Remove \"\(book.title)\" and its notes from the library? The original EPUB file on disk is not touched."
+            )
         }
         .onChange(of: model.selectedBookID) {
             Task { await model.loadSelectedBook() }

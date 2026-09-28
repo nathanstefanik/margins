@@ -1,6 +1,7 @@
 import Foundation
-@testable import MarginsCore
 import Testing
+
+@testable import MarginsCore
 
 /// Read-compatibility with files the legacy core wrote before the port
 /// (docs/apple-only-plan.md Phase 2 step 7 kept `Fixtures/legacy-library/`

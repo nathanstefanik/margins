@@ -1,6 +1,6 @@
-import SwiftUI
 import MarginsCore
 import MarginsModel
+import SwiftUI
 
 /// One club on iOS: identity, roster, invite code, and the merged document.
 /// System list content; actions live in rows and on the toolbar.
@@ -33,16 +33,17 @@ struct ClubDetailView: View {
                     ExportSheet(url: exportURL)
                 }
             }
-            .modifier(ClubDetailDialogs(
-                clubs: clubs,
-                dismiss: dismiss,
-                showingDeleteConfirmation: $showingDeleteConfirmation,
-                showingLeaveConfirmation: $showingLeaveConfirmation,
-                memberPendingRemoval: $memberPendingRemoval,
-                memberPendingPromote: $memberPendingPromote,
-                renameOpen: $renameOpen,
-                renameText: $renameText
-            ))
+            .modifier(
+                ClubDetailDialogs(
+                    clubs: clubs,
+                    dismiss: dismiss,
+                    showingDeleteConfirmation: $showingDeleteConfirmation,
+                    showingLeaveConfirmation: $showingLeaveConfirmation,
+                    memberPendingRemoval: $memberPendingRemoval,
+                    memberPendingPromote: $memberPendingPromote,
+                    renameOpen: $renameOpen,
+                    renameText: $renameText
+                ))
     }
 
     @ViewBuilder
@@ -275,7 +276,8 @@ struct ClubDetailView: View {
     }
 
     private func hiddenText(_ chapter: ClubChapter) -> String {
-        let who = chapter.hiddenMemberCount == 1
+        let who =
+            chapter.hiddenMemberCount == 1
             ? "1 other member's" : "\(chapter.hiddenMemberCount) other members'"
         return "\(who) notes are hidden until you finish this chapter."
     }

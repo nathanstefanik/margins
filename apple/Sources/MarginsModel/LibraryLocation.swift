@@ -129,14 +129,15 @@ public struct LibraryLocation: Sendable {
         let evicted = !exists && Self.hasEvictedPlaceholder(for: url)
         guard exists || evicted else { return path }
 
-        let isUbiquitous = evicted
+        let isUbiquitous =
+            evicted
             || ((try? url.resourceValues(forKeys: [.isUbiquitousItemKey]))?
                 .isUbiquitousItem ?? false)
         guard isUbiquitous else { return path }
 
         if !evicted,
-           (try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?
-               .ubiquitousItemDownloadingStatus == URLUbiquitousItemDownloadingStatus.current
+            (try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]))?
+                .ubiquitousItemDownloadingStatus == URLUbiquitousItemDownloadingStatus.current
         {
             return path
         }
@@ -178,11 +179,13 @@ public struct LibraryLocation: Sendable {
 
     private static func placeholderURLs(under root: String) -> [URL] {
         let rootURL = URL(fileURLWithPath: root, isDirectory: true)
-        guard let enumerator = FileManager.default.enumerator(
-            at: rootURL,
-            includingPropertiesForKeys: [],
-            options: []
-        ) else { return [] }
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: rootURL,
+                includingPropertiesForKeys: [],
+                options: []
+            )
+        else { return [] }
         var urls: [URL] = []
         for case let url as URL in enumerator {
             let name = url.lastPathComponent
