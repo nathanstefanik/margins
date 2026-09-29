@@ -12,6 +12,11 @@ final class AppModel {
     let library: LibraryModel
     let reader: ReaderModel
     let clubs: ClubModel
+    let notebooks = NotebookModel()
+    /// Shared search model — the Search tab and the reader's
+    /// "Search Library" drive the same query state and see the indexing
+    /// pass's progress.
+    let search = LibrarySearch()
     let libraryLocation: LibraryLocation
     let connectivity = Connectivity()
     let mirror: EpubMirror
@@ -29,6 +34,10 @@ final class AppModel {
     private var materializationTask: Task<String, Error>?
     private var downloadPassRunning = false
     private var downloadPassQueued = false
+    private var indexPassRunning = false
+    private var indexPassQueued = false
+    /// A download pass that landed books triggers an index pass after it.
+    private var downloadedSomething = false
 
     init() {
         let location: LibraryLocation
@@ -99,8 +108,11 @@ final class AppModel {
         }
         if let store = library.coreStore {
             Task { await clubs.activate(store: store) }
+            Task { await notebooks.activate(store: store) }
+            search.attach(store: store)
         }
         await downloadPass()
+        await indexPass()
     }
 
     /// Asks iCloud for every placeholder under the library root, then
@@ -114,6 +126,7 @@ final class AppModel {
             return
         }
         downloadPassRunning = true
+        downloadedSomething = false
         defer {
             downloadPassRunning = false
             downloadPassQueued = false
@@ -123,6 +136,10 @@ final class AppModel {
             downloadPassQueued = false
             await runDownloadPass()
         } while downloadPassQueued && connectivity.isOnline
+        // Books that finished downloading this pass can be indexed now.
+        if downloadedSomething {
+            await indexPass()
+        }
     }
 
     private func runDownloadPass() async {
@@ -153,6 +170,7 @@ final class AppModel {
             if count < last {
                 await library.refresh()
                 downloadGeneration += 1
+                downloadedSomething = true
                 if count == 0 { return }
                 unchanged = 0
             } else {
@@ -161,6 +179,56 @@ final class AppModel {
             }
             last = count
         }
+    }
+
+    /// One pass over the pending text index: every book that has local
+    /// bytes (mirror copy, or an on-device `source.epub`) gets built,
+    /// evicted ones are skipped, and the shared `search` model reports
+    /// progress. Overlapping calls queue one follow-up, like
+    /// `downloadPass`. No network — derived data only.
+    func indexPass() async {
+        if indexPassRunning {
+            indexPassQueued = true
+            return
+        }
+        indexPassRunning = true
+        defer {
+            indexPassRunning = false
+            indexPassQueued = false
+        }
+        repeat {
+            indexPassQueued = false
+            await runIndexPass()
+        } while indexPassQueued
+    }
+
+    private func runIndexPass() async {
+        guard let status = await library.textIndexStatus() else { return }
+        // Library order, not the status's sorted order.
+        let pending = library.books.map(\.id).filter { status.pendingBookIds.contains($0) }
+        search.indexStatus = status
+        guard !pending.isEmpty else {
+            search.indexingProgress = nil
+            return
+        }
+        var done = 0
+        search.indexingProgress = (done: 0, total: pending.count)
+        for id in pending {
+            // Mirror copies index directly; an on-device source.epub lets
+            // the core use its default path; anything else is evicted —
+            // it stays pending until a download pass lands it.
+            var epubPath: String? = nil
+            if mirror.has(id) {
+                epubPath = mirror.path(for: id)
+            } else if LibraryLocation.availability(of: library.sourceEpubPath(for: id)) != .local {
+                continue
+            }
+            _ = await library.indexBookText(bookId: id, epubPath: epubPath)
+            done += 1
+            search.indexingProgress = (done: done, total: pending.count)
+        }
+        search.indexStatus = await library.textIndexStatus()
+        search.indexingProgress = nil
     }
 
     /// True when this device can open the book without iCloud: a local
@@ -251,6 +319,7 @@ final class AppModel {
             for id in ids {
                 try? mirror.fill(bookId: id, from: library.sourceEpubPath(for: id))
             }
+            await indexPass()
             return true
         } catch {
             library.errorMessage = String(describing: error)

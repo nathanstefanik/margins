@@ -219,8 +219,8 @@ download. macOS does not build the index in this slice.
   from Notebook. The toolbar's Add Passage opens library search in picker
   mode.
 - **Library search** (the Search tab, the reader's "Search Library", and
-  the picker share one view): sections for Passages (marks), Notebooks,
-  Notes, In Your Books (full text), and Chapters & Books. Each passage-like
+  the picker share one view): sections for Passages (marks), In Your
+  Books (full text), Notebooks, Notes, and Chapters & Books. Each passage-like
   result offers "Add to Notebook…". The screen reports index progress and
   books whose text is not indexed yet.
 - **Reader:** the selection menu gains "Add to Notebook…" next to Note

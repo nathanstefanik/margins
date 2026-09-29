@@ -103,6 +103,9 @@ struct ReaderCallbacks {
     var userSwipe: (Bool) -> Void = { _ in }
     var captureRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
     var highlightRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
+    /// A passage reveal resolved: the located CFI, or nil when the text
+    /// was not found in the chapter.
+    var revealed: (String?) -> Void = { _ in }
 }
 
 @MainActor
@@ -304,6 +307,13 @@ final class ReaderBridge: NSObject {
         evaluate("readerClearSelection()")
     }
 
+    /// Asks the page to locate and flash `text` inside the chapter
+    /// currently on screen (jump-to-context for CFI-less targets). The
+    /// result comes back via `callbacks.revealed`.
+    func reveal(text: String) {
+        evaluate("readerRevealText(\(Self.javaScriptLiteral(text)))")
+    }
+
     /// The current page's CFI — tracked from `relocated` events rather
     /// than a JS round-trip, so it is valid the moment a page settles.
     private(set) var currentCfi: String?
@@ -434,6 +444,9 @@ extension ReaderBridge: WKScriptMessageHandler {
                 href: body["href"] as? String,
                 cfi: body["cfi"] as? String
             )
+        case "revealed":
+            let found = (body["found"] as? Bool) ?? false
+            callbacks.revealed(found ? body["cfi"] as? String : nil)
         case "tap":
             if let x = (body["x"] as? NSNumber)?.doubleValue,
                 let width = (body["width"] as? NSNumber)?.doubleValue

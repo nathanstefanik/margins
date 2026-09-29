@@ -401,6 +401,7 @@ struct LibraryScene: View {
             FileManager.default.fileExists(atPath: fixture)
         else { return }
         await library.importEpubs(atPaths: [fixture])
+        await app.indexPass()
     }
 
     /// Launch with `MARGINS_EVICT_FIXTURE=source|position|meta` after an

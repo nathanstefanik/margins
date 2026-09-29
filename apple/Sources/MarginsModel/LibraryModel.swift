@@ -318,12 +318,17 @@ public final class LibraryModel {
     /// Search hits and compiled-note marks share this so a thought lands
     /// on the sentence rather than the book card. `chapterKey` empty means
     /// a book-level target: first chapter, no CFI. `fragment` targets a
-    /// section inside the chapter's file (an outline row).
+    /// section inside the chapter's file (an outline row). `revealText`
+    /// (only when `cfi` is empty) arms the reader's text-match reveal —
+    /// the page locates the passage and reports a CFI, which `markId`
+    /// backfills onto.
     public func openPassage(
         bookId: String,
         chapterKey: String,
         cfi: String?,
-        fragment: String? = nil
+        fragment: String? = nil,
+        revealText: String? = nil,
+        markId: String? = nil
     ) async {
         await selectBook(id: bookId)
         guard let book = selectedBook, let reader else { return }
@@ -336,9 +341,55 @@ public final class LibraryModel {
         guard let chapter else { return }
         reader.open(book: book, chapter: chapter, fragment: fragment)
         reader.resume(at: (cfi?.isEmpty ?? true) ? nil : cfi)
+        if let revealText, !revealText.isEmpty, cfi?.isEmpty ?? true {
+            reader.requestReveal(
+                ReaderModel.PassageReveal(text: revealText, markId: markId, chapterKey: chapter.key))
+        } else {
+            _ = reader.consumeReveal()
+        }
         pendingReaderPresent = true
         passageJumpGeneration += 1
         await loadBookmarks(reader: reader)
+    }
+
+    /// Fills in a mark's `cfi` after a text reveal located it — only when
+    /// the mark still has none (a real CFI is never clobbered). Refreshes
+    /// the open reader's mark list when it is showing that chapter.
+    public func backfillMarkCfi(
+        bookId: String, chapterKey: String, markId: String, cfi: String
+    ) async {
+        guard let store, !cfi.isEmpty else { return }
+        do {
+            let note = try await store.getChapterNote(bookId: bookId, chapterKey: chapterKey)
+            guard let mark = note.marks.first(where: { $0.id == markId }),
+                mark.cfi?.isEmpty ?? true
+            else { return }
+            var updated = mark
+            updated.cfi = cfi
+            try await store.updateMark(bookId: bookId, chapterKey: chapterKey, mark: updated)
+            if let reader, reader.book?.id == bookId, reader.chapter?.key == chapterKey {
+                reader.noteMarksUpdated(
+                    reader.noteMarks.map { $0.id == markId ? updated : $0 })
+            }
+            await notesDidChange(bookId: bookId)
+        } catch {
+            // The mark or its note vanished mid-reveal — nothing to fill.
+        }
+    }
+
+    /// Background text indexing for one book (see `indexPass` on iOS).
+    /// Errors are swallowed — this runs unattended, and `textIndexStatus`
+    /// surfaces pending books instead.
+    @discardableResult
+    public func indexBookText(bookId: String, epubPath: String? = nil) async -> Bool {
+        guard let store else { return false }
+        return (try? await store.indexBookText(bookId: bookId, epubPath: epubPath)) ?? false
+    }
+
+    /// Which books have a full-text index — nil when the store is closed.
+    public func textIndexStatus() async -> TextIndexStatus? {
+        guard let store else { return nil }
+        return try? await store.textIndexStatus()
     }
 
     /// True when a passage jump should also push the reader scene. Views

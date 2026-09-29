@@ -54,6 +54,9 @@ struct ReaderScene: View {
     /// Book currently loaded in the webview; a passage jump to another
     /// book reloads the scheme URL instead of displaying a foreign CFI.
     @State private var loadedBookId: String?
+    /// The reveal in flight — kept for its `markId`/`chapterKey` so the
+    /// `revealed` callback can backfill the mark's CFI.
+    @State private var activeReveal: ReaderModel.PassageReveal?
 
     var body: some View {
         ZStack {
@@ -169,6 +172,7 @@ struct ReaderScene: View {
             { oldValue, newValue in
                 detectChapterFinish(to: newValue)
                 restoreHighlightsIfReady()
+                revealPendingPassageIfReady()
             }
         )
         .onAppear {
@@ -209,8 +213,35 @@ struct ReaderScene: View {
             },
             highlightRequest: { selection in
                 Task { highlight(selection) }
+            },
+            revealed: { cfi in
+                // A located reveal with a markId gets its CFI backfilled
+                // (the next jump opens at it directly); a miss just leaves
+                // the chapter open.
+                guard let cfi, let reveal = activeReveal, let markId = reveal.markId,
+                    let book = reader.book
+                else { return }
+                Task {
+                    await library.backfillMarkCfi(
+                        bookId: book.id, chapterKey: reveal.chapterKey,
+                        markId: markId, cfi: cfi)
+                }
             }
         )
+    }
+
+    /// Fires a pending text reveal once the rendition is live for its
+    /// chapter — the same readiness contract as `restoreHighlightsIfReady`
+    /// (`open()` resets progress; only a `relocated` for the current
+    /// chapter sets it again).
+    private func revealPendingPassageIfReady() {
+        guard let reveal = reader.pendingReveal,
+            reader.chapter?.key == reveal.chapterKey,
+            reader.progress != nil
+        else { return }
+        _ = reader.consumeReveal()
+        activeReveal = reveal
+        bridge?.reveal(text: reveal.text)
     }
 
     /// Highlight without a note: quote + empty body, committed instantly
@@ -557,6 +588,10 @@ struct ReaderScene: View {
             bridge?.jumpToChapter(reader.displayTarget)
         }
         chromeVisible = false
+        // Same-book jumps to an already-displayed chapter leave progress
+        // untouched — check the reveal directly rather than waiting for a
+        // relocated that may never differ.
+        revealPendingPassageIfReady()
     }
 
     #if DEBUG
