@@ -240,9 +240,10 @@ struct LibrarySearchView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .foregroundStyle(.primary)
-        .modifier(AddToNotebookSwipe(item: item) { source in
-            pendingAdd = AddCandidate(source: source, preview: snippet)
-        })
+        .modifier(
+            AddToNotebookSwipe(item: item) { source in
+                pendingAdd = AddCandidate(source: source, preview: snippet)
+            })
     }
 
     private func addToNotebook(notebookId: String, item: LibrarySearchItem) {

@@ -663,8 +663,8 @@ extension [Token] {
     }
 }
 
-private extension Token {
-    func matchesAnyOf(_ alternatives: [AnalyzedToken]) -> Bool {
+extension Token {
+    fileprivate func matchesAnyOf(_ alternatives: [AnalyzedToken]) -> Bool {
         alternatives.contains { matches($0) }
     }
 }

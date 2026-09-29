@@ -177,13 +177,15 @@ struct ReaderScene: View {
                 // Choosing a result dismisses first, then runs the open
                 // action — the tab switch tears this scene down.
                 LibrarySearchView(search: searchLibrarySearch, mode: .browse)
-                    .environment(\.openPassage, OpenPassageAction { target in
-                        searchLibraryPresented = false
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .milliseconds(350))
-                            openPassage(target)
-                        }
-                    })
+                    .environment(
+                        \.openPassage,
+                        OpenPassageAction { target in
+                            searchLibraryPresented = false
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(350))
+                                openPassage(target)
+                            }
+                        })
             }
             .presentationDetents([.large])
         }

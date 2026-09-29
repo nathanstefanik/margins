@@ -277,13 +277,15 @@ struct NotebooksTests {
 
         var segments = loaded.segments
         guard case .prose = segments[0].content else {
-            Issue.record("expected prose first"); return
+            Issue.record("expected prose first")
+            return
         }
         segments[0] = NotebookSegment(id: segments[0].id, content: .prose("rewritten"))
-        let passageRaw = try #require({
-            if case .passage(let p) = segments[1].content { return p.raw }
-            return nil
-        }())
+        let passageRaw = try #require(
+            {
+                if case .passage(let p) = segments[1].content { return p.raw }
+                return nil
+            }())
 
         _ = try harness.library.saveNotebook(id: "baaaaaaaaa", segments: segments)
         let after = try harness.body(ofFile: fileName)
@@ -398,7 +400,8 @@ struct NotebooksTests {
             bookDir: harness.library.bookDir(harness.bookID), chapterKey: "001")
         #expect(note.marks.count == 1, "the mark was reused, not duplicated")
         guard case .passage(let passage) = notebook.segments.last?.content else {
-            Issue.record("expected a trailing passage"); return
+            Issue.record("expected a trailing passage")
+            return
         }
         #expect(passage.ref.markId == mark.id)
     }
@@ -418,12 +421,14 @@ struct NotebooksTests {
             commentary: ""
         )
         guard case .passage(let passage) = notebook.segments.last?.content else {
-            Issue.record("expected a trailing passage"); return
+            Issue.record("expected a trailing passage")
+            return
         }
         #expect(passage.ref.markId == mark.id)
-        #expect(try Notes.loadChapterNote(
-            bookDir: harness.library.bookDir(harness.bookID), chapterKey: "001"
-        ).marks.count == 1)
+        #expect(
+            try Notes.loadChapterNote(
+                bookDir: harness.library.bookDir(harness.bookID), chapterKey: "001"
+            ).marks.count == 1)
     }
 
     @Test("addPassage from an existing mark embeds it directly")
@@ -438,7 +443,8 @@ struct NotebooksTests {
             commentary: ""
         )
         guard case .passage(let passage) = notebook.segments.last?.content else {
-            Issue.record("expected a trailing passage"); return
+            Issue.record("expected a trailing passage")
+            return
         }
         #expect(passage.ref.markId == mark.id)
         #expect(passage.resolution.status == .ok)
@@ -483,7 +489,8 @@ struct NotebooksTests {
 
         let loaded = try harness.library.notebook(id: summary.id)
         guard case .passage(let passage) = loaded.segments.first?.content else {
-            Issue.record("expected a leading passage"); return
+            Issue.record("expected a leading passage")
+            return
         }
         #expect(passage.resolution.status == .markMissing)
         #expect(passage.resolution.quote == "the gone passage")
@@ -508,7 +515,8 @@ struct NotebooksTests {
 
         let loaded = try harness.library.notebook(id: summary.id)
         guard case .passage(let passage) = loaded.segments.first?.content else {
-            Issue.record("expected a leading passage"); return
+            Issue.record("expected a leading passage")
+            return
         }
         #expect(passage.resolution.status == .bookMissing)
         #expect(passage.resolution.quote == "a quote")
@@ -536,7 +544,8 @@ struct NotebooksTests {
         // Load shows the live quote.
         let loaded = try harness.library.notebook(id: summary.id)
         guard case .passage(let passage) = loaded.segments.first?.content else {
-            Issue.record("expected a leading passage"); return
+            Issue.record("expected a leading passage")
+            return
         }
         #expect(passage.resolution.quote == "the new words")
         #expect(passage.cachedQuote == "the old words")

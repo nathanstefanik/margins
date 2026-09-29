@@ -375,8 +375,7 @@ public final class Library {
 
     /// Reverse-lookup cache for `notebooksCiting`, keyed by file path and
     /// gated on modification date (docs/commonplace.md "Reverse lookup").
-    private var notebookCitations:
-        [String: (modified: Date?, summary: NotebookSummary, refs: [PassageRef])] = [:]
+    private var notebookCitations: [String: (modified: Date?, summary: NotebookSummary, refs: [PassageRef])] = [:]
 
     private var notebooksDir: String {
         Notebooks.dir(root: root)
@@ -424,14 +423,14 @@ public final class Library {
         let ref: PassageRef
         var touchedBook: String?
         switch source {
-        case let .mark(bookId, chapterKey, markId):
+        case .mark(let bookId, let chapterKey, let markId):
             // The passage embeds a mark verbatim — verify it exists.
             let (_, note) = try chapterContext(bookID: bookId, chapterKey: chapterKey)
             guard note.marks.contains(where: { $0.id == markId }) else {
                 throw CoreError.notes("mark not found")
             }
             ref = PassageRef(bookId: bookId, chapterKey: chapterKey, markId: markId)
-        case let .selection(bookId, chapterKey, cfi, percent, quote):
+        case .selection(let bookId, let chapterKey, let cfi, let percent, let quote):
             ref = PassageRef(
                 bookId: bookId, chapterKey: chapterKey,
                 markId: try selectionMarkID(

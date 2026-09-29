@@ -192,7 +192,8 @@ final class TextIndex {
         var terms = ""
         for stem in postings.keys.sorted(by: utf8Less) {
             // Postings were appended in passage order — p is ascending.
-            terms += stem + "\t"
+            terms +=
+                stem + "\t"
                 + postings[stem]!.map { "\($0.passage):\($0.tf)" }
                 .joined(separator: ",") + "\n"
         }
@@ -346,8 +347,9 @@ final class TextIndex {
             var candidates: [Int: [(term: Int, tf: Int, w: Double)]] = [:]
             for (termIndex, expansions) in expansions.enumerated() {
                 for expansion in expansions where !expansion.heavy && expansion.df > 0 {
-                    guard let postings = postings(
-                        of: expansion.stem, in: termsData)
+                    guard
+                        let postings = postings(
+                            of: expansion.stem, in: termsData)
                     else { continue }
                     let idf = Self.idf(df: expansion.df, docs: totalDocs)
                     for posting in postings {
@@ -366,8 +368,10 @@ final class TextIndex {
                     score += entry.w * Self.tfNorm(tf: entry.tf, dl: dl, avgdl: avgdl)
                 }
                 scored.append(
-                    (bookId, passageIndex,
-                     Candidate(score: score, matched: Set(entries.map(\.term)))))
+                    (
+                        bookId, passageIndex,
+                        Candidate(score: score, matched: Set(entries.map(\.term)))
+                    ))
             }
         }
 
@@ -391,8 +395,7 @@ final class TextIndex {
                 let line = try? MarginsJSON.decode(
                     PassageLine.self,
                     from: data.subdata(
-                        in: lineIndex[candidate.passage].start
-                            ..< lineIndex[candidate.passage].end))
+                        in: lineIndex[candidate.passage].start..<lineIndex[candidate.passage].end))
             else { return }
             prepped[i] = line
             prepTokens[i] = TextAnalyzer.tokens(line.t)
@@ -426,7 +429,8 @@ final class TextIndex {
                     }
                     guard let tf = counts![expansion.stem], tf > 0 else { continue }
                     matched.insert(termIndex)
-                    score += expansion.weight * Self.idf(df: expansion.df, docs: totalDocs)
+                    score +=
+                        expansion.weight * Self.idf(df: expansion.df, docs: totalDocs)
                         * Self.tfNorm(tf: tf, dl: dl, avgdl: avgdl)
                 }
             }
@@ -436,11 +440,12 @@ final class TextIndex {
 
             let window = proximityWindow(
                 tokens: tokens, matched: matched, expansions: expansions)
-            var windowStart16 = tokens.first { token in
-                matched.contains { term in
-                    expansions[term].contains { $0.stem == token.stem }
-                }
-            }?.start16 ?? 0
+            var windowStart16 =
+                tokens.first { token in
+                    matched.contains { term in
+                        expansions[term].contains { $0.stem == token.stem }
+                    }
+                }?.start16 ?? 0
             if let window {
                 let m = matched.count
                 if m >= 2 {
@@ -459,17 +464,18 @@ final class TextIndex {
             let (snippet, ranges) = makeSnippet(
                 passage: passage, tokens: tokens, windowStart16: windowStart16,
                 expansions: expansions)
-            ranked.append((
-                ScoredPassage(
-                    bookId: candidate.bookId,
-                    passageIndex: candidate.passage,
-                    chapterKey: line.k,
-                    passage: passage,
-                    snippet: snippet,
-                    snippetRanges: ranges,
-                    score: score),
-                matched
-            ))
+            ranked.append(
+                (
+                    ScoredPassage(
+                        bookId: candidate.bookId,
+                        passageIndex: candidate.passage,
+                        chapterKey: line.k,
+                        passage: passage,
+                        snippet: snippet,
+                        snippetRanges: ranges,
+                        score: score),
+                    matched
+                ))
         }
         ranked.sort { lhs, rhs in
             if lhs.passage.score != rhs.passage.score {
@@ -541,7 +547,8 @@ final class TextIndex {
     private func typoAlternates(of stem: String, in stems: [String]) -> [String] {
         guard stem.count >= 4 else { return [] }
         let limit = stem.count >= 8 ? 2 : 1
-        return stems
+        return
+            stems
             .compactMap { candidate -> (String, Int)? in
                 guard candidate != stem,
                     let distance = EditDistance.osa(stem, candidate, limit: limit)
@@ -636,13 +643,16 @@ final class TextIndex {
         let windowStart = utf16.index(
             utf16.startIndex, offsetBy: min(windowStart16, utf16.count))
         let charsBefore = 40
-        let start = utf16.index(windowStart, offsetBy: -charsBefore, limitedBy: utf16.startIndex)
+        let start =
+            utf16.index(windowStart, offsetBy: -charsBefore, limitedBy: utf16.startIndex)
             ?? utf16.startIndex
         let charsAfter = 160
-        let end = utf16.index(windowStart, offsetBy: charsAfter, limitedBy: utf16.endIndex)
+        let end =
+            utf16.index(windowStart, offsetBy: charsAfter, limitedBy: utf16.endIndex)
             ?? utf16.endIndex
         let prefix = start > utf16.startIndex
-        let snippet = (prefix ? "…" : "")
+        let snippet =
+            (prefix ? "…" : "")
             + String(utf16[start..<end])!
             + (end < utf16.endIndex ? "…" : "")
         let offset = utf16.distance(from: utf16.startIndex, to: start)
@@ -682,8 +692,9 @@ final class TextIndex {
         if let cached = bookData[bookId]?.terms { return cached }
         let path = booksDir.appendingPathComponent(bookId)
             .appendingPathComponent("terms.tsv")
-        guard let data = try? Data(
-            contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)
+        guard
+            let data = try? Data(
+                contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)
         else { return nil }
         var entry = bookData[bookId] ?? BookData()
         entry.terms = data
@@ -696,8 +707,9 @@ final class TextIndex {
         if let cached = bookData[bookId]?.lines { return cached }
         let path = booksDir.appendingPathComponent(bookId)
             .appendingPathComponent("passages.jsonl")
-        guard let data = try? Data(
-            contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)
+        guard
+            let data = try? Data(
+                contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)
         else { return nil }
         var entry = bookData[bookId] ?? BookData()
         entry.lines = data
@@ -907,7 +919,8 @@ final class TextIndex {
 
     private func loadStats() -> Stats {
         if let stats { return stats }
-        let stats = (try? readStats())
+        let stats =
+            (try? readStats())
             ?? Stats(format: Self.format, books: [], passages: 0, tokens: 0)
         self.stats = stats
         return stats

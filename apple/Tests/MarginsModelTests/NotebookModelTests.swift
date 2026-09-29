@@ -1,8 +1,8 @@
 import Foundation
+import MarginsCore
 import Testing
 
 @testable import MarginsModel
-import MarginsCore
 
 @Suite("Notebook prose helpers")
 struct NotebookProseTests {

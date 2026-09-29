@@ -190,16 +190,18 @@ struct TextIndexSyntheticTests {
         // Prime the synced index.json, then hold its timestamp.
         _ = try await store.listBooks()
         let indexPath = root.appendingPathComponent("library/index.json").path
-        let before = try FileManager.default.attributesOfItem(atPath: indexPath)[
-            .modificationDate] as? Date
+        let before =
+            try FileManager.default.attributesOfItem(atPath: indexPath)[
+                .modificationDate] as? Date
         #expect(before != nil)
 
         for _ in 0..<3 {
             _ = try await store.searchBookText(query: "needle")
             _ = try await store.textIndexStatus()
         }
-        let after = try FileManager.default.attributesOfItem(atPath: indexPath)[
-            .modificationDate] as? Date
+        let after =
+            try FileManager.default.attributesOfItem(atPath: indexPath)[
+                .modificationDate] as? Date
         #expect(after == before)
     }
 

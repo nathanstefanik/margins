@@ -107,7 +107,8 @@ struct TextExtractTests {
         // Sentences of ~120 characters; ~3 000 characters in all.
         let sentence =
             "Sentence number that runs long enough to matter for the chunking logic of the extractor body."
-        let document = "<p>" + (0..<30).map { "\(sentence) \($0)." }.joined(separator: " ")
+        let document =
+            "<p>" + (0..<30).map { "\(sentence) \($0)." }.joined(separator: " ")
             + "</p>"
         let chunks = passages(document)
         #expect(chunks.count > 2)

@@ -320,10 +320,8 @@ public final class NotebookModel {
         while index + 1 < segments.count {
             let leftIsPassage: Bool
             let rightIsPassage: Bool
-            if case .passage = segments[index].content { leftIsPassage = true }
-            else { leftIsPassage = false }
-            if case .passage = segments[index + 1].content { rightIsPassage = true }
-            else { rightIsPassage = false }
+            if case .passage = segments[index].content { leftIsPassage = true } else { leftIsPassage = false }
+            if case .passage = segments[index + 1].content { rightIsPassage = true } else { rightIsPassage = false }
             if leftIsPassage && rightIsPassage {
                 segments.insert(
                     NotebookSegment(id: UUID().uuidString, content: .prose("\n")),

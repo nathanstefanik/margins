@@ -37,10 +37,13 @@ struct NotebooksScene: View {
                     Button("Create") { create(createTitle) }
                     Button("Cancel", role: .cancel) {}
                 }
-                .alert("Rename Notebook", isPresented: Binding(
-                    get: { renaming != nil },
-                    set: { if !$0 { renaming = nil } }
-                )) {
+                .alert(
+                    "Rename Notebook",
+                    isPresented: Binding(
+                        get: { renaming != nil },
+                        set: { if !$0 { renaming = nil } }
+                    )
+                ) {
                     TextField("Title", text: $renameTitle)
                     Button("Rename") {
                         if let notebook = renaming {
@@ -184,7 +187,8 @@ struct NotebookDetailView: View {
         .navigationTitle(
             notebooks.current?.summary.id == notebookId
                 ? (notebooks.current?.summary.title ?? "")
-                : "")
+                : ""
+        )
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

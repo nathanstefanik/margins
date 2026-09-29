@@ -53,13 +53,19 @@ struct LibraryScene: View {
                 searchTab
             }
         }
-        .environment(\.openPassage, OpenPassageAction { target in
-            Task { await openPassageTarget(target) }
-        })
-        .environment(\.openNotebook, OpenNotebookAction { notebookId in
-            selectedTab = .notebooks
-            notebooksPath = [notebookId]
-        })
+        .environment(
+            \.openPassage,
+            OpenPassageAction { target in
+                Task { await openPassageTarget(target) }
+            }
+        )
+        .environment(
+            \.openNotebook,
+            OpenNotebookAction { notebookId in
+                selectedTab = .notebooks
+                notebooksPath = [notebookId]
+            }
+        )
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .overlay { materializingOverlay }

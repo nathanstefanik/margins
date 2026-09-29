@@ -10,58 +10,60 @@ import Testing
 struct TextAnalysisTests {
     // MARK: Porter2
 
-    @Test("porter2 stems match the Snowball vectors", arguments: [
-        ("consign", "consign"), ("consigned", "consign"), ("consigning", "consign"),
-        ("consignment", "consign"), ("consist", "consist"), ("consisted", "consist"),
-        ("consistency", "consist"), ("consistent", "consist"), ("consistently", "consist"),
-        ("consisting", "consist"), ("consists", "consist"), ("consolation", "consol"),
-        ("consolations", "consol"), ("consolatory", "consolatori"), ("console", "consol"),
-        ("consoled", "consol"), ("consoles", "consol"), ("consolidate", "consolid"),
-        ("consolidated", "consolid"), ("consolidating", "consolid"), ("consoling", "consol"),
-        ("consolingly", "consol"), ("consols", "consol"), ("consonant", "conson"),
-        ("consort", "consort"), ("consorted", "consort"), ("consorting", "consort"),
-        ("conspicuous", "conspicu"), ("conspicuously", "conspicu"), ("conspiracy", "conspiraci"),
-        ("conspirator", "conspir"), ("conspirators", "conspir"), ("conspire", "conspir"),
-        ("conspired", "conspir"), ("conspiring", "conspir"), ("constable", "constabl"),
-        ("constables", "constabl"), ("constance", "constanc"), ("constancy", "constanc"),
-        ("constant", "constant"),
-        ("knack", "knack"), ("knackeries", "knackeri"), ("knacks", "knack"), ("knag", "knag"),
-        ("knave", "knave"), ("knaves", "knave"), ("knavish", "knavish"), ("kneaded", "knead"),
-        ("kneading", "knead"), ("knee", "knee"), ("kneel", "kneel"), ("kneeled", "kneel"),
-        ("kneeling", "kneel"), ("kneels", "kneel"), ("knees", "knee"), ("knell", "knell"),
-        ("knelt", "knelt"), ("knew", "knew"), ("knick", "knick"), ("knif", "knif"),
-        ("knife", "knife"), ("knight", "knight"), ("knightly", "knight"), ("knights", "knight"),
-        ("knit", "knit"), ("knits", "knit"), ("knitted", "knit"), ("knitting", "knit"),
-        ("knives", "knive"), ("knob", "knob"), ("knobs", "knob"), ("knock", "knock"),
-        ("knocked", "knock"), ("knocker", "knocker"), ("knockers", "knocker"),
-        ("knocking", "knock"), ("knocks", "knock"), ("knopp", "knopp"), ("knot", "knot"),
-        ("knots", "knot"),
-        ("caresses", "caress"), ("ponies", "poni"), ("ties", "tie"), ("cats", "cat"),
-        ("agreed", "agre"), ("plastered", "plaster"), ("motoring", "motor"), ("sing", "sing"),
-        ("hopping", "hop"), ("falling", "fall"), ("hissing", "hiss"), ("filing", "file"),
-        ("happy", "happi"), ("deceive", "deceiv"), ("deceived", "deceiv"),
-        ("deceiving", "deceiv"), ("deception", "decept"), ("generously", "generous"),
-        // The exceptional-forms list (Snowball's exception1).
-        ("skis", "ski"), ("skies", "sky"), ("dying", "die"), ("lying", "lie"),
-        ("tying", "tie"), ("idly", "idl"), ("gently", "gentl"), ("ugly", "ugli"),
-        ("early", "earli"), ("only", "onli"), ("singly", "singl"),
-        // The invariant forms.
-        ("sky", "sky"), ("news", "news"), ("howe", "howe"), ("atlas", "atlas"),
-        ("cosmos", "cosmos"), ("bias", "bias"), ("andes", "andes"),
-        // The step-1b invariants (checked where the suffix is handled).
-        ("inning", "inning"), ("outing", "outing"), ("canning", "canning"),
-        ("herring", "herring"), ("earring", "earring"), ("evening", "evening"),
-        ("proceed", "proceed"), ("exceed", "exceed"), ("succeed", "succeed"),
-        // Words of two letters or fewer are unchanged.
-        ("is", "is"), ("as", "as"), ("be", "be"),
-        // Snowball 3.x additions: -eed exceptions inside step 1b, and the
-        // "past"/vocabulary-spacing region prefixes.
-        ("deed", "deed"), ("feed", "feed"), ("agreement", "agreement"),
-        ("pasted", "paste"), ("pasting", "paste"), ("paste", "paste"), ("past", "past"),
-        // Longest-match semantics: step 2's among picks "entli", which
-        // fails the R1 test, so the shorter "li" never applies.
-        ("fluently", "fluentli"), ("statements", "statement"),
-    ])
+    @Test(
+        "porter2 stems match the Snowball vectors",
+        arguments: [
+            ("consign", "consign"), ("consigned", "consign"), ("consigning", "consign"),
+            ("consignment", "consign"), ("consist", "consist"), ("consisted", "consist"),
+            ("consistency", "consist"), ("consistent", "consist"), ("consistently", "consist"),
+            ("consisting", "consist"), ("consists", "consist"), ("consolation", "consol"),
+            ("consolations", "consol"), ("consolatory", "consolatori"), ("console", "consol"),
+            ("consoled", "consol"), ("consoles", "consol"), ("consolidate", "consolid"),
+            ("consolidated", "consolid"), ("consolidating", "consolid"), ("consoling", "consol"),
+            ("consolingly", "consol"), ("consols", "consol"), ("consonant", "conson"),
+            ("consort", "consort"), ("consorted", "consort"), ("consorting", "consort"),
+            ("conspicuous", "conspicu"), ("conspicuously", "conspicu"), ("conspiracy", "conspiraci"),
+            ("conspirator", "conspir"), ("conspirators", "conspir"), ("conspire", "conspir"),
+            ("conspired", "conspir"), ("conspiring", "conspir"), ("constable", "constabl"),
+            ("constables", "constabl"), ("constance", "constanc"), ("constancy", "constanc"),
+            ("constant", "constant"),
+            ("knack", "knack"), ("knackeries", "knackeri"), ("knacks", "knack"), ("knag", "knag"),
+            ("knave", "knave"), ("knaves", "knave"), ("knavish", "knavish"), ("kneaded", "knead"),
+            ("kneading", "knead"), ("knee", "knee"), ("kneel", "kneel"), ("kneeled", "kneel"),
+            ("kneeling", "kneel"), ("kneels", "kneel"), ("knees", "knee"), ("knell", "knell"),
+            ("knelt", "knelt"), ("knew", "knew"), ("knick", "knick"), ("knif", "knif"),
+            ("knife", "knife"), ("knight", "knight"), ("knightly", "knight"), ("knights", "knight"),
+            ("knit", "knit"), ("knits", "knit"), ("knitted", "knit"), ("knitting", "knit"),
+            ("knives", "knive"), ("knob", "knob"), ("knobs", "knob"), ("knock", "knock"),
+            ("knocked", "knock"), ("knocker", "knocker"), ("knockers", "knocker"),
+            ("knocking", "knock"), ("knocks", "knock"), ("knopp", "knopp"), ("knot", "knot"),
+            ("knots", "knot"),
+            ("caresses", "caress"), ("ponies", "poni"), ("ties", "tie"), ("cats", "cat"),
+            ("agreed", "agre"), ("plastered", "plaster"), ("motoring", "motor"), ("sing", "sing"),
+            ("hopping", "hop"), ("falling", "fall"), ("hissing", "hiss"), ("filing", "file"),
+            ("happy", "happi"), ("deceive", "deceiv"), ("deceived", "deceiv"),
+            ("deceiving", "deceiv"), ("deception", "decept"), ("generously", "generous"),
+            // The exceptional-forms list (Snowball's exception1).
+            ("skis", "ski"), ("skies", "sky"), ("dying", "die"), ("lying", "lie"),
+            ("tying", "tie"), ("idly", "idl"), ("gently", "gentl"), ("ugly", "ugli"),
+            ("early", "earli"), ("only", "onli"), ("singly", "singl"),
+            // The invariant forms.
+            ("sky", "sky"), ("news", "news"), ("howe", "howe"), ("atlas", "atlas"),
+            ("cosmos", "cosmos"), ("bias", "bias"), ("andes", "andes"),
+            // The step-1b invariants (checked where the suffix is handled).
+            ("inning", "inning"), ("outing", "outing"), ("canning", "canning"),
+            ("herring", "herring"), ("earring", "earring"), ("evening", "evening"),
+            ("proceed", "proceed"), ("exceed", "exceed"), ("succeed", "succeed"),
+            // Words of two letters or fewer are unchanged.
+            ("is", "is"), ("as", "as"), ("be", "be"),
+            // Snowball 3.x additions: -eed exceptions inside step 1b, and the
+            // "past"/vocabulary-spacing region prefixes.
+            ("deed", "deed"), ("feed", "feed"), ("agreement", "agreement"),
+            ("pasted", "paste"), ("pasting", "paste"), ("paste", "paste"), ("past", "past"),
+            // Longest-match semantics: step 2's among picks "entli", which
+            // fails the R1 test, so the shorter "li" never applies.
+            ("fluently", "fluentli"), ("statements", "statement"),
+        ])
     func porter2Vector(word: String, stem: String) {
         #expect(Porter2.stem(word) == stem)
     }

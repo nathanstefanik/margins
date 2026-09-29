@@ -1,8 +1,8 @@
 import Foundation
+import MarginsCore
 import Testing
 
 @testable import MarginsModel
-import MarginsCore
 
 private func capturedHit(
     _ kind: SearchHitKind, id: String = "b",
@@ -102,7 +102,10 @@ struct LibrarySearchTests {
         let search = LibrarySearch()
         search.debounceSleep = { _ in }
         let ran = SendableFlag()
-        search.capturedExecutor = { _ in ran.value = true; return [] }
+        search.capturedExecutor = { _ in
+            ran.value = true
+            return []
+        }
         search.setQuery("x")
         search.setQuery("   ")
         try? await Task.sleep(for: .milliseconds(20))

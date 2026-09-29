@@ -52,7 +52,7 @@ public enum Notebooks {
         // names, so an evicted notebook still counts as a file here.
         let files =
             (Files.isDirectory(dir)
-                ? (try? FileStore.contents(ofDirectory: dir)) ?? [] : [])
+            ? (try? FileStore.contents(ofDirectory: dir)) ?? [] : [])
             .filter { $0.hasSuffix(".md") && FileStore.isFile($0) }
             .map { ($0 as NSString).lastPathComponent }
 
@@ -64,7 +64,8 @@ public enum Notebooks {
         }
 
         // `isEvicted` is a live property, not stored: recompute per file.
-        return summaries
+        return
+            summaries
             .map { summary -> NotebookSummary in
                 var summary = summary
                 summary.isEvicted = FileStore.isEvicted(
@@ -201,9 +202,10 @@ public enum Notebooks {
         let parsed = try parseFile(path: path)
         let segments = resolveSegments(parsed.segments, root: root)
         return Notebook(
-            summary: summary(for: ParsedFile(
-                frontmatter: parsed.frontmatter, body: parsed.body, segments: segments
-            ), file: entry.file),
+            summary: summary(
+                for: ParsedFile(
+                    frontmatter: parsed.frontmatter, body: parsed.body, segments: segments
+                ), file: entry.file),
             segments: segments
         )
     }
