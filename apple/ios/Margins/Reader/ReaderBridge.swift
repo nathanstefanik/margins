@@ -103,6 +103,9 @@ struct ReaderCallbacks {
     var userSwipe: (Bool) -> Void = { _ in }
     var captureRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
     var highlightRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
+    /// The selection menu's "Add to Notebook…" — the selection travels
+    /// as a `.selection` passage source.
+    var notebookRequest: (ReaderBridge.ReaderSelection) -> Void = { _ in }
     /// A passage reveal resolved: the located CFI, or nil when the text
     /// was not found in the chapter.
     var revealed: (String?) -> Void = { _ in }
@@ -496,7 +499,13 @@ extension ReaderBridge: WKUIDelegate {
         let highlight = UIAction(title: "Highlight", image: UIImage(systemName: "highlighter")) { [weak self] _ in
             self?.callbacks.highlightRequest(selection)
         }
-        return [UIMenu(title: "", options: .displayInline, children: [note, highlight])] + recommendedActions
+        let notebook = UIAction(
+            title: "Add to Notebook…", image: UIImage(systemName: "text.book.closed")
+        ) { [weak self] _ in
+            self?.callbacks.notebookRequest(selection)
+        }
+        return [UIMenu(title: "", options: .displayInline, children: [note, highlight, notebook])]
+            + recommendedActions
     }
 
     func webView(

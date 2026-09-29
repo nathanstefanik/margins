@@ -34,6 +34,28 @@ struct ReaderRevealTests {
         #expect((message["cfi"] as? String)?.isEmpty == false)
     }
 
+    @Test("a needle crossing a <br/> still matches")
+    @MainActor
+    func revealAcrossLineBreaks() async throws {
+        let harness = try ReaderLayoutHarness(
+            fixture: .reveal, viewport: CGSize(width: 800, height: 900))
+        defer { harness.dismantle() }
+        try await harness.load(chapter: "ch1.xhtml")
+        try await harness.waitForLayoutSettled()
+
+        // The verse is one <p> split by <br/>: the walk's text nodes join
+        // as "…hearts.theonlyhard…" so the space-carrying needle can only
+        // match on the whitespace-stripped form.
+        let literal = String(
+            data: try JSONEncoder().encode(
+                "grow your hearts the only hard work is to kneel"),
+            encoding: .utf8)!
+        _ = try await harness.evaluate("readerRevealText(\(literal)); \"sent\"")
+        let message = try await harness.waitForMessage("revealed", "reveal across <br/>")
+        #expect(message["found"] as? Bool == true)
+        #expect((message["cfi"] as? String)?.isEmpty == false)
+    }
+
     @Test("a needle absent from the chapter reports found:false")
     @MainActor
     func revealMisses() async throws {

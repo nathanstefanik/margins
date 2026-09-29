@@ -19,6 +19,7 @@ struct ReaderScene: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openPassage) private var openPassage
 
     /// Shared with the library grid so the reader grows out of the cover.
     let zoomNamespace: Namespace.ID
@@ -36,6 +37,13 @@ struct ReaderScene: View {
     @State private var captureSelection: ReaderBridge.ReaderSelection?
     @State private var capturePresented = false
     @State private var flashVisible = false
+    /// The badge's current copy — "Mark saved", "Added to …".
+    @State private var flashText = "Mark saved"
+    /// A selection queued for the Add to Notebook sheet.
+    @State private var notebookCandidate: NotebookAddCandidate?
+    /// The "Search Library" sheet's own query state.
+    @State private var searchLibraryPresented = false
+    @State private var searchLibrarySearch = LibrarySearch()
     /// The chapter just finished (last page turned past); drives the quiet
     /// write-the-note prompt.
     @State private var finishedChapter: ChapterMeta?
@@ -81,6 +89,7 @@ struct ReaderScene: View {
             }
             if flashVisible {
                 flashBadge
+                    .transition(.opacity)
             }
         }
         // Overlays sit on the ZStack, not on the WKWebView representable:
@@ -149,6 +158,35 @@ struct ReaderScene: View {
                     flash()
                 })
         }
+        .sheet(item: $notebookCandidate) { candidate in
+            AddToNotebookSheet(source: candidate.source, preview: candidate.preview) { title in
+                Task {
+                    // The add created (or reused) a mark — reload so the
+                    // marks sheet and highlights see it.
+                    await library.loadChapterNote(reader: reader)
+                    if let cfi = candidate.cfi {
+                        bridge?.restoreHighlights([cfi])
+                    }
+                    flash("Added to \(title)")
+                    bridge?.clearSelection()
+                }
+            }
+        }
+        .sheet(isPresented: $searchLibraryPresented) {
+            NavigationStack {
+                // Choosing a result dismisses first, then runs the open
+                // action — the tab switch tears this scene down.
+                LibrarySearchView(search: searchLibrarySearch, mode: .browse)
+                    .environment(\.openPassage, OpenPassageAction { target in
+                        searchLibraryPresented = false
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(350))
+                            openPassage(target)
+                        }
+                    })
+            }
+            .presentationDetents([.large])
+        }
         .onChange(of: scenePhase) {
             // iOS suspends the app without warning: never lose position
             // (or a drafted note) to suspension.
@@ -214,6 +252,16 @@ struct ReaderScene: View {
             highlightRequest: { selection in
                 Task { highlight(selection) }
             },
+            notebookRequest: { selection in
+                guard let book = reader.book, let chapter = reader.chapter else { return }
+                notebookCandidate = NotebookAddCandidate(
+                    source: .selection(
+                        bookId: book.id, chapterKey: chapter.key,
+                        cfi: selection.cfiRange, percent: reader.bookPercent,
+                        quote: selection.text),
+                    preview: selection.text,
+                    cfi: selection.cfiRange)
+            },
             revealed: { cfi in
                 // A located reveal with a markId gets its CFI backfilled
                 // (the next jump opens at it directly); a miss just leaves
@@ -265,7 +313,8 @@ struct ReaderScene: View {
         }
     }
 
-    private func flash() {
+    private func flash(_ text: String = "Mark saved") {
+        flashText = text
         withAnimation(reduceMotion ? nil : DesignTokens.Motion.chrome) { flashVisible = true }
         Task {
             try? await Task.sleep(for: .seconds(1.4))
@@ -274,12 +323,11 @@ struct ReaderScene: View {
     }
 
     private var flashBadge: some View {
-        Text("Mark saved")
+        Text(flashText)
             .font(.footnote)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .glassEffect(.regular, in: .capsule)
-            .transition(.opacity)
             .accessibilityIdentifier("reader-flash")
     }
 
@@ -423,6 +471,7 @@ struct ReaderScene: View {
         case .bookmarks: bookmarksPresented = true
         case .marks: marksPresented = true
         case .chapterNote: editorPresented = true
+        case .searchLibrary: searchLibraryPresented = true
         case nil: break
         }
         pendingDestination = nil

@@ -1327,8 +1327,11 @@ function readerRevealNormalizeChar(char) {
 }
 
 // Normalizes the section document's text nodes into one searchable string,
-// keeping a (node, offset) map per normalized character so a found span
-// becomes a DOM Range — and thus a CFI.
+// keeping a (node, offset) map per kept character so a found span becomes a
+// DOM Range — and thus a CFI. Only letters and digits survive: text nodes
+// carry no whitespace across <br> or inline-element boundaries
+// ("one<br/>two" walks as "onetwo"), and a needle may lack the doc's
+// punctuation (or vice versa), so matching is alphanumeric-only.
 function readerRevealMap(contents) {
   const doc = contents.document;
   const body = doc && doc.body;
@@ -1343,11 +1346,7 @@ function readerRevealMap(contents) {
     const value = node.nodeValue || "";
     for (let i = 0; i < value.length; i += 1) {
       const mapped = readerRevealNormalizeChar(value.charAt(i));
-      if (mapped === null) {
-        continue;
-      }
-      // Whitespace runs collapse to one space, across nodes too.
-      if (mapped === " " && (normalized.length === 0 || normalized.endsWith(" "))) {
+      if (mapped === null || !/[\p{L}\p{N}]/u.test(mapped)) {
         continue;
       }
       positions.push({ node: node, offset: i });
@@ -1358,6 +1357,9 @@ function readerRevealMap(contents) {
   return { text: normalized, positions: positions };
 }
 
+// The needle's space-collapsing form, for word/sentence fallbacks; the
+// matched form drops everything but letters and digits (see
+// readerRevealMap).
 function readerRevealNormalize(text) {
   let out = "";
   for (let i = 0; i < text.length; i += 1) {
@@ -1371,6 +1373,10 @@ function readerRevealNormalize(text) {
     out += mapped;
   }
   return out;
+}
+
+function readerRevealStrip(text) {
+  return text.replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 window.readerRevealText = async function (needle) {
@@ -1415,10 +1421,14 @@ window.readerRevealText = async function (needle) {
     let start = -1;
     let length = 0;
     for (let c = 0; c < candidates.length; c += 1) {
-      const index = map.text.indexOf(candidates[c]);
+      const stripped = readerRevealStrip(candidates[c]);
+      if (!stripped.length) {
+        continue;
+      }
+      const index = map.text.indexOf(stripped);
       if (index >= 0) {
         start = index;
-        length = candidates[c].length;
+        length = stripped.length;
         break;
       }
     }

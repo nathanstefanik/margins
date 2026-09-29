@@ -371,6 +371,8 @@ def build_reveal() -> None:
   <p id="p-noisy">Above all, don’t lie to your­self — the man who​lies to
     himself and listens to his own lie comes to a point where he cannot
     distinguish the truth.</p>
+  <p id="p-verse">Grow your souls.<br/>Grow your hearts.<br/>The only hard
+    work is to kneel.</p>
 </body>
 </html>
 """
