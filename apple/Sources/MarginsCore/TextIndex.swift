@@ -164,10 +164,14 @@ final class TextIndex {
 
         // Tokenization is the bulk of build time — a whole book is
         // ~400k token/stem passes — so it fans out across cores while
-        // postings/JSONL merge stays serial (order-deterministic).
+        // postings/JSONL merge stays serial (order-deterministic). The
+        // buffer is fixed storage: each thread writes disjoint indices.
         var analyzed = [[AnalyzedToken]](repeating: [], count: extracted.count)
-        DispatchQueue.concurrentPerform(iterations: extracted.count) { index in
-            analyzed[index] = TextAnalyzer.tokens(extracted[index].text)
+        analyzed.withUnsafeMutableBufferPointer { buffer in
+            let shared = SharedBuffer(buffer)
+            DispatchQueue.concurrentPerform(iterations: extracted.count) { index in
+                shared[index] = TextAnalyzer.tokens(extracted[index].text)
+            }
         }
 
         var postings: [String: [(passage: Int, tf: Int)]] = [:]
@@ -387,18 +391,29 @@ final class TextIndex {
         }
         var prepped = [PassageLine?](repeating: nil, count: top.count)
         var prepTokens = [[AnalyzedToken]](repeating: [], count: top.count)
-        DispatchQueue.concurrentPerform(iterations: top.count) { i in
-            let candidate = top[i]
-            guard let data = bookData[candidate.bookId]?.lines,
-                let lineIndex = bookData[candidate.bookId]?.lineIndex,
-                candidate.passage < lineIndex.count,
-                let line = try? MarginsJSON.decode(
-                    PassageLine.self,
-                    from: data.subdata(
-                        in: lineIndex[candidate.passage].start..<lineIndex[candidate.passage].end))
-            else { return }
-            prepped[i] = line
-            prepTokens[i] = TextAnalyzer.tokens(line.t)
+        // Snapshot the cache reads the closure needs (no `self` capture)
+        // and write results through fixed storage at disjoint indices —
+        // mutating the arrays' captured vars concurrently would race.
+        let topLines = top.map { bookData[$0.bookId]?.lines }
+        let topIndexes = top.map { bookData[$0.bookId]?.lineIndex }
+        prepped.withUnsafeMutableBufferPointer { preppedBuffer in
+            prepTokens.withUnsafeMutableBufferPointer { tokensBuffer in
+                let sharedPrepped = SharedBuffer(preppedBuffer)
+                let sharedTokens = SharedBuffer(tokensBuffer)
+                DispatchQueue.concurrentPerform(iterations: top.count) { i in
+                    let candidate = top[i]
+                    guard let data = topLines[i],
+                        let lineIndex = topIndexes[i],
+                        candidate.passage < lineIndex.count,
+                        let line = try? MarginsJSON.decode(
+                            PassageLine.self,
+                            from: data.subdata(
+                                in: lineIndex[candidate.passage].start..<lineIndex[candidate.passage].end))
+                    else { return }
+                    sharedPrepped[i] = line
+                    sharedTokens[i] = TextAnalyzer.tokens(line.t)
+                }
+            }
         }
         for (i, line) in prepped.enumerated() {
             guard let line else { continue }
@@ -1016,6 +1031,22 @@ final class TextIndex {
         var books: [String]
         var passages: Int
         var tokens: Int
+    }
+
+    /// A fixed-storage buffer a `concurrentPerform` closure writes through:
+    /// safe only because every iteration touches a disjoint index and the
+    /// storage outlives the parallel section.
+    private struct SharedBuffer<Element>: @unchecked Sendable {
+        let buffer: UnsafeMutableBufferPointer<Element>
+
+        init(_ buffer: UnsafeMutableBufferPointer<Element>) {
+            self.buffer = buffer
+        }
+
+        subscript(index: Int) -> Element {
+            nonmutating get { buffer[index] }
+            nonmutating set { buffer[index] = newValue }
+        }
     }
 
     struct PassageLine: Codable {
