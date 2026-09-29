@@ -353,6 +353,143 @@ public final class Library {
         search.refreshBook(root: root, bookID: bookID)
     }
 
+    // MARK: Notebooks
+
+    /// Reverse-lookup cache for `notebooksCiting`, keyed by file path and
+    /// gated on modification date (docs/commonplace.md "Reverse lookup").
+    private var notebookCitations:
+        [String: (modified: Date?, summary: NotebookSummary, refs: [PassageRef])] = [:]
+
+    private var notebooksDir: String {
+        Notebooks.dir(root: root)
+    }
+
+    public func listNotebooks() throws -> [NotebookSummary] {
+        try Notebooks.listSummaries(dir: notebooksDir)
+    }
+
+    public func createNotebook(title: String) throws -> NotebookSummary {
+        let summary = try Notebooks.create(dir: notebooksDir, title: title)
+        search.refreshNotebooks(root: root)
+        return summary
+    }
+
+    public func renameNotebook(id: String, title: String) throws -> NotebookSummary {
+        let summary = try Notebooks.rename(dir: notebooksDir, id: id, title: title)
+        search.refreshNotebooks(root: root)
+        return summary
+    }
+
+    public func deleteNotebook(id: String) throws {
+        let path = try Notebooks.delete(dir: notebooksDir, id: id)
+        notebookCitations[path] = nil
+        search.refreshNotebooks(root: root)
+    }
+
+    public func notebook(id: String) throws -> Notebook {
+        try Notebooks.load(dir: notebooksDir, id: id, root: root)
+    }
+
+    public func saveNotebook(id: String, segments: [NotebookSegment]) throws -> Notebook {
+        let notebook = try Notebooks.save(
+            dir: notebooksDir, id: id, segments: segments, root: root)
+        search.refreshNotebooks(root: root)
+        return notebook
+    }
+
+    /// Appends a passage block at the end of the notebook, plus the
+    /// commentary as prose when non-empty. A `.selection` first finds or
+    /// creates the mark it embeds, then that book's index refreshes.
+    public func addPassage(
+        notebookId: String, source: PassageSource, commentary: String
+    ) throws -> Notebook {
+        let ref: PassageRef
+        var touchedBook: String?
+        switch source {
+        case let .mark(bookId, chapterKey, markId):
+            // The passage embeds a mark verbatim — verify it exists.
+            let (_, note) = try chapterContext(bookID: bookId, chapterKey: chapterKey)
+            guard note.marks.contains(where: { $0.id == markId }) else {
+                throw CoreError.notes("mark not found")
+            }
+            ref = PassageRef(bookId: bookId, chapterKey: chapterKey, markId: markId)
+        case let .selection(bookId, chapterKey, cfi, percent, quote):
+            ref = PassageRef(
+                bookId: bookId, chapterKey: chapterKey,
+                markId: try selectionMarkID(
+                    bookID: bookId, chapterKey: chapterKey,
+                    cfi: cfi, percent: percent, quote: quote))
+            touchedBook = bookId
+        }
+        let notebook = try Notebooks.appendPassage(
+            dir: notebooksDir, id: notebookId, ref: ref, commentary: commentary, root: root)
+        if let touchedBook { refreshNoteIndex(bookID: touchedBook) }
+        search.refreshNotebooks(root: root)
+        return notebook
+    }
+
+    /// markId → the notebooks embedding a passage of it, for one book.
+    public func notebooksCiting(bookId: String) throws -> [String: [NotebookSummary]] {
+        var result: [String: [NotebookSummary]] = [:]
+        guard Files.isDirectory(notebooksDir) else { return result }
+        var seen: Set<String> = []
+        for path in try FileStore.contents(ofDirectory: notebooksDir)
+        where path.hasSuffix(".md") && FileStore.isFile(path) {
+            seen.insert(path)
+            let modified = Files.modificationDate(path)
+            if notebookCitations[path]?.modified != modified {
+                guard let parsed = try? Notebooks.parseFile(path: path) else { continue }
+                notebookCitations[path] = (
+                    modified,
+                    Notebooks.summary(
+                        for: parsed, file: (path as NSString).lastPathComponent),
+                    parsed.segments.compactMap { segment in
+                        if case .passage(let passage) = segment.content { return passage.ref }
+                        return nil
+                    }
+                )
+            }
+            guard let entry = notebookCitations[path] else { continue }
+            for ref in entry.refs where ref.bookId == bookId {
+                result[ref.markId, default: []].append(entry.summary)
+            }
+        }
+        notebookCitations = notebookCitations.filter { seen.contains($0.key) }
+        return result
+    }
+
+    /// The chapter spine entry and its note file — shared by both passage
+    /// sources. Unknown book/chapter errors match the note APIs'.
+    private func chapterContext(
+        bookID: String, chapterKey: String
+    ) throws -> (chapter: ChapterMeta, note: ChapterNote) {
+        let meta = try getBook(id: bookID)
+        guard let chapter = meta.chapters.first(where: { $0.key == chapterKey }) else {
+            throw CoreError.notes("unknown chapter key: \(chapterKey)")
+        }
+        let note = try Notes.loadChapterNote(
+            bookDir: bookDir(bookID), chapterKey: chapterKey)
+        return (chapter, note)
+    }
+
+    /// A selection reuses a mark in that chapter with the same non-empty
+    /// cfi, or (when the cfi is nil/empty) the same quote; otherwise it
+    /// appends a new quote-only mark.
+    private func selectionMarkID(
+        bookID: String, chapterKey: String, cfi: String?, percent: Double?, quote: String
+    ) throws -> String {
+        let (chapter, note) = try chapterContext(bookID: bookID, chapterKey: chapterKey)
+        let reusable =
+            cfi?.isEmpty == false
+            ? note.marks.first { $0.cfi == cfi }
+            : note.marks.first { !quote.isEmpty && $0.quote == quote }
+        if let reusable { return reusable.id }
+        return try Notes.appendMark(
+            bookDir: bookDir(bookID), chapter: chapter,
+            cfi: cfi, percent: percent, quote: quote, body: ""
+        ).id
+    }
+
     // MARK: Backfills
 
     /// Re-derives chapter metadata for books imported under an older parser

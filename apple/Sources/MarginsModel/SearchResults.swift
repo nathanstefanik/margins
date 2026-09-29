@@ -16,26 +16,38 @@ public struct SearchSection: Equatable, Sendable {
 /// Pure helpers for organizing palette results and rendering the core's
 /// match ranges — both unit-testable without UI.
 public enum SearchResultsOrganizer {
-    /// Splits hits into sections: navigation targets (chapter titles, book
-    /// targets) first, then note-content hits, preserving each list's
-    /// relevance order.
+    /// Splits hits into sections — navigation targets (chapter titles,
+    /// book targets), then marks, then note content, then notebook prose —
+    /// preserving each list's relevance order.
     public static func sections(for hits: [NoteSearchHit]) -> [SearchSection] {
         var chapters: [NoteSearchHit] = []
+        var passages: [NoteSearchHit] = []
         var notes: [NoteSearchHit] = []
+        var notebooks: [NoteSearchHit] = []
         for hit in hits {
             switch hit.kind {
             case .chapterTitle, .bookTarget:
                 chapters.append(hit)
+            case .mark:
+                passages.append(hit)
             case .noteContent:
                 notes.append(hit)
+            case .notebook:
+                notebooks.append(hit)
             }
         }
         var sections: [SearchSection] = []
         if !chapters.isEmpty {
             sections.append(SearchSection(title: "Chapters", hits: chapters))
         }
+        if !passages.isEmpty {
+            sections.append(SearchSection(title: "Passages", hits: passages))
+        }
         if !notes.isEmpty {
             sections.append(SearchSection(title: "Notes", hits: notes))
+        }
+        if !notebooks.isEmpty {
+            sections.append(SearchSection(title: "Notebooks", hits: notebooks))
         }
         return sections
     }

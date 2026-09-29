@@ -17,7 +17,9 @@ struct MarginsApp: App {
             await model?.saveChapterNoteText(bookId: bookId, chapterKey: chapterKey, body: body)
         }
         model.search.setExecutor { [weak model] text in
-            await model?.searchNotes(text) ?? []
+            // macOS has no notebooks UI yet — drop notebook hits rather
+            // than showing rows that lead nowhere.
+            await (model?.searchNotes(text) ?? []).filter { $0.kind != .notebook }
         }
     }
 

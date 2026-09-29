@@ -184,6 +184,55 @@ enum Frontmatter {
         )
     }
 
+    /// One line (or block-scalar run) of a frontmatter block, in order:
+    /// the key (`nil` for comments, blanks, and non-key lines), the
+    /// decoded value, and the raw source to re-emit verbatim. Notebooks use
+    /// this to preserve unknown keys exactly (docs/commonplace.md).
+    struct OrderedField {
+        var key: String?
+        var value: String
+        var raw: String
+    }
+
+    /// The tolerant sibling of `decode`: where `decode` fails on a non-key
+    /// line, `parseOrdered` preserves it — for files whose frontmatter may
+    /// carry keys this build does not know.
+    static func parseOrdered(_ yaml: String) -> [OrderedField] {
+        var fields: [OrderedField] = []
+        var lines = yaml.lines[...]
+
+        while let line = lines.first {
+            lines = lines.dropFirst()
+            if line.trimmed.isEmpty || line.trimmed.hasPrefix("#") {
+                fields.append(OrderedField(key: nil, value: "", raw: String(line)))
+                continue
+            }
+            guard let separator = line.firstIndex(of: ":") else {
+                fields.append(OrderedField(key: nil, value: "", raw: String(line)))
+                continue
+            }
+            let key = String(line[..<separator].trimmed)
+            let rest = line[line.index(after: separator)...].trimmed
+
+            if rest == "|" || rest == "|-" || rest == ">" || rest == ">-" {
+                // A block scalar: keep its continuation lines in `raw`.
+                var raw = String(line)
+                var block: [Substring] = []
+                while let next = lines.first, next.trimmed.isEmpty || next.hasPrefix(" ") {
+                    lines = lines.dropFirst()
+                    block.append(next.trimmedStart)
+                    raw += "\n\(next)"
+                }
+                let joined = block.joined(separator: rest.hasPrefix("|") ? "\n" : " ")
+                let value = rest.hasSuffix("-") ? String(joined.trimmedEnd) : joined
+                fields.append(OrderedField(key: key, value: value, raw: raw))
+            } else {
+                fields.append(OrderedField(key: key, value: unquote(rest), raw: String(line)))
+            }
+        }
+        return fields
+    }
+
     /// Strips YAML quoting from a scalar, undoing `''` and backslash escapes.
     private static func unquote(_ raw: Substring) -> String {
         if raw.hasPrefix("'"), raw.hasSuffix("'"), raw.count >= 2 {

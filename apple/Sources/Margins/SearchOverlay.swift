@@ -265,7 +265,7 @@ struct SearchOverlay: View {
     @ViewBuilder
     private func mainLine(_ hit: NoteSearchHit) -> some View {
         switch hit.kind {
-        case .noteContent:
+        case .noteContent, .mark:
             Text(
                 SearchHighlighter.attributed(
                     hit.snippet,
@@ -295,6 +295,12 @@ struct SearchOverlay: View {
             )
             .font(.callout)
             .lineLimit(1)
+        case .notebook:
+            // Notebook hits are filtered out by the macOS executor (the
+            // app has no notebooks UI yet); the case stays for exhaustiveness.
+            Text(hit.chapterTitle)
+                .font(.callout)
+                .lineLimit(1)
         }
     }
 
@@ -333,10 +339,14 @@ struct SearchOverlay: View {
         switch hit.kind {
         case .noteContent:
             "\(hit.bookTitle), chapter \(hit.chapterTitle): \(hit.snippet)"
+        case .mark:
+            "Passage in \(hit.bookTitle), chapter \(hit.chapterTitle): \(hit.snippet)"
         case .chapterTitle:
             "Chapter \(hit.chapterTitle) in \(hit.bookTitle)"
         case .bookTarget:
             "Book \(hit.bookTitle) by \(hit.bookAuthor)"
+        case .notebook:
+            "Notebook \(hit.chapterTitle): \(hit.snippet)"
         }
     }
 
@@ -356,6 +366,15 @@ struct SearchOverlay: View {
     private func open(_ hit: NoteSearchHit) {
         controller.commitRecent(controller.query)
         Task {
+            // A mark hit lands on the mark's CFI, like opening it from the
+            // marks list (openPassage owns the jump).
+            if hit.kind == .mark {
+                await model.openPassage(
+                    bookId: hit.bookId, chapterKey: hit.chapterKey, cfi: hit.cfi
+                )
+                model.requestSearchDismissal()
+                return
+            }
             guard let book = await model.getBook(id: hit.bookId) else { return }
             let chapter: ChapterMeta?
             if hit.chapterKey.isEmpty {

@@ -222,7 +222,7 @@ struct LibraryScene: View {
     private func openFromSearch(_ hit: NoteSearchHit) {
         Task {
             guard await app.prepareForReading(bookId: hit.bookId) else { return }
-            await library.openPassage(bookId: hit.bookId, chapterKey: hit.chapterKey, cfi: nil)
+            await library.openPassage(bookId: hit.bookId, chapterKey: hit.chapterKey, cfi: hit.cfi)
             selectedTab = .library
             libraryPath = [.book(id: hit.bookId)]
         }

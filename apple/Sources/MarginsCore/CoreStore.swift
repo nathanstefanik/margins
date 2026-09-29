@@ -264,6 +264,51 @@ public actor CoreStore {
         library.searchNotes(query: query)
     }
 
+    // MARK: Notebooks
+
+    /// The notebook catalog (`notebooks/_index.json`), newest first.
+    public func listNotebooks() throws -> [NotebookSummary] {
+        try library.listNotebooks()
+    }
+
+    /// Creates an empty notebook; an empty title is an error.
+    public func createNotebook(title: String) throws -> NotebookSummary {
+        try library.createNotebook(title: title)
+    }
+
+    /// Renames the notebook and moves its file to the new slug.
+    public func renameNotebook(id: String, title: String) throws -> NotebookSummary {
+        try library.renameNotebook(id: id, title: title)
+    }
+
+    public func deleteNotebook(id: String) throws {
+        try library.deleteNotebook(id: id)
+    }
+
+    /// Loads one notebook with passages resolved against the live library.
+    public func notebook(id: String) throws -> Notebook {
+        try library.notebook(id: id)
+    }
+
+    /// Saves the segment list the UI hands back; untouched passage blocks
+    /// keep their bytes, a changed quote or citation is regenerated.
+    public func saveNotebook(id: String, segments: [NotebookSegment]) throws -> Notebook {
+        try library.saveNotebook(id: id, segments: segments)
+    }
+
+    /// Appends a passage (existing mark, or a selection the core turns
+    /// into a mark first) plus optional commentary prose.
+    public func addPassage(
+        notebookId: String, source: PassageSource, commentary: String
+    ) throws -> Notebook {
+        try library.addPassage(notebookId: notebookId, source: source, commentary: commentary)
+    }
+
+    /// markId → the notebooks citing it, for one book.
+    public func notebooksCiting(bookId: String) throws -> [String: [NotebookSummary]] {
+        try library.notebooksCiting(bookId: bookId)
+    }
+
     // MARK: Clubs
 
     /// Creates a private club reading `bookId`, with the creator as admin.

@@ -36,6 +36,9 @@ both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
         chapters/
           001-introduction.md
           002-the-market.md
+  notebooks/                 # commonplace notebooks (docs/commonplace.md)
+    _index.json              # derived catalog of notebooks
+    self-deception.md        # one file per notebook
 ```
 
 Imports are assembled in hidden `.importing-*` directories under `books/` and renamed into
@@ -316,6 +319,43 @@ prompt) deletes every file under `notes/chapters/` and rewrites `_index.json`
 to empty. Everything else about the book — `meta.json`, `source.epub`,
 `position.json` — is untouched, and the search index drops the cleared notes
 on its next refresh.
+
+## Commonplace notebooks
+
+Notebooks are long-running commonplace documents that collect prose and
+embedded passages cited from marks (full spec: `docs/commonplace.md`).
+They live at the library root, one markdown file per notebook:
+
+```markdown
+---
+id: 01k2m3p4q5
+title: 'Self-deception'
+created_at: 2026-09-29T10:00:00Z
+updated_at: 2026-09-29T10:30:00Z
+---
+
+<!-- margins:passage book=a1b2c3d4e5f6 chapter=014 mark=b01j8q3k2m -->
+> Above all, don't lie to yourself.
+> — Fyodor Dostoyevsky, *The Brothers Karamazov*, Book II
+
+Free prose.
+```
+
+- `id` is a 10-character Crockford id; the file name is the title's slug
+  (`{slug}.md`, `notebook.md` when the slug is empty, `-2`/`-3`/… on
+  collision). Renaming renames the file; the id never changes.
+- A passage block is a `margins:passage` comment (`book`, `chapter`,
+  `mark` attributes) followed by `>` quote lines and a regenerated
+  `> — author, *title*, chapter` citation. Unparsable comments stay prose.
+- Passages carry cached quote/citation bytes for readability; the mark is
+  authoritative and resolution happens at read time (`ok`, `mark-missing`,
+  `book-missing`, `not-downloaded`).
+- `_index.json` (`{"notebooks": […summaries…]}`) is derived: a listing
+  reconciles it against the `.md` files, so files added or removed outside
+  the app join or leave the catalog on the next read.
+- Round-trips are byte-exact like chapter notes: every segment keeps its
+  source bytes and a save rewrites only blocks whose live resolution
+  changed.
 
 ## Compiled notes page & markdown export
 
