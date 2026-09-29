@@ -180,7 +180,10 @@ folded form. The same function runs regardless of the book's language.
    match every term when the query has one or two terms, and at least
    ⌈60 %⌉ of them otherwise; the score is multiplied by (matched ÷ total)².
 5. Re-tokenize the top 200 passages and add a proximity bonus for the
-   smallest window covering the matched terms, plus an in-order bonus.
+   smallest token window `w` covering the `m` matched terms (score ×
+   (1 + 0.5 · m / w)), doubled again when those tokens are adjacent and in
+   query order — a verbatim phrase outranks a shorter passage that merely
+   shares the words.
 6. Return the best 50 with a snippet window and UTF-16 highlight ranges.
 
 **Building.** Indexing a book runs off the `CoreStore` actor into a

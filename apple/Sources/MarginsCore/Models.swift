@@ -1084,6 +1084,80 @@ public struct NoteSearchHit: Codable, Sendable, Equatable, Hashable, Identifiabl
     }
 }
 
+/// One full-text hit from the plain-file index (`TextIndex`,
+/// docs/commonplace.md "Full-text search"): a passage inside an indexed
+/// book, scored by BM25 with a snippet and UTF-16 highlight ranges.
+public struct TextSearchHit: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public var bookId: String
+    public var bookTitle: String
+    public var bookAuthor: String
+    public var chapterKey: String
+    /// Spine position of `chapterKey`, for opening.
+    public var chapterIndex: Int
+    public var chapterTitle: String
+    /// The full passage text the hit scored on.
+    public var passage: String
+    /// The passage's line number inside the book's `passages.jsonl`.
+    public var passageIndex: Int
+    public var snippet: String
+    /// Matched ranges inside `snippet` (UTF-16 code units of `snippet`).
+    public var snippetRanges: [MatchRange]
+    public var score: Double
+
+    public var id: String { "\(bookId)#\(passageIndex)" }
+
+    public init(
+        bookId: String, bookTitle: String, bookAuthor: String,
+        chapterKey: String, chapterIndex: Int, chapterTitle: String,
+        passage: String, passageIndex: Int, snippet: String,
+        snippetRanges: [MatchRange] = [], score: Double
+    ) {
+        self.bookId = bookId
+        self.bookTitle = bookTitle
+        self.bookAuthor = bookAuthor
+        self.chapterKey = chapterKey
+        self.chapterIndex = chapterIndex
+        self.chapterTitle = chapterTitle
+        self.passage = passage
+        self.passageIndex = passageIndex
+        self.snippet = snippet
+        self.snippetRanges = snippetRanges
+        self.score = score
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case bookId = "book_id"
+        case bookTitle = "book_title"
+        case bookAuthor = "book_author"
+        case chapterKey = "chapter_key"
+        case chapterIndex = "chapter_index"
+        case chapterTitle = "chapter_title"
+        case passage
+        case passageIndex = "passage_index"
+        case snippet
+        case snippetRanges = "snippet_ranges"
+        case score
+    }
+}
+
+/// Which of the library's books have a full-text index on this device
+/// (docs/commonplace.md "Full-text search"). Both lists are restricted
+/// to books in the current library and sorted.
+public struct TextIndexStatus: Codable, Sendable, Equatable, Hashable {
+    public var indexedBookIds: [String]
+    public var pendingBookIds: [String]
+
+    public init(indexedBookIds: [String], pendingBookIds: [String]) {
+        self.indexedBookIds = indexedBookIds
+        self.pendingBookIds = pendingBookIds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case indexedBookIds = "indexed_book_ids"
+        case pendingBookIds = "pending_book_ids"
+    }
+}
+
 // MARK: - Compiled notes and export
 
 /// Toggles for `renderMarkdown`; all default `true` unless noted.

@@ -103,10 +103,13 @@ public enum Notebooks {
             summaries.append(summary(for: parsed, file: file))
         }
         if writeIndex {
-            try FileStore.writeData(
-                MarginsJSON.encode(NotebooksIndex(notebooks: summaries)),
-                to: indexPath(dir: dir)
-            )
+            let encoded = try MarginsJSON.encode(NotebooksIndex(notebooks: summaries))
+            // Skip the write when nothing changed — an evicted file with
+            // no index entry leaves files and index permanently unequal,
+            // and rewriting identical bytes each listing is sync churn.
+            if (try? FileStore.readData(indexPath(dir: dir))) != encoded {
+                try FileStore.writeData(encoded, to: indexPath(dir: dir))
+            }
         }
         return summaries
     }

@@ -62,9 +62,20 @@ enum TextAnalyzer {
         tokens(raw).first
     }
 
+    /// Case+diacritic folding, with an ASCII fast path — `folding` goes
+    /// through NSString's transform and dominates tokenization cost on
+    /// hot paths (indexing, query re-tokenization).
+    private static func fold(_ raw: String) -> String {
+        if raw.utf8.allSatisfy({ $0 < 0x80 }) {
+            return raw.lowercased()
+        }
+        return raw.folding(
+            options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    }
+
     /// Folds and stems a raw token string per the shared pipeline.
     private static func analyze(_ raw: String, start16: Int, end16: Int) -> AnalyzedToken {
-        var folded = raw.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+        var folded = fold(raw)
         if folded.hasSuffix("'s") || folded.hasSuffix("’s") {
             folded = String(folded.dropLast(2))
         }
@@ -383,11 +394,13 @@ enum Porter2 {
 /// `limit`, with the computation pruned to the reachable band.
 enum EditDistance {
     static func osa(_ a: String, _ b: String, limit: Int) -> Int? {
+        // Length bail first: a whole-vocabulary scan calls this per stem,
+        // and most candidates die here without an array allocation.
+        guard limit >= 0, abs(a.count - b.count) <= limit else { return nil }
         let x = Array(a)
         let y = Array(b)
         let m = x.count
         let n = y.count
-        guard limit >= 0, abs(m - n) <= limit else { return nil }
         guard m > 0, n > 0 else { return max(m, n) <= limit ? max(m, n) : nil }
 
         let far = limit + 1  // out-of-band sentinel: any value > limit

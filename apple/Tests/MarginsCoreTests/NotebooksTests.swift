@@ -705,6 +705,32 @@ struct NotebooksTests {
         }
     }
 
+    @Test("a placeholder with no index entry does not rewrite the index")
+    func evictedWithoutEntryDoesNotRewriteIndex() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
+        let (documents, library) = try containerLibrary()
+        let one = try library.createNotebook(title: "One")
+        let notebooksDir = documents.appendingPathComponent("library/notebooks").path
+        let indexPath = notebooksDir.appendingPathComponent("_index.json")
+
+        // A placeholder for a notebook this device never indexed — files
+        // and index entries disagree on every listing, so a naive rebuild
+        // would rewrite identical bytes forever.
+        try Files.write(
+            "placeholder",
+            to: notebooksDir.appendingPathComponent(".ghost.md.icloud"))
+        let bytesBefore = try Files.readData(indexPath)
+        let mtimeBefore = Files.modificationDate(indexPath)
+
+        _ = try library.listNotebooks()
+        _ = try library.listNotebooks()
+
+        #expect(try Files.readData(indexPath) == bytesBefore)
+        #expect(Files.modificationDate(indexPath) == mtimeBefore)
+        #expect(try library.listNotebooks().map(\.id) == [one.id])
+    }
+
     @Test("an evicted index lists downloaded files and is never rewritten")
     func evictedIndex() throws {
         FileStoreTestIsolation.begin()

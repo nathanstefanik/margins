@@ -82,6 +82,24 @@ public final class Library {
         return summaries.map(resolvingCover)
     }
 
+    /// The ids of books physically present in `books/` — a directory
+    /// plus a `meta.json` (an evicted placeholder still counts). Cheap:
+    /// a directory listing and existence checks only — no meta parsing,
+    /// backfills, or index rewrites, unlike `listBooks`.
+    public func presentBookIDs() -> Set<String> {
+        let booksDir = root.appendingPathComponent("books")
+        return Set(
+            ((try? FileStore.contents(ofDirectory: booksDir)) ?? [])
+                .filter { Files.isDirectory($0) }
+                .compactMap { path -> String? in
+                    let name = (path as NSString).lastPathComponent
+                    guard !name.hasPrefix("."),
+                        FileStore.exists(path.appendingPathComponent("meta.json"))
+                    else { return nil }
+                    return name
+                })
+    }
+
     public func notDownloadedBookIDs() -> [String] {
         let booksDir = root.appendingPathComponent("books")
         return ((try? Files.contents(ofDirectory: booksDir)) ?? [])
