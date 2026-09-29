@@ -28,37 +28,40 @@ struct CaptureSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let selection, !selection.text.isEmpty {
-                Text(selection.text)
-                    .font(.callout)
-                    .italic()
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-            } else {
-                Text("Note at this page")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                if let selection, !selection.text.isEmpty {
+                    Text(selection.text)
+                        .font(.callout)
+                        .italic()
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                } else {
+                    Text("Note at this page")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                TextField("Quick thought…", text: $text, axis: .vertical)
+                    .focused($focused)
+                    .onSubmit { commit() }
+                    .lineLimit(1...3)
+                    .accessibilityLabel("Quick note text")
+                ViewThatFits {
+                    HStack {
+                        saveHint
+                        Spacer(minLength: 8)
+                        saveButton
+                    }
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.actions) {
+                        saveHint
+                        saveButton
+                    }
+                }
             }
-            TextField("Quick thought…", text: $text, axis: .vertical)
-                .focused($focused)
-                .onSubmit { commit() }
-                .lineLimit(1...3)
-                .accessibilityLabel("Quick note text")
-            HStack {
-                Text("Return or swipe down to save")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Spacer(minLength: 8)
-                Button("Save", action: commit)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(
-                        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            && (selection?.text.isEmpty ?? true))
-            }
+            .padding()
         }
-        .padding()
-        .presentationDetents([.height(200), .medium])
+        .presentationDetents([.height(200), .medium, .large])
+        .presentationDragIndicator(.visible)
         .task {
             // Draft autosave: a mistaken dismissal or a backgrounded app
             // must never discard typing.
@@ -73,6 +76,21 @@ struct CaptureSheet: View {
                 commit()
             }
         }
+    }
+
+    private var saveHint: some View {
+        Text("Return or swipe down to save")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+    }
+
+    private var saveButton: some View {
+        Button("Save", action: commit)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(
+                text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && (selection?.text.isEmpty ?? true))
     }
 
     private func commit() {
@@ -163,7 +181,7 @@ struct MarksSheet: View {
     }
 
     private func markRow(_ mark: Mark) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: DesignTokens.Spacing.actions) {
             Button {
                 onOpen(mark)
             } label: {
@@ -185,53 +203,83 @@ struct MarksSheet: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: DesignTokens.Control.minimumTarget,
+                    alignment: .leading
+                )
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens this mark in the reader")
-            Button {
-                markDraft = MarkDraft(mark: mark)
+            Menu {
+                Button {
+                    markDraft = MarkDraft(mark: mark)
+                } label: {
+                    Label("Edit mark", systemImage: "pencil")
+                }
+                .accessibilityIdentifier("mark-edit")
+                Button(role: .destructive) {
+                    Task { await library.deleteMark(mark, reader: reader) }
+                } label: {
+                    Label("Delete mark", systemImage: "trash")
+                }
+                .accessibilityIdentifier("mark-delete")
             } label: {
-                Image(systemName: "pencil")
+                Image(systemName: "ellipsis")
+                    .frame(
+                        width: DesignTokens.Control.minimumTarget,
+                        height: DesignTokens.Control.minimumTarget
+                    )
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Edit mark")
-            Button {
-                Task { await library.deleteMark(mark, reader: reader) }
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Delete mark")
+            .menuStyle(.borderlessButton)
+            .accessibilityLabel("Mark actions")
+            .accessibilityIdentifier("mark-actions-\(mark.id)")
         }
         .padding(.vertical, 2)
     }
 
     private func markEditSheet(_ draft: MarkDraft) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if !draft.mark.quote.isEmpty {
-                Text(draft.mark.quote)
-                    .font(.callout)
-                    .italic()
-                    .foregroundStyle(.secondary)
+        NavigationStack {
+            Form {
+                if !draft.mark.quote.isEmpty {
+                    Section {
+                        Text(draft.mark.quote)
+                            .font(.callout)
+                            .italic()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Section {
+                    TextField(
+                        "Mark",
+                        text: Binding(
+                            get: { markDraft?.body ?? "" },
+                            set: { markDraft?.body = $0 }
+                        ),
+                        axis: .vertical
+                    )
+                    .lineLimit(3...8)
+                    .accessibilityLabel("Mark text")
+                    .accessibilityIdentifier("mark-editor")
+                }
             }
-            TextField(
-                "Mark",
-                text: Binding(
-                    get: { markDraft?.body ?? "" },
-                    set: { markDraft?.body = $0 }
-                )
-            )
-            .onSubmit { saveMarkDraft(draft) }
-            HStack {
-                Spacer(minLength: 8)
-                Button("Cancel", role: .cancel) { markDraft = nil }
-                Button("Save") { saveMarkDraft(draft) }
+            .navigationTitle("Edit mark")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { markDraft = nil }
+                        .accessibilityIdentifier("mark-cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { saveMarkDraft(draft) }
+                        .accessibilityIdentifier("mark-save")
+                }
             }
         }
-        .padding()
-        .presentationDetents([.height(200)])
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private func saveMarkDraft(_ draft: MarkDraft) {

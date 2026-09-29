@@ -141,26 +141,44 @@ struct ClubDetailView: View {
                     Text(code)
                         .font(.system(.body, design: .monospaced).weight(.semibold))
                         .textSelection(.enabled)
-                    Spacer()
-                    ShareLink(item: code) {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                            .labelStyle(.iconOnly)
+                }
+                ViewThatFits {
+                    HStack(spacing: DesignTokens.Spacing.actions) {
+                        shareCodeButton(code)
+                        if clubs.isAdmin(of: club) {
+                            rotateCodeButton
+                        }
                     }
-                    if clubs.isAdmin(of: club) {
-                        Button {
-                            Task { await clubs.rotateInviteCode() }
-                        } label: {
-                            Label("New Code", systemImage: "arrow.clockwise")
-                                .labelStyle(.iconOnly)
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.actions) {
+                        shareCodeButton(code)
+                        if clubs.isAdmin(of: club) {
+                            rotateCodeButton
                         }
                     }
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
             } else if !clubs.supportsSharing {
                 Label("This iPhone only — sign in to iCloud to invite readers.", systemImage: "icloud.slash")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private func shareCodeButton(_ code: String) -> some View {
+        ShareLink(item: code) {
+            Label("Share code", systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private var rotateCodeButton: some View {
+        Button {
+            Task { await clubs.rotateInviteCode() }
+        } label: {
+            Label("New code", systemImage: "arrow.clockwise")
+        }
+        .disabled(clubs.isBusy)
     }
 
     private func membersSection(_ club: Club) -> some View {
@@ -409,6 +427,7 @@ private struct ExportSheet: View {
                     Label("Share Markdown", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
             .padding(24)
             .navigationTitle("Export Club Notes")

@@ -86,14 +86,27 @@ struct ClubsScene: View {
             } description: {
                 Text("Start a private club for one book and share the invite code with up to a few friends.")
             } actions: {
-                Button("New Book Club") { clubs.createSheetPresented = true }
+                VStack(spacing: DesignTokens.Spacing.actions) {
+                    Button {
+                        clubs.createSheetPresented = true
+                    } label: {
+                        Text("New Book Club")
+                    }
                     .buttonStyle(.borderedProminent)
-                if clubs.supportsSharing {
-                    Button("Join with a Code") { clubs.joinSheetPresented = true }
-                } else {
-                    Label("Sharing needs iCloud", systemImage: "icloud.slash")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    .controlSize(.large)
+                    if clubs.supportsSharing {
+                        Button {
+                            clubs.joinSheetPresented = true
+                        } label: {
+                            Text("Join with a Code")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                    } else {
+                        Label("Sharing needs iCloud", systemImage: "icloud.slash")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         } else {

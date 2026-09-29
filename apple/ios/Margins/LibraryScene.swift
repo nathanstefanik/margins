@@ -128,9 +128,13 @@ struct LibraryScene: View {
             } description: {
                 Text("Import an EPUB to start reading and taking notes.")
             } actions: {
-                Button("Import EPUB") {
+                Button {
                     importPresented = true
+                } label: {
+                    Text("Import EPUB")
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
         } else {
             ScrollView {
@@ -294,9 +298,13 @@ struct LibraryScene: View {
                 Color.black.opacity(0.2).ignoresSafeArea()
                 VStack(spacing: 12) {
                     ProgressView("Downloading book…")
-                    Button("Cancel") {
+                    Button {
                         app.cancelMaterialization()
+                    } label: {
+                        Text("Cancel")
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 14)

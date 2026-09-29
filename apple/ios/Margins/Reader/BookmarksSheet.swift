@@ -55,19 +55,26 @@ struct BookmarksSheet: View {
     }
 
     private func bookmarkRow(_ bookmark: Bookmark) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(BookmarkDisplay.title(bookmark, chapters: reader.book?.chapters ?? []))
-                .font(.callout)
-                .foregroundStyle(.primary)
-            Text(BookmarkDisplay.subtitle(bookmark, chapters: reader.book?.chapters ?? []))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+        Button {
+            onOpen(bookmark)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(BookmarkDisplay.title(bookmark, chapters: reader.book?.chapters ?? []))
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                Text(BookmarkDisplay.subtitle(bookmark, chapters: reader.book?.chapters ?? []))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(
+                maxWidth: .infinity,
+                minHeight: DesignTokens.Control.minimumTarget,
+                alignment: .leading
+            )
+            .contentShape(.rect)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentShape(.rect)
-        .onTapGesture { onOpen(bookmark) }
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens this bookmark in the reader")
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button("Delete", role: .destructive) {

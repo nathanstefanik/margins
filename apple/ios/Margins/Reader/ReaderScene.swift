@@ -112,6 +112,7 @@ struct ReaderScene: View {
                 settingsPresented = false
             }
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $tocPresented) {
             TOCSheet { row in
@@ -274,7 +275,7 @@ struct ReaderScene: View {
 
     // MARK: Chrome overlays
 
-    /// A 44pt hit target that survives WKWebView's bounds: the same class
+    /// A 48pt hit target that survives WKWebView's bounds: the same class
     /// of bug as the old dead eye/note buttons.
     private func chromeButton(
         _ systemName: String,
@@ -284,8 +285,11 @@ struct ReaderScene: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.body.weight(.medium))
-                .frame(width: 44, height: 44)
-                .contentShape(Circle())
+                .frame(
+                    width: DesignTokens.Control.readerTarget,
+                    height: DesignTokens.Control.readerTarget
+                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .circle)
@@ -308,13 +312,23 @@ struct ReaderScene: View {
                 .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .padding(.leading, chromeVisible ? 52 : 24)
-                .padding(.trailing, chromeVisible ? 152 : 24)
+                .padding(
+                    .leading,
+                    chromeVisible
+                        ? DesignTokens.Control.readerTarget + DesignTokens.Spacing.actions : 24
+                )
+                .padding(
+                    .trailing,
+                    chromeVisible
+                        ? DesignTokens.Control.readerTarget * 3 + DesignTokens.Spacing.actions * 3
+                        : 24
+                )
                 .allowsHitTesting(false)
             if chromeVisible {
                 GlassEffectContainer(spacing: DesignTokens.Spacing.chrome) {
-                    HStack(spacing: DesignTokens.Spacing.chrome) {
+                    HStack(spacing: DesignTokens.Spacing.actions) {
                         chromeButton("chevron.left", "Back to book") { dismiss() }
+                            .accessibilityIdentifier("reader-back")
                         Spacer(minLength: 0)
                         chromeButton(
                             reader.pageIsBookmarked ? "bookmark.fill" : "bookmark",
@@ -322,18 +336,26 @@ struct ReaderScene: View {
                         ) {
                             bookmarkPage()
                         }
+                        .accessibilityIdentifier("reader-bookmark")
+                        .accessibilityValue(
+                            reader.pageIsBookmarked ? "Bookmarked" : "Not bookmarked"
+                        )
+                        .disabled(reader.currentPosition() == nil)
                         chromeButton("square.and.pencil", "New note at this page") {
                             newNote()
                         }
+                        .accessibilityIdentifier("reader-new-note")
                         chromeButton("line.3.horizontal", "Reader menu") {
                             settingsPresented = true
                         }
+                        .accessibilityIdentifier("reader-menu")
                     }
                 }
                 .transition(.opacity)
             }
         }
-        .frame(height: 44)
+        .padding(.horizontal, DesignTokens.Spacing.controlInset)
+        .frame(height: DesignTokens.Control.readerTarget)
     }
 
     /// The running foot: this chapter's paginated page number, expanding
@@ -435,42 +457,61 @@ struct ReaderScene: View {
             Text("Write the chapter note while it's fresh?")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            HStack(spacing: 10) {
-                Button("Not now") {
-                    let bookID = reader.book?.id ?? ""
-                    UserDefaults.standard.set(
-                        true,
-                        forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
-                    )
-                    withAnimation(reduceMotion ? nil : DesignTokens.Motion.prompt) {
-                        finishedChapter = nil
-                    }
+            ViewThatFits {
+                HStack(spacing: DesignTokens.Spacing.actions) {
+                    promptDismissButton(for: chapter)
+                    promptWriteButton(for: chapter)
                 }
-                .buttonStyle(.bordered)
-                Button("Write note") {
-                    let bookID = reader.book?.id ?? ""
-                    UserDefaults.standard.set(
-                        true,
-                        forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
-                    )
-                    finishedChapter = nil
-                    // The reader has already followed the page turn into
-                    // the finished chapter's successor, and the editor
-                    // always edits `reader.chapter`: step back before
-                    // opening it, or the note lands on the next chapter.
-                    guard let book = reader.book else { return }
-                    reader.open(book: book, chapter: chapter)
-                    bridge?.jumpToChapter(reader.displayTarget)
-                    editorPresented = true
+                VStack(spacing: DesignTokens.Spacing.actions) {
+                    promptDismissButton(for: chapter)
+                    promptWriteButton(for: chapter)
                 }
-                .buttonStyle(.borderedProminent)
             }
+            .controlSize(.large)
         }
         .padding(16)
         .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.Radius.card, style: .continuous))
         .padding(.bottom, 16)
         .frame(maxHeight: .infinity, alignment: .bottom)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func promptDismissButton(for chapter: ChapterMeta) -> some View {
+        Button {
+            let bookID = reader.book?.id ?? ""
+            UserDefaults.standard.set(
+                true,
+                forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
+            )
+            withAnimation(reduceMotion ? nil : DesignTokens.Motion.prompt) {
+                finishedChapter = nil
+            }
+        } label: {
+            Text("Not now")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func promptWriteButton(for chapter: ChapterMeta) -> some View {
+        Button {
+            let bookID = reader.book?.id ?? ""
+            UserDefaults.standard.set(
+                true,
+                forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
+            )
+            finishedChapter = nil
+            // The reader has already followed the page turn into
+            // the finished chapter's successor, and the editor
+            // always edits `reader.chapter`: step back before
+            // opening it, or the note lands on the next chapter.
+            guard let book = reader.book else { return }
+            reader.open(book: book, chapter: chapter)
+            bridge?.jumpToChapter(reader.displayTarget)
+            editorPresented = true
+        } label: {
+            Text("Write note")
+        }
+        .buttonStyle(.borderedProminent)
     }
 
     // MARK: Input
