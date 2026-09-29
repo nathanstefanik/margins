@@ -42,7 +42,19 @@ mode throughout):
 - `ClubCode.swift` + `CoreID.swift` — four-character Crockford invite codes
   and the shared time-ordered id idiom marks and clubs use.
 - `Search.swift` — lazily built, mtime-revalidated in-memory index over the
-  notes.
+  notes, marks, and notebook prose; matching folds stems, diacritics, and
+  one-edit typos.
+- `Notebooks.swift` + `NotebookModels.swift` — commonplace notebooks under
+  the library root: the markdown segment format, the derived `_index.json`
+  catalog, passage resolution, and the computed `notebooksCiting` reverse
+  lookup.
+- `TextAnalysis.swift` — the shared analyzer: case/diacritic folding,
+  Porter2 stemming, and OSA typo-distance matching.
+- `TextExtract.swift` — pulls passage text out of EPUB chapter documents
+  for indexing.
+- `TextIndex.swift` — the per-device plain-file full-text index
+  (`{data_dir}/text-index/`): manifest + postings build, BM25 query,
+  and reconcile/wipe recovery (`docs/storage.md`).
 - `FileStore.swift` — coordinated document I/O: every read/write of
   `meta.json`, `position.json`, `bookmarks.json`, `notes/**`, and `notes/_index.json` goes through
   it; inside the ubiquity container the operations are wrapped in
@@ -98,7 +110,13 @@ A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
   library root: iCloud container resolution with runtime fallback,
   placeholder materialization, download pass over the library tree,
   coordinated staging of picked files, conflict detection), `EpubMirror`
-  (eviction-proof copy of opened EPUBs under Application Support), and
+  (eviction-proof copy of opened EPUBs under Application Support),
+  `NotebookModel` (notebook list, the open notebook's debounced autosave
+  and segment edits), `LibrarySearch` (debounced captured + full-text
+  query model behind the Search tab), the reader reveal
+  (`ReaderModel.pendingReveal` + `requestReveal`/`consumeReveal` — a
+  `revealText` passage opening requests an in-page text match, and a
+  located mark gets its CFI backfilled), and
   the club layer:
   `ClubModel` (club list, selection, merged document, auto-publish), `ClubSync` +
   `CloudKitClubSync` (share transport), and `LocalClubSyncEngine` (the
@@ -125,7 +143,7 @@ shared `LibraryModel`; the library root is resolved per launch by
 falling back to local `Documents/Library` with the reason surfaced in the
 UI. DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`,
 `MARGINS_DELETE_FIXTURE`, `MARGINS_OPEN_FIXTURE`, `MARGINS_CHROME_FIXTURE`,
-`MARGINS_EVICT_FIXTURE`, `MARGINS_OFFLINE_FIXTURE`)
+`MARGINS_EVICT_FIXTURE`, `MARGINS_OFFLINE_FIXTURE`, `MARGINS_NOTEBOOK_FIXTURE`)
 drive deterministic simulator verification flows. EPUBs handed over by
 Files/Mail arrive through `onOpenURL` as
 security-scoped URLs and are staged (`NSFileCoordinator`) before the core
@@ -177,18 +195,27 @@ only — never to cards, list rows, or content, and never nested in glass.
 
 One information architecture adapts to the available space instead of a
 per-device layout: `LibraryScene` is a `TabView` with a **Library** tab, a
+**Notebooks** tab (`NotebooksScene` → `NotebookDetailView`), a
 **Clubs** tab (`ClubsScene` → `ClubDetailView`), and a dedicated **Search**
 tab, styled `.sidebarAdaptable` so it is a floating tab bar on a compact
 canvas and a sidebar on a regular one. The Library tab is a
 `NavigationStack` (`LibraryRoute`) pushing book detail and then the reader;
 the reader fires a matched-geometry zoom out of the tapped cover
-(`.matchedTransitionSource` / `.navigationTransition(.zoom)`). Global notes
-search owns the Search tab (scope: the whole library); the contextual search
+(`.matchedTransitionSource` / `.navigationTransition(.zoom)`). Library-wide
+search owns the Search tab (`LibrarySearchView` over `LibrarySearch`;
+scope: the whole library); the contextual search
 for a book's contents would live inline over that content. Layout keys off
 size classes (`verticalSizeClass` shrinks the book-detail cover on a
 constrained height), never `interfaceOrientation`, so it survives Split
 View, landscape, and iPhone Mirroring. Shared sizing and rounding live in
 `DesignTokens.swift`.
+
+Navigation between surfaces is two environment actions installed by
+`LibraryScene` — `openPassage(PassageTarget)` (a search hit, notebook card,
+or mark citation opens the reader at its CFI, or arms the reveal) and
+`openNotebook(id)` (pushes the notebook on its tab's stack). `AppModel`
+runs `indexPass` after activation, imports, and download passes, walking
+the per-device index's pending books without blocking the UI.
 
 ### Reader rendering
 
@@ -229,9 +256,19 @@ until the iOS reader surfaced it.
 
 The page also reports text **selections** (`selected` events carry the CFI
 range + quoted text) through the same script channel; the iOS bridge
-extends the native edit menu with *Note* / *Highlight* and applies
-highlight overlays through epub.js's annotations API. The macOS handler
-ignores selection messages.
+extends the native edit menu with *Note* / *Highlight* / *Add to
+Notebook…* and applies highlight overlays through epub.js's annotations
+API. The macOS handler ignores selection messages.
+
+A passage with no stored CFI is found in-page instead:
+`window.readerRevealText(needle)` normalizes the rendered section's text
+(lowercase, whitespace-collapsed, curly-quote-folded, matched
+alphanumeric-only so `<br>` and punctuation boundaries cannot break a
+phrase), tries full/first-sentence/first-8-words candidates, and on a hit
+displays the located CFI and flashes a `margins-reveal` overlay — posting
+`revealed` back so Swift can backfill the mark's CFI. The reader menu's
+*Search Library* runs the shared search inside the reader and jumps to a
+chosen passage; the marks sheet lists which notebooks cite each mark.
 
 ### `margins-reader://` scheme — security model
 
@@ -273,10 +310,12 @@ reading. ⌘-combos and text-field typing pass through to menus and inputs.
 The notes pane edits the chapter note from `getChapterNote`; ⌘S / `i`-pane
 Save go through `saveChapterNote`, writing the same markdown+frontmatter
 files as the iOS app. `/` (or ⌘F) opens the search overlay over
-`searchNotes`; opening a hit jumps straight to that book/chapter. The
-overlay is non-modal (no sheet window) and `LibraryModel.searchOpen` is the
-single source of truth: the shell key monitor closes it on Esc and clicks
-outside the panel dismiss it.
+`searchNotes`; hits now include passages (marks) alongside notes, chapters,
+and notebooks — opening a mark hit lands on its CFI, and a notebook hit
+renders title + snippet (the macOS app has no notebooks UI, so the row is
+informational). The overlay is non-modal (no sheet window) and
+`LibraryModel.searchOpen` is the single source of truth: the shell key
+monitor closes it on Esc and clicks outside the panel dismiss it.
 
 The **compiled notes page** (`NotesPageView`, reached via the book detail's
 "All Notes" button, `N`, or ⇧⌘N / View → Book Notes) shows every chapter

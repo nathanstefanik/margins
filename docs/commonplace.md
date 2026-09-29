@@ -1,6 +1,6 @@
 # Commonplace notebooks & library search
 
-Status: in progress · core shared, UI iOS first · Last updated: 2026-09-29
+Status: first slice landed · core shared, UI iOS · Last updated: 2026-09-29
 
 A reader develops an idea over years: a notebook called *Self-deception*
 gathers passages from novels, essays, and philosophy, with the reader's own
@@ -174,7 +174,10 @@ folded form. The same function runs regardless of the book's language.
    is absent from `vocab.tsv`, vocabulary stems within edit distance 1
    (4–7 characters) or 2 (8+), best 10 (0.6).
 3. For each indexed book in the current library, binary-search each
-   expansion (or prefix range) in the memory-mapped `terms.tsv`.
+   expansion (or prefix range) in the memory-mapped `terms.tsv` — a stem
+   covering more than 25 % of a book's passages generates no candidates;
+   its contribution is counted from the passage's tokens when scoring
+   candidates the rarer terms found.
 4. Score passages with BM25 (k1 = 1.2, b = 0.75; IDF from `vocab.tsv` and
    `stats.json`) times the expansion weight. **Soft AND:** a passage must
    match every term when the query has one or two terms, and at least
@@ -235,4 +238,7 @@ from files, reverse lookup; extraction, Porter2 vectors, index build,
 stemmed/typo/prefix/soft-AND/proximity queries against the Karamazov
 fixture, removal and vocabulary recovery, backup exclusion; captured
 search over marks and notebooks. Simulator verification of the iOS flows
-through DEBUG launch fixtures.
+through DEBUG launch fixtures — `MARGINS_NOTEBOOK_FIXTURE=1|list|reveal`
+(with `MARGINS_IMPORT_FIXTURE`) seeds a notebook holding a text-indexed
+passage and lands on it (`1`), the list (`list`), or the reader's
+in-context reveal (`reveal`).
