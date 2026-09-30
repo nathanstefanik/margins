@@ -25,7 +25,9 @@ chrome). Center tap toggles chrome. That tap also expands the footer from
 percent.
 
 **Revealed chrome.** A hamburger (`line.3.horizontal`), a bookmark button
-(drop a pin at this page; filled when this page already has one), and the
+(toggles the pin at this page: adds one when the visible range holds none,
+removes it when one does, and offers a removal picker when several pins
+land here; filled while any pin is on the page), and the
 new-note button. Back lives here too (leading chevron) so leaving the
 reader is not buried in a sheet. Title and page number stay put.
 

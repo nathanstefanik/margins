@@ -43,6 +43,15 @@ struct BookmarksOverlay: View {
                         .padding(20)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
+                    if reader.bookmarksOnPage.count > 1 {
+                        Text("Several bookmarks are on this page — choose which to remove.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Divider()
+                    }
                     ScrollView {
                         VStack(alignment: .leading, spacing: 0) {
                             ForEach(reader.bookmarks) { bookmark in
@@ -82,6 +91,7 @@ struct BookmarksOverlay: View {
 
     private func bookmarkRow(_ bookmark: Bookmark) -> some View {
         let chapters = reader.book?.chapters ?? []
+        let onPage = reader.bookmarksOnPage.contains { $0.id == bookmark.id }
         return HStack(alignment: .firstTextBaseline, spacing: 12) {
             Button {
                 jump(bookmark)
@@ -97,6 +107,14 @@ struct BookmarksOverlay: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            if onPage {
+                Text("this page")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .overlay(Capsule().strokeBorder(.quaternary))
+            }
             Button("Rename") {
                 renameTarget = bookmark
                 renameText = bookmark.label

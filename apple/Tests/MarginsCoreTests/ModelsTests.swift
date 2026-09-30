@@ -397,6 +397,168 @@ struct ModelsTests {
         #expect(chapter.marks.isEmpty)
     }
 
+    private func pin(
+        chapterKey: String = "ch1", cfi: String?, id: String = "pin0000001"
+    ) -> Bookmark {
+        Bookmark(
+            id: id, label: "", chapterKey: chapterKey, epubCfi: cfi,
+            percent: 10,
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    @Test("a pin anchored inside the visible range is on the page")
+    func pinInsideRangeIsVisible() {
+        let pin = pin(cfi: "epubcfi(/6/4!/4/2/1:5)")
+        #expect(
+            pin.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: "epubcfi(/6/4!/4/2/1:9)"
+            )
+        )
+    }
+
+    @Test("pins at the page's own endpoints are on the page")
+    func pageEndpointsAreVisible() {
+        let atStart = pin(cfi: "epubcfi(/6/4!/4/2/1:0)", id: "pin0000002")
+        let atEnd = pin(cfi: "epubcfi(/6/4!/4/2/1:9)", id: "pin0000003")
+        let start = "epubcfi(/6/4!/4/2/1:0)"
+        let end = "epubcfi(/6/4!/4/2/1:9)"
+        #expect(atStart.isVisible(chapterKey: "ch1", startCfi: start, endCfi: end))
+        #expect(atEnd.isVisible(chapterKey: "ch1", startCfi: start, endCfi: end))
+    }
+
+    @Test("pins outside the range are not on the page")
+    func pinsOutsideRangeAreNotVisible() {
+        let before = pin(cfi: "epubcfi(/6/4!/4/2/1:0)", id: "pin0000004")
+        let after = pin(cfi: "epubcfi(/6/4!/4/4/1:0)", id: "pin0000005")
+        let start = "epubcfi(/6/4!/4/2/1:1)"
+        let end = "epubcfi(/6/4!/4/2/9:9)"
+        #expect(!before.isVisible(chapterKey: "ch1", startCfi: start, endCfi: end))
+        #expect(!after.isVisible(chapterKey: "ch1", startCfi: start, endCfi: end))
+    }
+
+    @Test("a pin in another chapter is never on the page")
+    func pinInOtherChapterIsNotVisible() {
+        let pin = pin(chapterKey: "ch2", cfi: "epubcfi(/6/4!/4/2/1:5)")
+        #expect(
+            !pin.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: "epubcfi(/6/4!/4/2/1:9)"
+            )
+        )
+    }
+
+    @Test("a reversed, missing, or unparseable endpoint never infers a pin")
+    func unusableEndpointsStayConservative() {
+        let inside = pin(cfi: "epubcfi(/6/4!/4/2/1:5)")
+        #expect(
+            !inside.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:9)",
+                endCfi: "epubcfi(/6/4!/4/2/1:0)"
+            )
+        )
+        #expect(
+            !inside.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: nil
+            )
+        )
+        #expect(
+            !inside.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: "epubcfi(/6/4!/4/2,/1:0,/1:9)"
+            )
+        )
+        #expect(
+            !inside.isVisible(
+                chapterKey: "ch1",
+                startCfi: nil,
+                endCfi: "epubcfi(/6/4!/4/2/1:9)"
+            )
+        )
+    }
+
+    @Test("malformed and legacy pins still match by exact CFI")
+    func fallbackMatchingIsExactOnly() {
+        let legacy = pin(cfi: nil)
+        #expect(legacy.isVisible(chapterKey: "ch1", startCfi: nil, endCfi: nil))
+        #expect(
+            !legacy.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: "epubcfi(/6/4!/4/2/1:9)"
+            )
+        )
+
+        let opaque = pin(cfi: "cfi-left")
+        #expect(opaque.isVisible(chapterKey: "ch1", startCfi: "cfi-left", endCfi: nil))
+        #expect(opaque.isVisible(chapterKey: "ch1", startCfi: "other", endCfi: "cfi-left"))
+        #expect(!opaque.isVisible(chapterKey: "ch1", startCfi: "cfi-right", endCfi: nil))
+
+        let exactEnd = pin(cfi: "epubcfi(/6/4!/4/2/9:9)")
+        #expect(
+            exactEnd.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: "epubcfi(/6/4!/4/2,/9:9,/9:9)"
+            ) == false
+        )
+    }
+
+    @Test("assertion-variant CFIs still land inside the range")
+    func assertionVariantAnchorIsVisible() {
+        let pin = pin(cfi: "epubcfi(/6/4!/4/2[id-x]/1:5)")
+        #expect(
+            pin.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: "epubcfi(/6/4!/4/2/1:9)"
+            )
+        )
+    }
+
+    @Test("a comparator-equivalent pin at a page edge matches without exact strings")
+    func equivalentEndpointPinsAreVisible() {
+        let pinned = pin(cfi: "epubcfi(/6/4!/4/2[x]/1:0)", id: "pin0000006")
+        #expect(
+            pinned.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: nil
+            )
+        )
+        let biased = pin(cfi: "epubcfi(/6/4!/4/2/1:0;s=b)", id: "pin0000007")
+        #expect(
+            biased.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:0)",
+                endCfi: nil
+            )
+        )
+        let atEnd = pin(cfi: "epubcfi(/6/4!/4/2[x]/1:9)", id: "pin0000008")
+        #expect(
+            atEnd.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/9/9/9:0)",
+                endCfi: "epubcfi(/6/4!/4/2/1:9)"
+            )
+        )
+        #expect(
+            !pinned.isVisible(
+                chapterKey: "ch1",
+                startCfi: "epubcfi(/6/4!/4/2/1:1)",
+                endCfi: nil
+            )
+        )
+    }
+
     // MARK: Errors
 
     @Test("a core error reads as its bare message")

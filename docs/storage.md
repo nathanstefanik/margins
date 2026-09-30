@@ -219,6 +219,16 @@ private navigation — they are not compiled, searched, or shared with a club.
 - Display order is percent, then `chapter_key`, then `created_at`
 - A missing or corrupt file is an empty list; deleting the last pin removes the file
 
+A pin is a fixed content spot, not a page number: the reader considers it
+"on the page" whenever the visible range (the relocated start CFI through
+the verified end CFI) contains its `epub_cfi`, so reflows that move page
+boundaries do not orphan it. Toggling a bookmark adds a pin when the page
+holds none, removes the pin when exactly one is visible, and asks the user
+which to remove when several match — it never collapses or bulk-deletes.
+Saving a pin at the same content point (identical CFI, or one equal after
+CFI assertions and side bias are ignored) returns the stored record
+unchanged, preserving its label, percent, and timestamps.
+
 ## Chapter note format
 
 Each note is a markdown file with YAML frontmatter:

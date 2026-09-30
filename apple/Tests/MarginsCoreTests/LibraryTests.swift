@@ -390,6 +390,271 @@ struct LibraryTests {
         #expect(Files.exists(placeholder))
     }
 
+    @Test("toggling a bookmark adds, removes, then re-adds the same spot")
+    func toggleBookmarkCycles() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+        let position = ReadingPosition(
+            chapterKey: "002", epubCfi: "epubcfi(/6/4!/4/2/1:0)", percent: 61.2
+        )
+        let end = "epubcfi(/6/4!/4/2/1:99)"
+
+        let first = try harness.library.toggleBookmark(
+            bookID: meta.id, position: position, endCfi: end
+        )
+        guard case .added(let pin) = first else {
+            Issue.record("expected .added, got \(first)")
+            return
+        }
+        #expect(pin.epubCfi == "epubcfi(/6/4!/4/2/1:0)")
+        #expect(harness.library.readBookmarks(bookID: meta.id).map(\.id) == [pin.id])
+
+        let second = try harness.library.toggleBookmark(
+            bookID: meta.id, position: position, endCfi: end
+        )
+        guard case .removed(let gone) = second else {
+            Issue.record("expected .removed, got \(second)")
+            return
+        }
+        #expect(gone.id == pin.id)
+        #expect(harness.library.readBookmarks(bookID: meta.id).isEmpty)
+
+        let third = try harness.library.toggleBookmark(
+            bookID: meta.id, position: position, endCfi: end
+        )
+        guard case .added = third else {
+            Issue.record("expected .added, got \(third)")
+            return
+        }
+        #expect(harness.library.readBookmarks(bookID: meta.id).count == 1)
+    }
+
+    @Test("toggling removes a pin anchored inside the page even when the CFI differs")
+    func toggleRemovesInteriorPin() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+        let pin = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "",
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:5)", percent: 12.5
+            )
+        )
+
+        let result = try harness.library.toggleBookmark(
+            bookID: meta.id,
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:0)", percent: 12.5
+            ),
+            endCfi: "epubcfi(/6/4!/4/2/1:9)"
+        )
+        guard case .removed(let gone) = result else {
+            Issue.record("expected .removed, got \(result)")
+            return
+        }
+        #expect(gone.id == pin.id)
+        #expect(harness.library.readBookmarks(bookID: meta.id).isEmpty)
+    }
+
+    @Test("toggling with several pins on the page asks which to remove and writes nothing")
+    func toggleWithSeveralVisiblePinsChooses() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+        let first = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "",
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:2)", percent: 10
+            )
+        )
+        let second = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "",
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:4)", percent: 30
+            )
+        )
+        let outside = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "",
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/4/1:0)", percent: 90
+            )
+        )
+        let path = harness.library.bookDir(meta.id).appendingPathComponent("bookmarks.json")
+        let before = try Files.readData(path)
+
+        let result = try harness.library.toggleBookmark(
+            bookID: meta.id,
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:0)", percent: 12.5
+            ),
+            endCfi: "epubcfi(/6/4!/4/2/1:9)"
+        )
+        guard case .choose(let pins) = result else {
+            Issue.record("expected .choose, got \(result)")
+            return
+        }
+        #expect(Set(pins.map(\.id)) == [first.id, second.id])
+        #expect(!pins.map(\.id).contains(outside.id))
+        #expect(try Files.readData(path) == before)
+        #expect(harness.library.readBookmarks(bookID: meta.id).count == 3)
+    }
+
+    @Test("legacy duplicate pins are offered for a choice, never auto-collapsed")
+    func toggleWithDuplicatePinsChooses() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+        let now = RFC3339.now()
+        let cfi = "epubcfi(/6/4!/4/2/1:5)"
+        let duplicates = [
+            Bookmark(
+                id: "dup0000001", label: "first", chapterKey: "001",
+                epubCfi: cfi, percent: 10, createdAt: now, updatedAt: now
+            ),
+            Bookmark(
+                id: "dup0000002", label: "second", chapterKey: "001",
+                epubCfi: cfi, percent: 20, createdAt: now, updatedAt: now
+            ),
+        ]
+        let path = harness.library.bookDir(meta.id).appendingPathComponent("bookmarks.json")
+        try Files.writeData(
+            MarginsJSON.encode(BookmarkFile(bookmarks: duplicates)), to: path
+        )
+        let before = try Files.readData(path)
+
+        let result = try harness.library.toggleBookmark(
+            bookID: meta.id,
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: cfi, percent: 15
+            ),
+            endCfi: "epubcfi(/6/4!/4/2/1:9)"
+        )
+        guard case .choose(let pins) = result else {
+            Issue.record("expected .choose, got \(result)")
+            return
+        }
+        #expect(Set(pins.map(\.id)) == ["dup0000001", "dup0000002"])
+        #expect(try Files.readData(path) == before)
+    }
+
+    @Test("toggling an equivalent start point removes the stored pin, not adds")
+    func toggleRemovesEquivalentStartPin() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+        let pin = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "kept",
+            position: ReadingPosition(
+                chapterKey: "001",
+                epubCfi: "epubcfi(/6/4!/4/2[id-tag]/1:0;s=b)",
+                percent: 10
+            )
+        )
+
+        let result = try harness.library.toggleBookmark(
+            bookID: meta.id,
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:0)", percent: 10
+            ),
+            endCfi: nil
+        )
+        guard case .removed(let gone) = result else {
+            Issue.record("expected .removed, got \(result)")
+            return
+        }
+        #expect(gone == pin)
+        #expect(harness.library.readBookmarks(bookID: meta.id).isEmpty)
+    }
+
+    @Test("re-adding a pinned spot returns the stored record untouched")
+    func addBookmarkIsIdempotent() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+        let pin = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "kept",
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:0)", percent: 10
+            )
+        )
+
+        let again = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "clobber attempt",
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:0)", percent: 55
+            )
+        )
+        #expect(again == pin)
+        #expect(harness.library.readBookmarks(bookID: meta.id).count == 1)
+
+        let equivalent = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "",
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2[renamed]/1:0)", percent: 70
+            )
+        )
+        #expect(equivalent == pin)
+        #expect(harness.library.readBookmarks(bookID: meta.id).count == 1)
+
+        let other = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "",
+            position: ReadingPosition(
+                chapterKey: "001", epubCfi: "epubcfi(/6/4!/4/2/1:7)", percent: 12
+            )
+        )
+        #expect(other.id != pin.id)
+        #expect(harness.library.readBookmarks(bookID: meta.id).count == 2)
+
+        let elsewhere = try harness.library.addBookmark(
+            bookID: meta.id,
+            label: "",
+            position: ReadingPosition(
+                chapterKey: "002", epubCfi: "epubcfi(/6/4!/4/2/1:0)", percent: 50
+            )
+        )
+        #expect(elsewhere.id != pin.id)
+        #expect(harness.library.readBookmarks(bookID: meta.id).count == 3)
+    }
+
+    @Test("toggling a bookmark refuses to overwrite an evicted file")
+    func toggleBookmarkRefusesEvictedFile() throws {
+        FileStoreTestIsolation.begin()
+        defer { FileStoreTestIsolation.end() }
+        let documents = FileManager.default.temporaryDirectory
+            .appendingPathComponent("margins-bookmarks-evicted-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("Documents", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: documents, withIntermediateDirectories: true
+        )
+        FileStore.overrideContainerProvider { documents }
+
+        let library = try Library(root: documents.appendingPathComponent("Library").path)
+        let epub = try EpubFixtureBuilder.sampleEpub(in: documents, named: "book.epub")
+        let book = try library.importEpub(atPath: epub)
+        let path = library.bookDir(book.id).appendingPathComponent("bookmarks.json")
+        let placeholder = library.bookDir(book.id).appendingPathComponent(".bookmarks.json.icloud")
+        try Files.write("placeholder", to: placeholder)
+
+        do {
+            _ = try library.toggleBookmark(
+                bookID: book.id,
+                position: ReadingPosition(chapterKey: "001", percent: 12.5),
+                endCfi: nil
+            )
+            Issue.record("expected an evicted bookmarks file to refuse the toggle")
+        } catch let error as CoreError {
+            #expect(error == .notDownloaded(path))
+        } catch {
+            Issue.record("expected CoreError, got \(error)")
+        }
+        #expect(!Files.exists(path))
+        #expect(Files.exists(placeholder))
+    }
+
     // MARK: Import lifecycle
 
     @Test("import, list, get, and remove round-trip")

@@ -99,13 +99,18 @@ struct MarginsCommands: Commands {
                 reader.toggleNotes()
             }
             Divider()
-            Button("Bookmark This Page") {
-                guard let book = reader.book, let position = reader.currentPosition() else { return }
+            Button(BookmarkDisplay.toggleTitle(onPageCount: reader.bookmarksOnPage.count)) {
                 Task {
-                    await model.addBookmark(bookId: book.id, position: position, reader: reader)
+                    let result = await model.toggleBookmark(reader: reader)
+                    if case .choose = result {
+                        model.requestBookmarks()
+                    }
                 }
             }
-            .disabled(!reader.isOpen)
+            .disabled(
+                !reader.isOpen || (reader.currentCfi?.isEmpty ?? true)
+                    || model.bookmarkToggleInFlight
+            )
             Button("Bookmarks") {
                 model.requestBookmarks()
             }

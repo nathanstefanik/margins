@@ -8,11 +8,17 @@ struct BookmarksSheet: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
     var onOpen: (Bookmark) -> Void = { _ in }
+    var removalIDs: Set<String>? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var renameTarget: Bookmark?
     @State private var renameText = ""
     @State private var renameOpen = false
+
+    private var listedBookmarks: [Bookmark] {
+        guard let removalIDs else { return reader.bookmarks }
+        return reader.bookmarks.filter { removalIDs.contains($0.id) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -23,6 +29,18 @@ struct BookmarksSheet: View {
                         systemImage: "bookmark",
                         description: Text("Bookmark this page from the reader chrome.")
                     )
+                } else if removalIDs != nil {
+                    List {
+                        Section {
+                            ForEach(listedBookmarks) { bookmark in
+                                removalRow(bookmark)
+                            }
+                        } footer: {
+                            Text(
+                                "Several bookmarks are visible on this page. Choose the one to remove."
+                            )
+                        }
+                    }
                 } else {
                     List {
                         ForEach(reader.bookmarks) { bookmark in
@@ -31,7 +49,11 @@ struct BookmarksSheet: View {
                     }
                 }
             }
-            .navigationTitle(BookmarkDisplay.countText(reader.bookmarks.count))
+            .navigationTitle(
+                removalIDs == nil
+                    ? BookmarkDisplay.countText(reader.bookmarks.count)
+                    : "Remove Bookmark"
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -50,6 +72,38 @@ struct BookmarksSheet: View {
                     }
                 }
                 Button("Cancel", role: .cancel) {}
+            }
+        }
+    }
+
+    private func removalRow(_ bookmark: Bookmark) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(BookmarkDisplay.title(bookmark, chapters: reader.book?.chapters ?? []))
+                    .font(.callout)
+                Text(BookmarkDisplay.subtitle(bookmark, chapters: reader.book?.chapters ?? []))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(
+                maxWidth: .infinity,
+                minHeight: DesignTokens.Control.minimumTarget,
+                alignment: .leading
+            )
+            Spacer(minLength: 8)
+            Button("Remove", role: .destructive) {
+                remove(bookmark)
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    private func remove(_ bookmark: Bookmark) {
+        guard let book = reader.book else { return }
+        Task {
+            await library.deleteBookmark(bookmark, bookId: book.id, reader: reader)
+            if !reader.bookmarks.contains(where: { $0.id == bookmark.id }) {
+                dismiss()
             }
         }
     }

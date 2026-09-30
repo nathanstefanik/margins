@@ -46,17 +46,20 @@ struct ReaderView: View {
             }
             ToolbarItem(placement: .navigation) {
                 Button {
-                    guard let book = reader.book, let position = reader.currentPosition() else { return }
                     Task {
-                        await model.addBookmark(bookId: book.id, position: position, reader: reader)
+                        let result = await model.toggleBookmark(reader: reader)
+                        if case .choose = result {
+                            model.requestBookmarks()
+                        }
                     }
                 } label: {
                     Label(
-                        "Bookmark This Page",
+                        BookmarkDisplay.toggleTitle(onPageCount: reader.bookmarksOnPage.count),
                         systemImage: reader.pageIsBookmarked ? "bookmark.fill" : "bookmark"
                     )
                 }
-                .help("Bookmark this page (b). Press B for the list.")
+                .disabled(model.bookmarkToggleInFlight || (reader.currentCfi?.isEmpty ?? true))
+                .help("Toggle bookmark (b). Press B for the list.")
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {

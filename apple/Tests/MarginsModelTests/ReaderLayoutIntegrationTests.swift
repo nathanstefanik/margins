@@ -1,6 +1,7 @@
 #if os(macOS)
 import CoreGraphics
 import Foundation
+import MarginsCore
 import Testing
 import MarginsModel
 
@@ -662,6 +663,186 @@ struct ReaderLayoutIntegrationTests {
             }
         }
         #expect(observed == expected, "saw \(observed)")
+    }
+
+    private func fixtureBook() -> BookMeta {
+        BookMeta(
+            id: "fixture-book",
+            title: "Reader Fixture",
+            author: "",
+            addedAt: Date(timeIntervalSince1970: 0),
+            sourceFilename: "reflowable.epub",
+            chapters: (1...5).map {
+                ChapterMeta(
+                    key: "c\($0)", index: $0 - 1, title: "Ch \($0)",
+                    href: "ch\($0).xhtml", fragment: nil
+                )
+            },
+            coverPath: nil,
+            progressPercent: nil
+        )
+    }
+
+    private func feedRelocation(_ relocation: [String: Any], to reader: ReaderModel) {
+        reader.relocated(
+            page: (relocation["page"] as? Int) ?? 1,
+            totalPages: (relocation["totalPages"] as? Int) ?? 0,
+            href: relocation["href"] as? String,
+            cfi: relocation["cfi"] as? String,
+            endPage: relocation["endPage"] as? Int,
+            endHref: relocation["endHref"] as? String,
+            endCfi: relocation["endCfi"] as? String
+        )
+    }
+
+    private func currentLocation(_ harness: ReaderLayoutHarness) async throws -> [String: Any] {
+        guard
+            let location = try await harness.evaluateJSON(
+                """
+                (function() {
+                  var l = readerRendition.currentLocation();
+                  var s = l && l.start ? l.start : {};
+                  var e = l && l.end ? l.end : {};
+                  return {
+                    cfi: s.cfi || null,
+                    href: s.href || null,
+                    page: s.displayed ? s.displayed.page : null,
+                    totalPages: s.displayed ? s.displayed.total : null,
+                    endCfi: e.cfi || null,
+                    endHref: e.href || null,
+                    endPage: e.displayed ? e.displayed.page : null
+                  };
+                })()
+                """
+            ) as? [String: Any]
+        else {
+            throw ReaderLayoutHarnessError.javaScript("currentLocation")
+        }
+        return location
+    }
+
+    private func paragraphID(
+        _ harness: ReaderLayoutHarness, containing cfi: String
+    ) async throws -> (id: String, index: Int) {
+        let script = """
+            (function() {
+              var range = readerRendition.getRange(\(jsLiteral(cfi)));
+              var node = range && range.startContainer;
+              if (!node) { return null; }
+              var el = node.nodeType === 1 ? node : node.parentElement;
+              var p = el && el.closest ? el.closest("p[id]") : null;
+              var doc = node.ownerDocument;
+              var paras = doc ? Array.prototype.slice.call(doc.querySelectorAll("p[id]")) : [];
+              if (!p) {
+                p = paras.filter(function(candidate) {
+                  return (node.compareDocumentPosition(candidate)
+                    & Node.DOCUMENT_POSITION_PRECEDING) === 0;
+                })[0] || null;
+              }
+              if (!p) { return null; }
+              return { id: p.id, index: paras.indexOf(p) };
+            })()
+            """
+        guard let hit = try await harness.evaluateJSON(script) as? [String: Any],
+            let id = hit["id"] as? String, let index = hit["index"] as? Int
+        else { throw ReaderLayoutHarnessError.javaScript("paragraphID") }
+        return (id, index)
+    }
+
+    private func savedSpotAcceptance(
+        _ harness: ReaderLayoutHarness,
+        pinId: String,
+        initialTypography: String?,
+        reflowTypography: String
+    ) async throws {
+        if let initialTypography {
+            try await harness.evaluate(initialTypography)
+            try await harness.waitForLayoutSettled()
+        }
+        var settled = try await harness.waitForRelocation(after: 0)
+        var anchorCfi = try #require(settled["cfi"] as? String)
+        var anchor = try await paragraphID(harness, containing: anchorCfi)
+        for _ in 0..<8 where anchor.index < 2 {
+            try await harness.evaluate("readerScrollBy(1)")
+            settled = try await harness.waitForRelocationChange(from: settled)
+            try await harness.waitForReaderIdle()
+            anchorCfi = try #require(settled["cfi"] as? String)
+            anchor = try await paragraphID(harness, containing: anchorCfi)
+        }
+        #expect(anchor.index >= 2)
+
+        let book = fixtureBook()
+        let reader = ReaderModel()
+        reader.open(book: book, chapter: book.chapters[0])
+        feedRelocation(settled, to: reader)
+
+        let anchorId = anchor.id
+        let pin = Bookmark(
+            id: pinId, label: "", chapterKey: reader.chapter!.key,
+            epubCfi: anchorCfi, percent: 20,
+            createdAt: Date(), updatedAt: Date()
+        )
+        reader.bookmarksUpdated([pin])
+        #expect(reader.pageIsBookmarked)
+        #expect(reader.bookmarksOnPage == [pin])
+
+        try await harness.evaluate(reflowTypography)
+        try await harness.waitForLayoutSettled()
+        var current = try await currentLocation(harness)
+        feedRelocation(current, to: reader)
+        let newStart = try #require(current["cfi"] as? String)
+        let newEnd = try #require(current["endCfi"] as? String)
+        #expect(newStart != anchorCfi)
+        #expect(CFI.comparePoints(newStart, anchorCfi) == .orderedAscending)
+        #expect(CFI.comparePoints(anchorCfi, newEnd) != .orderedDescending)
+        #expect(reader.pageIsBookmarked)
+        #expect(reader.bookmarks == [pin])
+
+        var away = current
+        for _ in 0..<6 {
+            try await harness.evaluate("readerScrollBy(1)")
+            away = try await harness.waitForRelocationChange(from: away)
+            try await harness.waitForReaderIdle()
+            feedRelocation(away, to: reader)
+            if !reader.pageIsBookmarked { break }
+        }
+        #expect(!reader.pageIsBookmarked)
+        #expect(reader.bookmarks == [pin])
+
+        try await harness.evaluate("readerDisplay(\(jsLiteral(anchorCfi)))")
+        try await harness.waitForVisibleParagraph(anchorId)
+        try await harness.waitForReaderIdle()
+        current = try await currentLocation(harness)
+        feedRelocation(current, to: reader)
+        #expect(reader.pageIsBookmarked)
+        #expect(reader.bookmarks == [pin])
+    }
+
+    @Test("a saved spot stays bookmarked across reflow on the desktop spread")
+    func savedSpotStaysBookmarkedThroughReflow() async throws {
+        let harness = try makeHarness(width: 1400, height: 800)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForDivisor(2)
+        try await savedSpotAcceptance(
+            harness,
+            pinId: "pin0000001",
+            initialTypography: "readerApplyTypography(200,1.6,72,'%')",
+            reflowTypography: "readerApplyTypography(110,1.6,72,'%')"
+        )
+    }
+
+    @Test("a saved spot stays bookmarked on the single-column iOS page")
+    func savedSpotStaysBookmarkedOnIOSPage() async throws {
+        let harness = try makeHarness(width: 900, height: 700)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        try await savedSpotAcceptance(
+            harness,
+            pinId: "pin0000002",
+            initialTypography: nil,
+            reflowTypography: "readerApplyTypography(20,1.65,0,'px')"
+        )
     }
 
     private func glyphWidth(_ harness: ReaderLayoutHarness) async throws -> Double {

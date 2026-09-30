@@ -29,6 +29,7 @@ struct ReaderScene: View {
     @State private var settingsPresented = false
     @State private var tocPresented = false
     @State private var bookmarksPresented = false
+    @State private var bookmarkRemovalIDs: Set<String>?
     @State private var marksPresented = false
     @State private var editorPresented = false
     /// The hamburger menu's chosen destination, presented after the menu
@@ -80,7 +81,7 @@ struct ReaderScene: View {
             .accessibilityAction(named: Text("New note")) {
                 newNote()
             }
-            .accessibilityAction(named: Text("Bookmark this page")) {
+            .accessibilityAction(named: Text(bookmarkActionName)) {
                 bookmarkPage()
             }
             if let finished = finishedChapter {
@@ -132,8 +133,8 @@ struct ReaderScene: View {
             }
             .presentationDetents([.medium, .large])
         }
-        .sheet(isPresented: $bookmarksPresented) {
-            BookmarksSheet { bookmark in
+        .sheet(isPresented: $bookmarksPresented, onDismiss: { bookmarkRemovalIDs = nil }) {
+            BookmarksSheet(removalIDs: bookmarkRemovalIDs) { bookmark in
                 bookmarksPresented = false
                 jumpToBookmark(bookmark)
             }
@@ -413,7 +414,7 @@ struct ReaderScene: View {
                         Spacer(minLength: 0)
                         chromeButton(
                             reader.pageIsBookmarked ? "bookmark.fill" : "bookmark",
-                            "Bookmark this page"
+                            bookmarkActionName
                         ) {
                             bookmarkPage()
                         }
@@ -421,7 +422,10 @@ struct ReaderScene: View {
                         .accessibilityValue(
                             reader.pageIsBookmarked ? "Bookmarked" : "Not bookmarked"
                         )
-                        .disabled(reader.currentPosition() == nil)
+                        .disabled(
+                            (reader.currentCfi ?? "").isEmpty
+                                || library.bookmarkToggleInFlight
+                        )
                         chromeButton("square.and.pencil", "New note at this page") {
                             newNote()
                         }
@@ -482,10 +486,21 @@ struct ReaderScene: View {
         capturePresented = true
     }
 
+    private var bookmarkActionName: String {
+        switch reader.bookmarksOnPage.count {
+        case 0: return "Bookmark this page"
+        case 1: return "Remove bookmark"
+        default: return "Choose bookmark to remove"
+        }
+    }
+
     private func bookmarkPage() {
-        guard let book = reader.book, let position = reader.currentPosition() else { return }
         Task {
-            await library.addBookmark(bookId: book.id, position: position, reader: reader)
+            let result = await library.toggleBookmark(reader: reader)
+            if case .choose(let pins) = result {
+                bookmarkRemovalIDs = Set(pins.map(\.id))
+                bookmarksPresented = true
+            }
         }
     }
 

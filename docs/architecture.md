@@ -22,7 +22,9 @@ mode throughout):
   `MARGINS_LIBRARY_ROOT` or platform defaults, remembered in `config.json`.
 - `Library.swift` — importing EPUBs into the library tree (content-hash ids,
   staging dir + commit-by-rename), the book catalog (`index.json`), reading
-  positions, named bookmarks, cover backfills, removing books.
+  positions, named bookmarks and the toggle that decides
+  add/remove/choose from the visible page's CFI range, cover backfills,
+  removing books.
 - `EpubParser.swift` — OPF/spine/metadata parsing (`XMLParser` for OPF, NCX,
   and EPUB3 nav; tolerant scanners for everything chapter documents do to
   markup).
@@ -39,6 +41,9 @@ mode throughout):
 - `ClubCompile.swift` + `CFI.swift` — merges members' snapshots into one
   document: CFI-overlap clustering (one quote, every member's note under it),
   spoiler gating by the viewer's chapter, and the club markdown export.
+  `CFI.swift` also orders point CFIs (`comparePoints`), which
+  `Bookmark.isVisible` uses to tell whether a pin sits inside the page's
+  start–end range.
 - `ClubCode.swift` + `CoreID.swift` — four-character Crockford invite codes
   and the shared time-ordered id idiom marks and clubs use.
 - `Search.swift` — lazily built, mtime-revalidated in-memory index over the

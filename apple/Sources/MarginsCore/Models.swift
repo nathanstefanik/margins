@@ -605,6 +605,30 @@ public struct Bookmark: Codable, Sendable, Equatable, Hashable, Identifiable {
         let current = cfi.flatMap { $0.isEmpty ? nil : $0 }
         return stored == current
     }
+
+    public func isVisible(chapterKey: String, startCfi: String?, endCfi: String?) -> Bool {
+        guard self.chapterKey == chapterKey else { return false }
+        if isAt(chapterKey: chapterKey, cfi: startCfi) { return true }
+        // `isAt` treats two absent CFIs as equal, so only consult
+        // the second page when the renderer gave it a real CFI.
+        if let endCfi, !endCfi.isEmpty, isAt(chapterKey: chapterKey, cfi: endCfi) {
+            return true
+        }
+        guard let anchor = epubCfi, !anchor.isEmpty else { return false }
+        let start = startCfi.flatMap { $0.isEmpty ? nil : $0 }
+        let end = endCfi.flatMap { $0.isEmpty ? nil : $0 }
+        let afterStart = start.flatMap { CFI.comparePoints($0, anchor) }
+        let beforeEnd = end.flatMap { CFI.comparePoints(anchor, $0) }
+        if afterStart == .orderedSame || beforeEnd == .orderedSame { return true }
+        guard let afterStart, let beforeEnd else { return false }
+        return afterStart != .orderedDescending && beforeEnd != .orderedDescending
+    }
+}
+
+public enum BookmarkToggleResult: Equatable, Sendable {
+    case added(Bookmark)
+    case removed(Bookmark)
+    case choose([Bookmark])
 }
 
 /// On-disk wrapper for `bookmarks.json`.

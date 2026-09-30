@@ -170,6 +170,14 @@ public final class Library {
         bookID: String, label: String, position: ReadingPosition
     ) throws -> Bookmark {
         var bookmarks = try bookmarksForWrite(bookID: bookID)
+        let newCfi = position.epubCfi.flatMap { $0.isEmpty ? nil : $0 }
+        if let existing = bookmarks.first(where: {
+            $0.isAt(chapterKey: position.chapterKey, cfi: newCfi)
+                || ($0.chapterKey == position.chapterKey
+                    && Self.sameContentPoint($0.epubCfi, newCfi))
+        }) {
+            return existing
+        }
         let taken = Set(bookmarks.map(\.id))
         var id = CoreID.newID()
         while taken.contains(id) { id = CoreID.newID() }
@@ -220,6 +228,36 @@ public final class Library {
             throw CoreError.library("bookmark not found: \(id)")
         }
         try writeBookmarks(bookID: bookID, bookmarks: bookmarks)
+    }
+
+    public func toggleBookmark(
+        bookID: String, position: ReadingPosition, endCfi: String?
+    ) throws -> BookmarkToggleResult {
+        let bookmarks = try bookmarksForWrite(bookID: bookID)
+        let visible = bookmarks.filter {
+            $0.isVisible(
+                chapterKey: position.chapterKey,
+                startCfi: position.epubCfi,
+                endCfi: endCfi
+            )
+        }
+        switch visible.count {
+        case 0:
+            return .added(
+                try addBookmark(bookID: bookID, label: "", position: position)
+            )
+        case 1:
+            let bookmark = visible[0]
+            try deleteBookmark(bookID: bookID, id: bookmark.id)
+            return .removed(bookmark)
+        default:
+            return .choose(visible)
+        }
+    }
+
+    private static func sameContentPoint(_ lhs: String?, _ rhs: String?) -> Bool {
+        guard let lhs, !lhs.isEmpty, let rhs, !rhs.isEmpty else { return false }
+        return CFI.comparePoints(lhs, rhs) == .orderedSame
     }
 
     private func bookmarksForWrite(bookID: String) throws -> [Bookmark] {
