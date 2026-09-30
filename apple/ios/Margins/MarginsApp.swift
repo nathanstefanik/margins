@@ -12,6 +12,8 @@ struct MarginsApp: App {
                 .environment(app.library)
                 .environment(app.reader)
                 .environment(app.clubs)
+                .environment(app.notebooks)
+                .environment(app.search)
                 .environment(app)
                 .task { await app.activate() }
                 .onChange(of: scenePhase) { _, phase in

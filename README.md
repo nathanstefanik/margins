@@ -12,7 +12,13 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Per-chapter markdown notes with YAML frontmatter
 - Compiled per-book **notes page** (`N`) with one-click markdown export,
   copy-all, and clear-all (with a confirmation prompt)
-- Full-text search across notes (`/` or `:search`)
+- Full-text search across notes and passages (`/` or `:search` — hits
+  include marks, chapter titles, and notebook prose)
+- Commonplace **notebooks** (iOS): gather passages from any book with your
+  own thoughts between them; every passage opens in its original context
+- Forgiving full-text **library search** (iOS) over every book's text and
+  your passages — stems, typos, and partial words — from a per-device
+  plain-file index; nothing leaves the device
 - Private **book clubs** (one book per club): a four-character invite code,
   CloudKit sharing with an automatic local-only fallback, and a merged view
   of every member's notes — overlapping highlights cluster under one quoted

@@ -3,13 +3,15 @@ import MarginsModel
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The app's tab anatomy: **Library** and **Search**, one information
-/// architecture that adapts from a compact floating tab bar to a regular
-/// sidebar (`.sidebarAdaptable`) instead of a hand-built per-device layout.
-/// Global notes search owns its own tab — its scope is the whole library —
-/// while contextual search belongs over the content it filters.
+/// The app's tab anatomy: **Library**, **Notebooks**, **Clubs**, and
+/// **Search**, one information architecture that adapts from a compact
+/// floating tab bar to a regular sidebar (`.sidebarAdaptable`) instead of
+/// a hand-built per-device layout. Global search owns its own tab — its
+/// scope is the whole library — while contextual search belongs over the
+/// content it filters.
 enum AppTab: Hashable {
     case library
+    case notebooks
     case clubs
     case search
 }
@@ -26,8 +28,8 @@ struct LibraryScene: View {
 
     @State private var selectedTab: AppTab = .library
     @State private var libraryPath: [LibraryRoute] = []
-    @State private var query = ""
-    @State private var hits: [NoteSearchHit] = []
+    /// The Notebooks stack: pushed values are notebook ids.
+    @State private var notebooksPath: [String] = []
     @State private var importPresented = false
     @State private var bookPendingDeletion: BookSummary?
     @State private var readerActive = false
@@ -41,6 +43,9 @@ struct LibraryScene: View {
             Tab("Library", systemImage: "books.vertical", value: AppTab.library) {
                 libraryTab
             }
+            Tab("Notebooks", systemImage: "text.book.closed", value: AppTab.notebooks) {
+                NotebooksScene(path: $notebooksPath)
+            }
             Tab("Clubs", systemImage: "person.2", value: AppTab.clubs) {
                 ClubsScene()
             }
@@ -48,6 +53,19 @@ struct LibraryScene: View {
                 searchTab
             }
         }
+        .environment(
+            \.openPassage,
+            OpenPassageAction { target in
+                Task { await openPassageTarget(target) }
+            }
+        )
+        .environment(
+            \.openNotebook,
+            OpenNotebookAction { notebookId in
+                selectedTab = .notebooks
+                notebooksPath = [notebookId]
+            }
+        )
         .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .overlay { materializingOverlay }
@@ -175,69 +193,26 @@ struct LibraryScene: View {
 
     private var searchTab: some View {
         NavigationStack {
-            searchResults
-                .navigationTitle("Search")
-                .searchable(text: $query, prompt: "Search notes")
-                .task(id: query) {
-                    await runSearch()
-                }
+            LibrarySearchView(search: app.search, mode: .browse)
         }
     }
 
-    @ViewBuilder
-    private var searchResults: some View {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty {
-            ContentUnavailableView {
-                Label("Search your notes", systemImage: "magnifyingglass")
-            } description: {
-                Text("Find a phrase across every book's annotations.")
-            }
-        } else if hits.isEmpty {
-            ContentUnavailableView.search
-        } else {
-            List {
-                ForEach(hits) { hit in
-                    Button {
-                        openFromSearch(hit)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(hit.chapterTitle)
-                                .font(.headline)
-                            Text("\(hit.bookTitle) · \(hit.snippet)")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                    .foregroundStyle(.primary)
-                }
-            }
-        }
-    }
-
-    /// A hit opens the reader inside the Library tab; switching tabs and
-    /// rebuilding the path keeps the reader in the same navigation tree the
-    /// grid owns rather than a detached one.
-    private func openFromSearch(_ hit: NoteSearchHit) {
-        Task {
-            guard await app.prepareForReading(bookId: hit.bookId) else { return }
-            await library.openPassage(bookId: hit.bookId, chapterKey: hit.chapterKey, cfi: nil)
-            selectedTab = .library
-            libraryPath = [.book(id: hit.bookId)]
-        }
-    }
-
-    private func runSearch() async {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else {
-            hits = []
-            return
-        }
-        // Debounce: the searchable field fires on every keystroke.
-        try? await Task.sleep(for: .milliseconds(250))
-        guard !Task.isCancelled else { return }
-        hits = await library.searchNotes(trimmed)
+    /// A passage-like result opens the reader inside the Library tab;
+    /// switching tabs and rebuilding the path keeps the reader in the same
+    /// navigation tree the grid owns rather than a detached one. From
+    /// inside the reader the passage-jump generation retargets the visible
+    /// page instead of repushing.
+    private func openPassageTarget(_ target: PassageTarget) async {
+        guard await app.prepareForReading(bookId: target.bookId) else { return }
+        await library.openPassage(
+            bookId: target.bookId,
+            chapterKey: target.chapterKey,
+            cfi: target.cfi,
+            revealText: target.revealText,
+            markId: target.markId
+        )
+        selectedTab = .library
+        libraryPath = [.book(id: target.bookId)]
     }
 
     // MARK: Status
@@ -334,8 +309,11 @@ struct LibraryScene: View {
             for _ in 0..<50 where library.books.isEmpty {
                 try? await Task.sleep(for: .milliseconds(200))
             }
+            // Wait out the index build so full-text hits are in before
+            // the query lands.
+            await app.indexPass()
             selectedTab = .search
-            query = search
+            app.search.setQuery(search)
         }
         if ProcessInfo.processInfo.environment["MARGINS_OPEN_FIXTURE"] != nil {
             for _ in 0..<50 where library.books.isEmpty {
@@ -357,8 +335,60 @@ struct LibraryScene: View {
                 bookPendingDeletion = nil
             }
         }
+        if let mode = ProcessInfo.processInfo.environment["MARGINS_NOTEBOOK_FIXTURE"] {
+            await notebookFixture(mode: mode)
+        }
         if ProcessInfo.processInfo.environment["MARGINS_CLUB_FIXTURE"] != nil {
             await createClubFixture()
+        }
+    }
+
+    /// `MARGINS_NOTEBOOK_FIXTURE=1|list|reveal` (with
+    /// `MARGINS_IMPORT_FIXTURE`): indexes the imported book, creates the
+    /// "Self-deception" notebook, adds the top "lie to yourself" text hit
+    /// as a CFI-less passage with commentary, and lands on the notebook
+    /// (`1`), the notebooks list (`list`), or opens the passage in context
+    /// (`reveal` — the reader's text-match reveal runs and backfills the
+    /// new mark's CFI).
+    private func notebookFixture(mode: String) async {
+        for _ in 0..<50 where library.books.isEmpty {
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        guard library.books.first != nil, let store = library.coreStore else { return }
+        await app.indexPass()
+        await app.notebooks.activate(store: store)
+        var summary = app.notebooks.notebooks.first { $0.title == "Self-deception" }
+        if summary == nil {
+            summary = await app.notebooks.create(title: "Self-deception")
+        }
+        guard let summary else { return }
+        guard let hits = try? await store.searchBookText(query: "lie to yourself"),
+            let hit = hits.first
+        else { return }
+        let added = await app.notebooks.addPassage(
+            notebookId: summary.id,
+            source: .selection(
+                bookId: hit.bookId, chapterKey: hit.chapterKey,
+                cfi: nil, percent: nil, quote: hit.passage),
+            commentary: "Zossima's advice — the lie to oneself comes first."
+        )
+        guard added else { return }
+        if mode == "reveal",
+            let notebook = try? await store.notebook(id: summary.id),
+            let markId = notebook.segments.compactMap({ segment in
+                if case .passage(let card) = segment.content { return card.ref.markId }
+                return nil
+            }).first
+        {
+            await openPassageTarget(
+                PassageTarget(
+                    bookId: hit.bookId, chapterKey: hit.chapterKey,
+                    revealText: hit.passage, markId: markId))
+            return
+        }
+        selectedTab = .notebooks
+        if mode != "list" {
+            notebooksPath = [summary.id]
         }
     }
 
@@ -401,6 +431,7 @@ struct LibraryScene: View {
             FileManager.default.fileExists(atPath: fixture)
         else { return }
         await library.importEpubs(atPaths: [fixture])
+        await app.indexPass()
     }
 
     /// Launch with `MARGINS_EVICT_FIXTURE=source|position|meta` after an

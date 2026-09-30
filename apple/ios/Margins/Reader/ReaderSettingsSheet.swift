@@ -8,6 +8,7 @@ enum ReaderDestination {
     case bookmarks
     case marks
     case chapterNote
+    case searchLibrary
 }
 
 /// The hamburger menu: the reading-surface theme (cream paper or dark), text
@@ -82,6 +83,11 @@ struct ReaderSettingsSheet: View {
                         onSelect(.chapterNote)
                     } label: {
                         Label("Chapter note", systemImage: "square.and.pencil")
+                    }
+                    Button {
+                        onSelect(.searchLibrary)
+                    } label: {
+                        Label("Search Library", systemImage: "magnifyingglass")
                     }
                 }
             }

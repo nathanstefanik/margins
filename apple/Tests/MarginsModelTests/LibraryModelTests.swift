@@ -82,6 +82,87 @@ struct LibraryModelTests {
         #expect(model.pendingReaderPresent)
     }
 
+    @Test("openPassage arms a text reveal only when the hit has no CFI")
+    @MainActor
+    func openPassageArmsReveal() async throws {
+        let fixture =
+            repoRoot
+            .appendingPathComponent("fixtures", isDirectory: true)
+            .appendingPathComponent("h-g-wells_the-time-machine.epub")
+            .path
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+
+        // No CFI → the reveal is armed for the target chapter.
+        await model.openPassage(
+            bookId: book.id, chapterKey: book.chapters[0].key, cfi: nil,
+            revealText: "the line to find", markId: "m42")
+        #expect(
+            reader.pendingReveal
+                == ReaderModel.PassageReveal(
+                    text: "the line to find", markId: "m42",
+                    chapterKey: book.chapters[0].key))
+
+        // A real CFI opens exactly — the reveal clears.
+        await model.openPassage(
+            bookId: book.id, chapterKey: book.chapters[0].key,
+            cfi: "epubcfi(/6/2!/4/2)", revealText: "the line to find")
+        #expect(reader.pendingReveal == nil)
+        #expect(reader.resumeCfi == "epubcfi(/6/2!/4/2)")
+
+        // Empty reveal text never arms it either.
+        await model.openPassage(
+            bookId: book.id, chapterKey: book.chapters[0].key, cfi: nil,
+            revealText: "")
+        #expect(reader.pendingReveal == nil)
+    }
+
+    @Test("backfillMarkCfi fills a missing cfi and never clobbers one")
+    @MainActor
+    func backfillMarkCfi() async throws {
+        let fixture =
+            repoRoot
+            .appendingPathComponent("fixtures", isDirectory: true)
+            .appendingPathComponent("h-g-wells_the-time-machine.epub")
+            .path
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        let chapterKey = book.chapters[0].key
+
+        let mark = try #require(
+            await model.appendMark(
+                bookId: book.id, chapterKey: chapterKey,
+                cfi: nil, percent: nil, quote: "a quote worth finding",
+                body: "", reader: reader))
+        #expect(mark.cfi == nil)
+
+        await model.backfillMarkCfi(
+            bookId: book.id, chapterKey: chapterKey, markId: mark.id,
+            cfi: "epubcfi(/6/4!/2/2)")
+        // The mark gained its cfi on disk and in the open reader.
+        let note = try await model.coreStore!.getChapterNote(
+            bookId: book.id, chapterKey: chapterKey)
+        #expect(note.marks.first { $0.id == mark.id }?.cfi == "epubcfi(/6/4!/2/2)")
+        #expect(reader.noteMarks.first { $0.id == mark.id }?.cfi == "epubcfi(/6/4!/2/2)")
+
+        // A second reveal must not clobber a real CFI.
+        await model.backfillMarkCfi(
+            bookId: book.id, chapterKey: chapterKey, markId: mark.id,
+            cfi: "epubcfi(/6/8!/2/2)")
+        let after = try await model.coreStore!.getChapterNote(
+            bookId: book.id, chapterKey: chapterKey)
+        #expect(after.marks.first { $0.id == mark.id }?.cfi == "epubcfi(/6/4!/2/2)")
+    }
+
     @Test("remove clears selection and empties the library")
     @MainActor
     func removeBookClearsSelection() async throws {

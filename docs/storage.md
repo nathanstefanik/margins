@@ -36,6 +36,9 @@ both are present, `MARGINS_LIBRARY_ROOT` takes precedence over the saved path.
         chapters/
           001-introduction.md
           002-the-market.md
+  notebooks/                 # commonplace notebooks (docs/commonplace.md)
+    _index.json              # derived catalog of notebooks
+    self-deception.md        # one file per notebook
 ```
 
 Imports are assembled in hidden `.importing-*` directories under `books/` and renamed into
@@ -317,6 +320,50 @@ to empty. Everything else about the book — `meta.json`, `source.epub`,
 `position.json` — is untouched, and the search index drops the cleared notes
 on its next refresh.
 
+## Commonplace notebooks
+
+Notebooks are long-running commonplace documents that collect prose and
+embedded passages cited from marks (full spec: `docs/commonplace.md`).
+They live at the library root, one markdown file per notebook:
+
+```markdown
+---
+id: 01k2m3p4q5
+title: 'Self-deception'
+created_at: 2026-09-29T10:00:00Z
+updated_at: 2026-09-29T10:30:00Z
+---
+
+<!-- margins:passage book=a1b2c3d4e5f6 chapter=014 mark=b01j8q3k2m -->
+> Above all, don't lie to yourself.
+> — Fyodor Dostoyevsky, *The Brothers Karamazov*, Book II
+
+Free prose.
+```
+
+- `id` is a 10-character Crockford id; the file name is the title's slug
+  (`{slug}.md`, `notebook.md` when the slug is empty, `-2`/`-3`/… on
+  collision). Renaming renames the file; the id never changes.
+- A passage block is a `margins:passage` comment (`book`, `chapter`,
+  `mark` attributes) followed by `>` quote lines and a regenerated
+  `> — author, *title*, chapter` citation. Unparsable comments stay prose.
+- Passages carry cached quote/citation bytes for readability; the mark is
+  authoritative and resolution happens at read time (`ok`, `mark-missing`,
+  `book-missing`, `not-downloaded`).
+- `_index.json` (`{"notebooks": […summaries…]}`) is derived: a listing
+  reconciles it against the `.md` files, so files added or removed outside
+  the app join or leave the catalog on the next read. The reverse lookup
+  behind `notebooksCiting` (which notebooks reference a book's marks) is
+  computed by scanning passage refs on demand — nothing stores it.
+- An evicted iCloud placeholder still lists — its `_index.json` entry is
+  enough to render the row — but opening or saving it refuses with a
+  not-downloaded error, and a listing never rewrites the index over an
+  evicted placeholder or when the encoded bytes are identical to what is
+  already on disk.
+- Round-trips are byte-exact like chapter notes: every segment keeps its
+  source bytes and a save rewrites only blocks whose live resolution
+  changed.
+
 ## Compiled notes page & markdown export
 
 Both frontends can show a per-book **notes page** that compiles every
@@ -361,6 +408,34 @@ synced folder therefore never replicates club membership between machines.
   (`club_spoiler_protection`, default `true`); it is never part of shared
   club state.
 
+## Full-text search index (per device)
+
+The "In Your Books" results come from a per-device index under the app
+**data directory** — macOS `~/Library/Application Support/margins/text-index`,
+iOS `Application Support/Margins/text-index` — never the library root. It is
+excluded from backup, never synced, and safe to delete wholesale.
+
+```
+{data_dir}/text-index/
+  FORMAT                       # index format version; mismatch wipes and rebuilds
+  stats.json                   # {format, books: [ids], passages, tokens}
+  vocab.tsv                    # merged vocabulary: stem → document frequency
+  books/{book_id}/
+    manifest.json              # format, extractor, and chapters_version the build used
+    passages.jsonl             # extracted passages, one JSON line each
+    terms.tsv                  # stem → packed posting list
+```
+
+- A book's index is rebuilt when the format, the extractor version, or its
+  `chapters_version` changes; `reconcile` also rebuilds `stats.json`/`vocab.tsv`
+  after manual surgery and drops interrupted `.staging-*` builds.
+- Removing a book deletes `books/{id}` and subtracts its stems from the
+  vocabulary.
+- Deleting the whole directory is always safe — a fresh index pass
+  rebuilds it from the books' `source.epub` copies.
+- Privacy: the index holds a plain-text copy of indexed book text inside
+  the app container — the same sensitivity as the library itself.
+
 ## Sync workflow
 
 1. Point the library root at a synced folder (`MARGINS_LIBRARY_ROOT`, or
@@ -382,3 +457,7 @@ evicted existing note so remote content is never overwritten blindly.
 The iOS EPUB mirror is a derived copy outside this tree: Application
 Support, excluded from backup, one file per content-hash book id. It is
 not synced, not part of the layout above, and is removed with the book.
+
+Notebooks sync with the library like every other file under the root. The
+per-device text index never does: each device builds its own under its own
+data directory.

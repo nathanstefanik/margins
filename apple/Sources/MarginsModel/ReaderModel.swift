@@ -101,6 +101,7 @@ public final class ReaderModel {
         progress = nil
         currentCfi = nil
         currentEndCfi = nil
+        pendingReveal = nil
         #if os(macOS)
         // The renderer will report again once it has re-resolved; keeping
         // the old count would leave a stale fallback note in the popover.
@@ -128,6 +129,37 @@ public final class ReaderModel {
         resumeCfi = cfi
     }
 
+    /// A passage the reader should locate by text once its chapter is on
+    /// screen (full-text hits and marks without a CFI — see
+    /// docs/commonplace.md "Jump to context"). `markId`, when present, is
+    /// the mark whose `cfi` should be backfilled from the match.
+    public struct PassageReveal: Equatable, Sendable {
+        public var text: String
+        public var markId: String?
+        public var chapterKey: String
+
+        public init(text: String, markId: String? = nil, chapterKey: String) {
+            self.text = text
+            self.markId = markId
+            self.chapterKey = chapterKey
+        }
+    }
+
+    /// Set by `openPassage` when the target has no CFI; the scene fires it
+    /// once the rendition is live for that chapter.
+    public private(set) var pendingReveal: PassageReveal?
+
+    public func requestReveal(_ reveal: PassageReveal) {
+        pendingReveal = reveal
+    }
+
+    /// Takes the pending reveal and clears it — fire-once semantics.
+    @discardableResult
+    public func consumeReveal() -> PassageReveal? {
+        defer { pendingReveal = nil }
+        return pendingReveal
+    }
+
     public func close() {
         flushNoteSave()
         flushPositionSave()
@@ -136,6 +168,7 @@ public final class ReaderModel {
         resumeCfi = nil
         jumpFragmentOverride = nil
         progress = nil
+        pendingReveal = nil
         notesVisible = false
         noteBody = ""
         noteBaseline = nil

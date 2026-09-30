@@ -229,4 +229,130 @@ struct SearchTests {
         // A single term is never a phrase.
         #expect(!tokens.isPhraseMatch(["faith"]))
     }
+
+    // MARK: Captured search — marks, notebooks, forgiving matching
+
+    /// Appends a mark to chapter one's note and warms the index.
+    private func makeMark(
+        _ harness: Harness, cfi: String? = "epubcfi(/6/2!/4/2)",
+        quote: String = "a quote", body: String = ""
+    ) throws -> Mark {
+        let mark = try Notes.appendMark(
+            bookDir: harness.library.bookDir(harness.bookID),
+            chapter: harness.chapters[0],
+            cfi: cfi, percent: 12.5, quote: quote, body: body
+        )
+        harness.library.refreshNoteIndex(bookID: harness.bookID)
+        return mark
+    }
+
+    @Test("a mark's quote is its own hit, carrying the mark id and cfi")
+    func markQuoteIsItsOwnHit() throws {
+        let harness = try Harness()
+        let mark = try makeMark(
+            harness, quote: "a marked sentence", body: "a thought")
+
+        let hits = harness.library.searchNotes(query: "marked")
+        let hit = try #require(hits.first { $0.kind == .mark })
+        #expect(hit.markId == mark.id)
+        #expect(hit.cfi == "epubcfi(/6/2!/4/2)")
+        #expect(hit.chapterKey == "001")
+        #expect(hit.chapterTitle == harness.chapters[0].title)
+        #expect(hit.snippet.contains("marked sentence"))
+        #expect(hit.id == "\(harness.bookID)/001#\(mark.id)")
+    }
+
+    @Test("a mark's body is searchable")
+    func markBodySearchable() throws {
+        let harness = try Harness()
+        _ = try makeMark(harness, quote: "", body: "mnemonic drift everywhere")
+
+        let hits = harness.library.searchNotes(query: "mnemonic")
+        #expect(hits.contains { $0.kind == .mark })
+    }
+
+    @Test("notebook prose is a hit; passage quote text is not notebook prose")
+    func notebookProseHit() throws {
+        let harness = try Harness()
+        let summary = try harness.library.createNotebook(title: "Themes")
+        let mark = try makeMark(harness, quote: "the zanzibar passage")
+        _ = try harness.library.addPassage(
+            notebookId: summary.id,
+            source: .mark(bookId: harness.bookID, chapterKey: "001", markId: mark.id),
+            commentary: "self deception runs deep"
+        )
+
+        let hits = harness.library.searchNotes(query: "deception")
+        let hit = try #require(hits.first { $0.kind == .notebook })
+        #expect(hit.notebookId == summary.id)
+        #expect(hit.chapterTitle == "Themes")
+        #expect(hit.snippet.contains("deception"))
+        #expect(hit.id == "notebook/\(summary.id)")
+
+        // The quote inside the passage block is the mark's document, not
+        // the notebook's prose.
+        let passageHits = harness.library.searchNotes(query: "zanzibar")
+        #expect(passageHits.contains { $0.kind == .mark })
+        #expect(passageHits.allSatisfy { $0.kind != .notebook })
+    }
+
+    @Test("stemmed terms match inflected forms")
+    func stemMatching() throws {
+        let harness = try Harness()
+        try harness.saveNote(harness.chapters[0], "she deceived herself")
+
+        for query in ["deceive", "deceiving"] {
+            let hits = harness.library.searchNotes(query: query)
+            let hit = try #require(hits.first { $0.kind == .noteContent })
+            #expect(hit.snippet.contains("deceived"))
+        }
+    }
+
+    @Test("a term matching nothing expands by edit distance")
+    func typoFallback() throws {
+        let harness = try Harness()
+        try harness.saveNote(harness.chapters[0], "she deceived herself")
+
+        let hits = harness.library.searchNotes(query: "decieved")
+        #expect(hits.contains { $0.kind == .noteContent })
+
+        // A term with no near-miss stays unmatched and kills the AND.
+        #expect(harness.library.searchNotes(query: "decieved xylophone").isEmpty)
+    }
+
+    @Test("folded query terms match diacritic-folded tokens")
+    func foldedQueryMatch() throws {
+        let harness = try Harness()
+        try harness.saveNote(harness.chapters[0], "the Café society")
+
+        let hits = harness.library.searchNotes(query: "cafe")
+        #expect(hits.contains { $0.snippet.contains("Café") })
+    }
+
+    @Test("changes saved through CoreStore are visible to the next search")
+    func coreStoreWritesAreSearchable() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("margins-store-search-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try CoreStore(dataDir: root.appendingPathComponent("data").path)
+        let epub = try EpubFixtureBuilder.sampleEpub(in: root)
+        let meta = try await store.importEpub(atPath: epub)
+
+        let mark = try await store.appendMark(
+            bookId: meta.id, chapterKey: "001",
+            cfi: "epubcfi(/6/2)", percent: nil,
+            quote: "a quotable line", body: ""
+        )
+        let hits = try await store.searchNotes(query: "quotable")
+        #expect(hits.contains { $0.kind == .mark && $0.markId == mark.id })
+
+        let notebook = try await store.createNotebook(title: "Fresh")
+        _ = try await store.addPassage(
+            notebookId: notebook.id,
+            source: .mark(bookId: meta.id, chapterKey: "001", markId: mark.id),
+            commentary: "keeper of the quotable"
+        )
+        let next = try await store.searchNotes(query: "keeper")
+        #expect(next.contains { $0.kind == .notebook && $0.notebookId == notebook.id })
+    }
 }

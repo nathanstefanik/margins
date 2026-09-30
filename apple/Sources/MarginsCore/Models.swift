@@ -931,11 +931,14 @@ public struct NoteIndexEntry: Codable, Sendable, Equatable, Hashable, Identifiab
 // MARK: - Search
 
 /// What a search hit points at. Chapter titles and book targets are pure
-/// navigation; note-content hits carry a snippet.
+/// navigation; note-content hits carry a snippet; mark and notebook hits
+/// point into a chapter note's marks section or a notebook's prose.
 public enum SearchHitKind: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
     case noteContent = "note-content"
     case chapterTitle = "chapter-title"
     case bookTarget = "book-target"
+    case mark = "mark"
+    case notebook = "notebook"
 }
 
 /// Half-open range of matched text, measured in UTF-16 code units of the
@@ -969,6 +972,13 @@ public struct NoteSearchHit: Codable, Sendable, Equatable, Hashable, Identifiabl
     /// Matched ranges within the displayed title (chapter title, or book
     /// title for book targets).
     public var titleRanges: [MatchRange]
+    /// The mark a `.mark` hit points at (nil for other kinds).
+    public var markId: String?
+    /// The mark's CFI when known — a `.mark` hit opens at it (nil for
+    /// other kinds and marks without one).
+    public var cfi: String?
+    /// The notebook a `.notebook` hit points at (nil for other kinds).
+    public var notebookId: String?
 
     public init(
         bookId: String,
@@ -982,7 +992,10 @@ public struct NoteSearchHit: Codable, Sendable, Equatable, Hashable, Identifiabl
         kind: SearchHitKind,
         score: Double,
         snippetRanges: [MatchRange] = [],
-        titleRanges: [MatchRange] = []
+        titleRanges: [MatchRange] = [],
+        markId: String? = nil,
+        cfi: String? = nil,
+        notebookId: String? = nil
     ) {
         self.bookId = bookId
         self.bookTitle = bookTitle
@@ -996,9 +1009,23 @@ public struct NoteSearchHit: Codable, Sendable, Equatable, Hashable, Identifiabl
         self.score = score
         self.snippetRanges = snippetRanges
         self.titleRanges = titleRanges
+        self.markId = markId
+        self.cfi = cfi
+        self.notebookId = notebookId
     }
 
-    public var id: String { "\(bookId)/\(chapterKey)" }
+    /// Mark and notebook hits carry their target in the id so distinct
+    /// marks in one chapter (and distinct notebooks) stay separate rows.
+    public var id: String {
+        switch kind {
+        case .mark:
+            return "\(bookId)/\(chapterKey)#\(markId ?? "")"
+        case .notebook:
+            return "notebook/\(notebookId ?? "")"
+        case .noteContent, .chapterTitle, .bookTarget:
+            return "\(bookId)/\(chapterKey)"
+        }
+    }
 
     private enum CodingKeys: String, CodingKey {
         case bookId = "book_id"
@@ -1012,6 +1039,122 @@ public struct NoteSearchHit: Codable, Sendable, Equatable, Hashable, Identifiabl
         case kind, score
         case snippetRanges = "snippet_ranges"
         case titleRanges = "title_ranges"
+        case markId = "mark_id"
+        case cfi
+        case notebookId = "notebook_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        bookId = try container.decode(String.self, forKey: .bookId)
+        bookTitle = try container.decode(String.self, forKey: .bookTitle)
+        bookAuthor = try container.decode(String.self, forKey: .bookAuthor)
+        chapterKey = try container.decode(String.self, forKey: .chapterKey)
+        chapterIndex = try container.decode(Int.self, forKey: .chapterIndex)
+        chapterTitle = try container.decode(String.self, forKey: .chapterTitle)
+        snippet = try container.decode(String.self, forKey: .snippet)
+        wordCount = try container.decode(Int.self, forKey: .wordCount)
+        kind = try container.decode(SearchHitKind.self, forKey: .kind)
+        score = try container.decode(Double.self, forKey: .score)
+        snippetRanges = try container.decode([MatchRange].self, forKey: .snippetRanges)
+        titleRanges = try container.decode([MatchRange].self, forKey: .titleRanges)
+        markId = try container.decodeIfPresent(String.self, forKey: .markId)
+        cfi = try container.decodeIfPresent(String.self, forKey: .cfi)
+        notebookId = try container.decodeIfPresent(String.self, forKey: .notebookId)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(bookId, forKey: .bookId)
+        try container.encode(bookTitle, forKey: .bookTitle)
+        try container.encode(bookAuthor, forKey: .bookAuthor)
+        try container.encode(chapterKey, forKey: .chapterKey)
+        try container.encode(chapterIndex, forKey: .chapterIndex)
+        try container.encode(chapterTitle, forKey: .chapterTitle)
+        try container.encode(snippet, forKey: .snippet)
+        try container.encode(wordCount, forKey: .wordCount)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(score, forKey: .score)
+        try container.encode(snippetRanges, forKey: .snippetRanges)
+        try container.encode(titleRanges, forKey: .titleRanges)
+        // The mark/notebook ids are kind-scoped: only written when present.
+        try container.encodeIfPresent(markId, forKey: .markId)
+        try container.encodeIfPresent(cfi, forKey: .cfi)
+        try container.encodeIfPresent(notebookId, forKey: .notebookId)
+    }
+}
+
+/// One full-text hit from the plain-file index (`TextIndex`,
+/// docs/commonplace.md "Full-text search"): a passage inside an indexed
+/// book, scored by BM25 with a snippet and UTF-16 highlight ranges.
+public struct TextSearchHit: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public var bookId: String
+    public var bookTitle: String
+    public var bookAuthor: String
+    public var chapterKey: String
+    /// Spine position of `chapterKey`, for opening.
+    public var chapterIndex: Int
+    public var chapterTitle: String
+    /// The full passage text the hit scored on.
+    public var passage: String
+    /// The passage's line number inside the book's `passages.jsonl`.
+    public var passageIndex: Int
+    public var snippet: String
+    /// Matched ranges inside `snippet` (UTF-16 code units of `snippet`).
+    public var snippetRanges: [MatchRange]
+    public var score: Double
+
+    public var id: String { "\(bookId)#\(passageIndex)" }
+
+    public init(
+        bookId: String, bookTitle: String, bookAuthor: String,
+        chapterKey: String, chapterIndex: Int, chapterTitle: String,
+        passage: String, passageIndex: Int, snippet: String,
+        snippetRanges: [MatchRange] = [], score: Double
+    ) {
+        self.bookId = bookId
+        self.bookTitle = bookTitle
+        self.bookAuthor = bookAuthor
+        self.chapterKey = chapterKey
+        self.chapterIndex = chapterIndex
+        self.chapterTitle = chapterTitle
+        self.passage = passage
+        self.passageIndex = passageIndex
+        self.snippet = snippet
+        self.snippetRanges = snippetRanges
+        self.score = score
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case bookId = "book_id"
+        case bookTitle = "book_title"
+        case bookAuthor = "book_author"
+        case chapterKey = "chapter_key"
+        case chapterIndex = "chapter_index"
+        case chapterTitle = "chapter_title"
+        case passage
+        case passageIndex = "passage_index"
+        case snippet
+        case snippetRanges = "snippet_ranges"
+        case score
+    }
+}
+
+/// Which of the library's books have a full-text index on this device
+/// (docs/commonplace.md "Full-text search"). Both lists are restricted
+/// to books in the current library and sorted.
+public struct TextIndexStatus: Codable, Sendable, Equatable, Hashable {
+    public var indexedBookIds: [String]
+    public var pendingBookIds: [String]
+
+    public init(indexedBookIds: [String], pendingBookIds: [String]) {
+        self.indexedBookIds = indexedBookIds
+        self.pendingBookIds = pendingBookIds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case indexedBookIds = "indexed_book_ids"
+        case pendingBookIds = "pending_book_ids"
     }
 }
 

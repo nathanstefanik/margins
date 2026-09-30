@@ -353,12 +353,63 @@ def build_fixed_layout() -> None:
     write_epub(OUT_DIR / "fixed-layout.epub", entries)
 
 
+def build_reveal() -> None:
+    """One chapter with typographic noise — curly quotes, an em-dash, a
+    soft hyphen, a zero-width space — so readerRevealText exercises the
+    folding normalization, plus a plain second paragraph as a miss guard."""
+    chapter = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Reveal Chapter</title>
+  <link rel="stylesheet" type="text/css" href="css/publisher.css"/>
+</head>
+<body>
+  <h1 id="heading-1">Reveal Chapter</h1>
+  <p id="p-plain">A plain paragraph with no typographic surprises.</p>
+  <p id="p-noisy">Above all, don’t lie to your­self — the man who​lies to
+    himself and listens to his own lie comes to a point where he cannot
+    distinguish the truth.</p>
+  <p id="p-verse">Grow your souls.<br/>Grow your hearts.<br/>The only hard
+    work is to kneel.</p>
+</body>
+</html>
+"""
+    manifest = [
+        ("nav", "nav.xhtml", "application/xhtml+xml", ' properties="nav"'),
+        ("css", "css/publisher.css", "text/css", ""),
+        ("ch1", "ch1.xhtml", "application/xhtml+xml", ""),
+    ]
+    entries: list[tuple[str, bytes]] = [
+        ("mimetype", b"application/epub+zip"),
+        ("META-INF/container.xml", CONTAINER.encode()),
+        (
+            "OEBPS/content.opf",
+            package_opf(
+                "Margins Layout Fixture: Reveal",
+                "urn:uuid:margins-reader-layout-reveal",
+                manifest,
+                ["ch1"],
+            ).encode(),
+        ),
+        (
+            "OEBPS/nav.xhtml",
+            nav_xhtml("Contents", [("Reveal Chapter", "ch1.xhtml")]).encode(),
+        ),
+        ("OEBPS/css/publisher.css", PUBLISHER_CSS.encode()),
+        ("OEBPS/ch1.xhtml", chapter.encode()),
+    ]
+    write_epub(OUT_DIR / "reveal.epub", entries)
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     build_reflowable()
     build_rtl()
     build_fixed_layout()
-    for name in ("reflowable.epub", "rtl.epub", "fixed-layout.epub"):
+    build_reveal()
+    for name in ("reflowable.epub", "rtl.epub", "fixed-layout.epub", "reveal.epub"):
         path = OUT_DIR / name
         print(f"wrote {path.relative_to(REPO_ROOT)} ({path.stat().st_size} bytes)")
 
