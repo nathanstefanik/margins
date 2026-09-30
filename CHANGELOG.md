@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reader acceptance tests wait for settled navigation and geometry instead
   of observing intermediate layout states
 
+### Fixed
+
+- macOS window resizing preserves the reading passage when layout
+  notifications are coalesced and the final page geometry is unchanged
+
 ## [0.6.0] - 2026-09-29
 
 ### Added
