@@ -10,6 +10,10 @@ public actor CoreStore {
     private var config: AppConfig
     private let library: Library
     private let clubs: ClubStore
+    /// The plain-file full-text index under the app data dir.
+    private let textIndex: TextIndex
+    /// Books currently indexing — a second `indexBookText` returns false.
+    private var indexingBooks: Set<String> = []
 
     /// The library root as `readEpubBytesSync` sees it. That call must not
     /// hop through the actor (the reader's scheme handler invokes it
@@ -39,6 +43,8 @@ public actor CoreStore {
         self.config = config
         self.library = try Library(root: config.libraryRoot)
         self.clubs = ClubStore(root: config.dataDir.appendingPathComponent("clubs"))
+        self.textIndex = TextIndex(
+            directory: config.dataDir.appendingPathComponent("text-index"))
         readerRoot.current = config.libraryRoot
     }
 
@@ -95,6 +101,9 @@ public actor CoreStore {
 
     public func removeBook(id: String) throws {
         try library.removeBook(id: id)
+        // The index is derived — a failed cleanup leaves nothing but a
+        // stray directory, which the next reconcile drops.
+        try? textIndex.remove(bookId: id)
     }
 
     /// Deletes every note file for the book and resets its notes index;
@@ -262,6 +271,134 @@ public actor CoreStore {
 
     public func searchNotes(query: String) throws -> [NoteSearchHit] {
         library.searchNotes(query: query)
+    }
+
+    // MARK: Full-text index
+
+    /// Searches the plain-file index over the books in the current
+    /// library; titles/authors/chapter titles are joined from meta.json.
+    public func searchBookText(query: String, limit: Int = 50) throws -> [TextSearchHit] {
+        try textIndex.ensure()
+        let scored = try textIndex.search(
+            query: query, bookIds: library.presentBookIDs(), limit: limit)
+        var metas: [String: BookMeta] = [:]
+        for hit in scored where metas[hit.bookId] == nil {
+            metas[hit.bookId] = try? library.getBook(id: hit.bookId)
+        }
+        return scored.compactMap { hit in
+            guard let meta = metas[hit.bookId] else { return nil }
+            let chapter = meta.chapters.first { $0.key == hit.chapterKey }
+            return TextSearchHit(
+                bookId: hit.bookId, bookTitle: meta.title, bookAuthor: meta.author,
+                chapterKey: hit.chapterKey, chapterIndex: chapter?.index ?? 0,
+                chapterTitle: chapter?.title ?? hit.chapterKey,
+                passage: hit.passage, passageIndex: hit.passageIndex,
+                snippet: hit.snippet, snippetRanges: hit.snippetRanges, score: hit.score
+            )
+        }
+        .sorted { lhs, rhs in
+            if lhs.score != rhs.score { return lhs.score > rhs.score }
+            if lhs.bookTitle != rhs.bookTitle {
+                return lhs.bookTitle.localizedStandardCompare(rhs.bookTitle) == .orderedAscending
+            }
+            if lhs.chapterIndex != rhs.chapterIndex { return lhs.chapterIndex < rhs.chapterIndex }
+            return lhs.passageIndex < rhs.passageIndex
+        }
+        .prefix(limit)
+        .map { $0 }
+    }
+
+    /// Builds (or refreshes) the book's full-text index. `epubPath`
+    /// defaults to the library's `books/{id}/source.epub` — an evicted
+    /// placeholder throws `CoreError.notDownloaded`. Extraction runs off
+    /// the actor and is committed atomically; a concurrent build of the
+    /// same book returns `false`.
+    public func indexBookText(bookId: String, epubPath: String? = nil) async throws -> Bool {
+        try textIndex.ensure()
+        let meta = try library.getBook(id: bookId)
+        guard !textIndex.isCurrent(bookId: bookId, chaptersVersion: meta.chaptersVersion)
+        else { return false }
+        guard indexingBooks.insert(bookId).inserted else { return false }
+        defer { indexingBooks.remove(bookId) }
+
+        let epub: String
+        if let epubPath {
+            epub = epubPath
+        } else {
+            let path = library.bookDir(bookId).appendingPathComponent("source.epub")
+            guard !FileStore.isEvicted(path) else {
+                throw CoreError.notDownloaded(path)
+            }
+            epub = path
+        }
+        let staging = config.dataDir
+            .appendingPathComponent("text-index/books/.staging-\(UUID().uuidString)")
+        try await Task.detached(priority: .utility) {
+            try TextIndex.build(bookId: bookId, epubPath: epub, meta: meta, into: staging)
+        }.value
+        try textIndex.commit(stagingDir: staging, bookId: bookId)
+        return true
+    }
+
+    /// Which of the current library's books are full-text indexed.
+    public func textIndexStatus() throws -> TextIndexStatus {
+        try textIndex.ensure()
+        let ids = library.presentBookIDs()
+        let indexed = textIndex.indexedBookIds().intersection(ids).sorted()
+        return TextIndexStatus(
+            indexedBookIds: indexed,
+            pendingBookIds: ids.subtracting(indexed).sorted()
+        )
+    }
+
+    /// Deletes the whole index directory; the next query recreates it.
+    public func deleteTextIndex() throws {
+        try textIndex.reset()
+    }
+
+    // MARK: Notebooks
+
+    /// The notebook catalog (`notebooks/_index.json`), newest first.
+    public func listNotebooks() throws -> [NotebookSummary] {
+        try library.listNotebooks()
+    }
+
+    /// Creates an empty notebook; an empty title is an error.
+    public func createNotebook(title: String) throws -> NotebookSummary {
+        try library.createNotebook(title: title)
+    }
+
+    /// Renames the notebook and moves its file to the new slug.
+    public func renameNotebook(id: String, title: String) throws -> NotebookSummary {
+        try library.renameNotebook(id: id, title: title)
+    }
+
+    public func deleteNotebook(id: String) throws {
+        try library.deleteNotebook(id: id)
+    }
+
+    /// Loads one notebook with passages resolved against the live library.
+    public func notebook(id: String) throws -> Notebook {
+        try library.notebook(id: id)
+    }
+
+    /// Saves the segment list the UI hands back; untouched passage blocks
+    /// keep their bytes, a changed quote or citation is regenerated.
+    public func saveNotebook(id: String, segments: [NotebookSegment]) throws -> Notebook {
+        try library.saveNotebook(id: id, segments: segments)
+    }
+
+    /// Appends a passage (existing mark, or a selection the core turns
+    /// into a mark first) plus optional commentary prose.
+    public func addPassage(
+        notebookId: String, source: PassageSource, commentary: String
+    ) throws -> Notebook {
+        try library.addPassage(notebookId: notebookId, source: source, commentary: commentary)
+    }
+
+    /// markId → the notebooks citing it, for one book.
+    public func notebooksCiting(bookId: String) throws -> [String: [NotebookSummary]] {
+        try library.notebooksCiting(bookId: bookId)
     }
 
     // MARK: Clubs

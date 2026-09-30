@@ -27,23 +27,25 @@ struct SearchResultsTests {
         )
     }
 
-    @Test("sections partition by kind: navigation targets above notes")
+    @Test("sections partition by kind: navigation targets, passages, notes, notebooks")
     func sectionsPartitionByKind() {
         let hits = [
             makeHit(bookId: "a", kind: .noteContent),
             makeHit(bookId: "b", kind: .bookTarget, chapterKey: ""),
             makeHit(bookId: "c", kind: .chapterTitle),
+            makeHit(bookId: "d", kind: .mark),
+            makeHit(bookId: "e", kind: .notebook),
         ]
         let sections = SearchResultsOrganizer.sections(for: hits)
-        #expect(sections.count == 2)
-        #expect(sections[0].title == "Chapters")
+        #expect(sections.map(\.title) == ["Chapters", "Passages", "Notes", "Notebooks"])
         #expect(sections[0].hits.map(\.bookId) == ["b", "c"])
-        #expect(sections[1].title == "Notes")
-        #expect(sections[1].hits.map(\.bookId) == ["a"])
+        #expect(sections[1].hits.map(\.bookId) == ["d"])
+        #expect(sections[2].hits.map(\.bookId) == ["a"])
+        #expect(sections[3].hits.map(\.bookId) == ["e"])
 
         // Navigation order flattens sections back, preserving relevance.
         let flat = SearchResultsOrganizer.flatOrder(for: hits)
-        #expect(flat.map(\.bookId) == ["b", "c", "a"])
+        #expect(flat.map(\.bookId) == ["b", "c", "d", "a", "e"])
 
         #expect(SearchResultsOrganizer.sections(for: []).isEmpty)
     }

@@ -839,6 +839,14 @@ function readerStyleContents(contents) {
       "color": "inherit !important",
       "background-color": "transparent !important",
     },
+    // The jump-to-context reveal flash: epub.js passes the class through
+    // to its highlight SVG; inline styles are also set at add time, so
+    // this rule is a fallback for the same warm yellow.
+    ".margins-reveal": {
+      "fill": "rgba(255, 213, 79, 0.45) !important",
+      "fill-opacity": "1 !important",
+      "mix-blend-mode": "multiply",
+    },
   };
   if (readerTypography) {
     // Root size on html; body and the common flow containers forced to
@@ -1289,6 +1297,177 @@ window.readerClearSelection = function () {
 window.readerCurrentCfi = function () {
   const location = readerRendition ? readerRendition.currentLocation() : null;
   return location && location.start ? location.start.cfi : null;
+};
+
+// MARK: Reveal (jump to context)
+
+// Locate a passage by text inside the currently displayed section and
+// flash it — full-text hits and marks without a CFI open their chapter,
+// then the shell calls this. Matching is forgiving: lowercase, whitespace
+// runs collapse to one space, curly quotes fold to straight, and soft
+// hyphens / zero-width spaces drop out — the needle from a mark quote or
+// the text index was extracted before the book's typography mangled it.
+function readerRevealNormalizeChar(char) {
+  switch (char) {
+    case "‘":
+    case "’":
+      return "'";
+    case "“":
+    case "”":
+      return '"';
+    case "\u00ad":
+    case "\u200b":
+      return null;
+    default:
+      if (/\s/.test(char)) {
+        return " ";
+      }
+      return char.toLowerCase();
+  }
+}
+
+// Normalizes the section document's text nodes into one searchable string,
+// keeping a (node, offset) map per kept character so a found span becomes a
+// DOM Range — and thus a CFI. Only letters and digits survive: text nodes
+// carry no whitespace across <br> or inline-element boundaries
+// ("one<br/>two" walks as "onetwo"), and a needle may lack the doc's
+// punctuation (or vice versa), so matching is alphanumeric-only.
+function readerRevealMap(contents) {
+  const doc = contents.document;
+  const body = doc && doc.body;
+  if (!body) {
+    return null;
+  }
+  const walker = doc.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  let normalized = "";
+  const positions = [];
+  let node = walker.nextNode();
+  while (node) {
+    const value = node.nodeValue || "";
+    for (let i = 0; i < value.length; i += 1) {
+      const mapped = readerRevealNormalizeChar(value.charAt(i));
+      if (mapped === null || !/[\p{L}\p{N}]/u.test(mapped)) {
+        continue;
+      }
+      positions.push({ node: node, offset: i });
+      normalized += mapped;
+    }
+    node = walker.nextNode();
+  }
+  return { text: normalized, positions: positions };
+}
+
+// The needle's space-collapsing form, for word/sentence fallbacks; the
+// matched form drops everything but letters and digits (see
+// readerRevealMap).
+function readerRevealNormalize(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i += 1) {
+    const mapped = readerRevealNormalizeChar(text.charAt(i));
+    if (mapped === null) {
+      continue;
+    }
+    if (mapped === " " && (out.length === 0 || out.endsWith(" "))) {
+      continue;
+    }
+    out += mapped;
+  }
+  return out;
+}
+
+function readerRevealStrip(text) {
+  return text.replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+window.readerRevealText = async function (needle) {
+  const report = function (found, cfi) {
+    const payload = { type: "revealed", found: found };
+    if (cfi) {
+      payload.cfi = cfi;
+    }
+    readerPost(payload);
+  };
+  try {
+    if (!readerRendition || !needle) {
+      report(false);
+      return;
+    }
+    const location = readerRendition.currentLocation();
+    const sectionIndex = location && location.start ? location.start.index : null;
+    const all = readerRendition.getContents() || [];
+    const current = all.filter(
+      (contents) => sectionIndex === null || contents.sectionIndex === sectionIndex,
+    );
+    const map = readerRevealMap(current[0] || all[0]);
+    if (!map) {
+      report(false);
+      return;
+    }
+
+    const normalized = readerRevealNormalize(needle);
+    if (!normalized.length || !map.positions.length) {
+      report(false);
+      return;
+    }
+    const candidates = [normalized.substring(0, 300)];
+    const sentenceEnd = normalized.search(/[.!?…]\s/);
+    if (sentenceEnd > 0) {
+      candidates.push(normalized.substring(0, sentenceEnd + 1));
+    }
+    const words = normalized.split(" ").filter((word) => word.length > 0);
+    if (words.length > 8) {
+      candidates.push(words.slice(0, 8).join(" "));
+    }
+    let start = -1;
+    let length = 0;
+    for (let c = 0; c < candidates.length; c += 1) {
+      const stripped = readerRevealStrip(candidates[c]);
+      if (!stripped.length) {
+        continue;
+      }
+      const index = map.text.indexOf(stripped);
+      if (index >= 0) {
+        start = index;
+        length = stripped.length;
+        break;
+      }
+    }
+    if (start < 0) {
+      report(false);
+      return;
+    }
+
+    const first = map.positions[start];
+    const last = map.positions[Math.min(start + length - 1, map.positions.length - 1)];
+    const range = map.positions[0].node.ownerDocument.createRange();
+    range.setStart(first.node, first.offset);
+    range.setEnd(last.node, last.offset + 1);
+    const cfi = (current[0] || all[0]).cfiFromRange(range);
+    if (cfi) {
+      await readerRendition.display(cfi);
+      try {
+        readerRendition.annotations.add(
+          "highlight",
+          cfi,
+          {},
+          () => {},
+          "margins-reveal",
+          { fill: "rgba(255, 213, 79, 0.45)", "fill-opacity": "1" },
+        );
+        setTimeout(() => {
+          try {
+            readerRendition.annotations.remove(cfi, "highlight");
+          } catch (error) {}
+        }, 2500);
+      } catch (error) {
+        console.error("readerRevealText highlight failed:", error);
+      }
+    }
+    report(!!cfi, cfi || undefined);
+  } catch (error) {
+    console.error("readerRevealText failed:", error);
+    report(false);
+  }
 };
 
 // Clicks on the top document itself (viewer padding, error page): the

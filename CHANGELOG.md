@@ -17,6 +17,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supports multiline notes with separate Save and Cancel controls
 - Bookmarks, contents, and note links expose full-row touch targets, and
   reader settings include an explicit Close action
+- Reader acceptance tests wait for settled navigation and geometry instead
+  of observing intermediate layout states
+
+## [0.6.0] - 2026-09-29
+
+### Added
+
+- Commonplace notebooks (iOS): a Notebooks tab of plain-markdown notebooks
+  under `notebooks/` where passages from any book sit between your own
+  prose; every passage references its mark and opens in its original
+  context, and a deleted mark leaves the cached quote marked "source
+  removed"
+- Full-text library search (iOS): every book's text is indexed on the
+  device as plain files outside the library (never synced or backed up)
+  and searched with stemming, typo tolerance, partial words, and phrase
+  ranking — no network, works in Airplane mode
+- "Add to Notebook…" from the reader's selection menu, search results, and
+  the marks sheet; "Search Library" from inside the reader; the marks
+  sheet shows which notebooks cite each mark
+- Hits without a saved location open their chapter and flash the passage,
+  and a mark created from such a hit remembers its location afterwards
+
+### Changed
+
+- Notes search on both platforms now finds mark quotes and thoughts,
+  matches word forms and accents ("deceive" finds "deceived", "cafe" finds
+  "café"), and retries misspelled words; macOS opens a passage hit at its
+  exact location
 
 ## [0.5.1] - 2026-09-21
 
@@ -180,6 +208,7 @@ Initial release.
 
 [Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.6.1...HEAD
 [0.6.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.6.1
+[0.6.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.6.0
 [0.5.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.1
 [0.5.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.0
 [0.2.5]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.5

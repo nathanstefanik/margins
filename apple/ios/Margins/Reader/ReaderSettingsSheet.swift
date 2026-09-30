@@ -8,6 +8,7 @@ enum ReaderDestination {
     case bookmarks
     case marks
     case chapterNote
+    case searchLibrary
 }
 
 /// The hamburger menu: the reading-surface theme (cream paper or dark), text
@@ -80,6 +81,9 @@ struct ReaderSettingsSheet: View {
                     destinationButton(
                         "Chapter note", systemImage: "square.and.pencil", destination: .chapterNote
                     )
+                    destinationButton(
+                        "Search Library", systemImage: "magnifyingglass",
+                        destination: .searchLibrary)
                 }
             }
             .navigationTitle("Reader")

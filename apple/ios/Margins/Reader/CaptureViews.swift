@@ -133,16 +133,19 @@ struct CaptureSheet: View {
 }
 
 /// The chapter's marks on demand: the chrome shows the count, this sheet
-/// lists them; tap a mark to land on it, or edit/delete.
+/// lists them — each annotated with the notebooks citing it; tap a mark to
+/// land on it, or edit/delete.
 struct MarksSheet: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
+    @Environment(NotebookModel.self) private var notebooks
 
     let onEditChapterNote: () -> Void
     var onOpen: (Mark) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @State private var markDraft: MarkDraft?
+    @State private var notebookCandidate: NotebookAddCandidate?
 
     var body: some View {
         NavigationStack {
@@ -177,6 +180,14 @@ struct MarksSheet: View {
             .sheet(item: $markDraft) { draft in
                 markEditSheet(draft)
             }
+            .sheet(item: $notebookCandidate) { candidate in
+                AddToNotebookSheet(source: candidate.source, preview: candidate.preview) { _ in }
+            }
+        }
+        .task {
+            if let book = reader.book {
+                await notebooks.loadCiting(bookId: book.id)
+            }
         }
     }
 
@@ -202,6 +213,11 @@ struct MarksSheet: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
+                    if let citing = notebooks.citing[mark.id], !citing.isEmpty {
+                        Text("In " + citing.map(\.title).joined(separator: ", "))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .frame(
                     maxWidth: .infinity,
@@ -212,7 +228,29 @@ struct MarksSheet: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens this mark in the reader")
+            .swipeActions {
+                Button {
+                    notebookCandidate = addCandidate(for: mark)
+                } label: {
+                    Label("Add to Notebook…", systemImage: "text.book.closed")
+                }
+                .tint(.accentColor)
+            }
+            .contextMenu {
+                Button {
+                    notebookCandidate = addCandidate(for: mark)
+                } label: {
+                    Label("Add to Notebook…", systemImage: "text.book.closed")
+                }
+            }
             Menu {
+                Button {
+                    notebookCandidate = addCandidate(for: mark)
+                } label: {
+                    Label("Add to Notebook…", systemImage: "text.book.closed")
+                }
+                .accessibilityIdentifier("mark-add-to-notebook")
+                Divider()
                 Button {
                     markDraft = MarkDraft(mark: mark)
                 } label: {
@@ -238,6 +276,17 @@ struct MarksSheet: View {
             .accessibilityIdentifier("mark-actions-\(mark.id)")
         }
         .padding(.vertical, 2)
+    }
+
+    /// The mark as a notebook-add candidate — `.mark` keeps the link to
+    /// the original annotation.
+    private func addCandidate(for mark: Mark) -> NotebookAddCandidate {
+        NotebookAddCandidate(
+            source: .mark(
+                bookId: reader.book?.id ?? "",
+                chapterKey: reader.chapter?.key ?? "",
+                markId: mark.id),
+            preview: mark.quote.isEmpty ? mark.body : mark.quote)
     }
 
     private func markEditSheet(_ draft: MarkDraft) -> some View {

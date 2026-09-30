@@ -10,6 +10,7 @@ enum ReaderLayoutFixture: String, CaseIterable, Sendable {
     case reflowable
     case rtl
     case fixedLayout = "fixed-layout"
+    case reveal
 
     var data: Data {
         get throws {

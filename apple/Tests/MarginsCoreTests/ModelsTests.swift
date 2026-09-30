@@ -360,6 +360,8 @@ struct ModelsTests {
         #expect(SearchHitKind.noteContent.rawValue == "note-content")
         #expect(SearchHitKind.chapterTitle.rawValue == "chapter-title")
         #expect(SearchHitKind.bookTarget.rawValue == "book-target")
+        #expect(SearchHitKind.mark.rawValue == "mark")
+        #expect(SearchHitKind.notebook.rawValue == "notebook")
     }
 
     @Test("a search hit identifies by book and chapter")

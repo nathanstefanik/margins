@@ -33,11 +33,13 @@ apple/                 # shared Apple SwiftPM package (macOS + iOS)
   VERSION              # the single version source (bump-version.sh writes
                        # it; make-app.sh and release.yml read it)
   Sources/MarginsCore/ # the core, no UI: Models, EpubParser, Library, Notes,
-                       # Marks, Frontmatter, Compile, Search, FileStore,
+                       # Marks, Frontmatter, Compile, Search, Notebooks,
+                       # TextAnalysis, TextExtract, TextIndex, FileStore,
                        # Files, AppConfig, Text, CoreStore (actor facade)
   Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap,
                        # LibraryLocation (iCloud root, materialization, conflicts),
-                       # EpubMirror (eviction-proof local EPUB copies)
+                       # EpubMirror (eviction-proof local EPUB copies),
+                       # NotebookModel, LibrarySearch
   Sources/Margins/     # macOS SwiftUI views, reader webview glue, key routing
   Tests/               # MarginsModelTests + MarginsCoreTests (Swift Testing);
                        # MarginsCoreTests/Fixtures/legacy-library/ is a library
@@ -50,6 +52,7 @@ scripts/               # make-app.sh, bump-version.sh, bump-build.sh,
 ## Conventions
 
 - Keep annotation storage plain-text; do not introduce a database without strong reason
+- Derived indexes are plain files too — per device under the data dir, never in the library root (`docs/storage.md`)
 - Sensitive paths belong in `.env`, never committed
 - Match existing minimal/zathura-like UI patterns (dark, keyboard-first)
 - iOS UI follows the iOS 26 content-under-glass model: system controls
@@ -80,7 +83,8 @@ iOS targets. The iOS library root lives in the iCloud Documents container
 when available, falling back to local `Documents/Library` at runtime
 (`LibraryLocation`); DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`,
 `MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`,
-`MARGINS_EVICT_FIXTURE`, `MARGINS_OFFLINE_FIXTURE`) drive simulator
+`MARGINS_EVICT_FIXTURE`, `MARGINS_OFFLINE_FIXTURE`,
+`MARGINS_NOTEBOOK_FIXTURE`) drive simulator
 verification flows. FileStore refuses evicted iCloud reads rather than
 waiting; see `docs/architecture.md` (iOS) and `docs/testing/ios-offline.md`.
 Device signing uses the team ID in
@@ -93,4 +97,4 @@ Tests use Swift Testing (`import Testing`) via the
 
 ## Agent tasks
 
-When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When adding macOS keybindings, update the README table and `KeyHelp.swift` (the iOS app has no vim keymap). When changing the `CoreStore` surface, keep the method list and labels the apps call — check `MarginsModel`, both apps (macOS + iOS), and the tests.
+When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When modifying notebook storage, update `docs/storage.md` and `docs/commonplace.md`; `notebooks/_index.json` must stay derivable from the files. When adding macOS keybindings, update the README table and `KeyHelp.swift` (the iOS app has no vim keymap). When changing the `CoreStore` surface, keep the method list and labels the apps call — check `MarginsModel`, both apps (macOS + iOS), and the tests.
