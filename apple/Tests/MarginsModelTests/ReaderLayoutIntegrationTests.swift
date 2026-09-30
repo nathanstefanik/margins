@@ -455,6 +455,33 @@ struct ReaderLayoutIntegrationTests {
         #expect(after.contains(anchor), "anchor \(anchor) left the screen after rapid resizes")
     }
 
+    @Test("window resize repairs the passage when policy geometry is unchanged")
+    func windowResizeRestoresUnchangedGeometry() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(1)
+        var visible = try await harness.visibleParagraphIDs()
+        _ = try await harness.evaluate("readerScrollBy(1)")
+        visible = try await harness.waitForVisibleParagraphChange(from: visible)
+        try await harness.waitForReaderIdle()
+        let anchor = try await anchorParagraph(harness)
+        let before = try await harness.geometry()
+        let generation = try #require(try await harness.evaluate("readerLayoutGeneration") as? Int)
+        _ = try await harness.evaluate(
+            "readerViewportObserver.disconnect(); window.dispatchEvent(new Event('resize'))"
+        )
+        try await harness.waitForLayoutSettled()
+        let repaired = try #require(try await harness.evaluate("readerLayoutGeneration") as? Int)
+        let after = try await harness.geometry()
+        let paragraphs = try await harness.visibleParagraphIDs()
+        #expect(repaired > generation)
+        #expect(abs(after.viewerWidth - before.viewerWidth) < 1)
+        #expect(after.renderedDivisor == before.renderedDivisor)
+        #expect(paragraphs.contains(anchor))
+    }
+
     @Test("navigation during reflow wins over the old anchor")
     func navigationDuringReflowWins() async throws {
         let harness = try makeHarness(width: 1200, height: 760)
@@ -499,6 +526,62 @@ struct ReaderLayoutIntegrationTests {
                 "document.querySelector('.reader-error') ? 'error' : 'ok'"
             ) as? String
         #expect(body == "ok")
+    }
+
+    @Test("layout waits reject unfinished navigation")
+    func layoutWaitRejectsPendingNavigation() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        try await harness.waitForLayoutSettled()
+
+        _ = try await harness.evaluate("readerBeginNavigation()")
+        await #expect(throws: ReaderLayoutHarnessError.self) {
+            try await harness.waitForLayoutSettled(timeout: 0.2)
+        }
+        _ = try await harness.evaluate("readerEndNavigation()")
+        try await harness.waitForLayoutSettled()
+    }
+
+    @Test("idle waits reject unfinished navigation")
+    func idleWaitRejectsPendingNavigation() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        try await harness.waitForLayoutSettled()
+
+        _ = try await harness.evaluate("readerBeginNavigation()")
+        await #expect(throws: ReaderLayoutHarnessError.self) {
+            try await harness.waitForReaderIdle(timeout: 0.2)
+        }
+        _ = try await harness.evaluate("readerEndNavigation()")
+        try await harness.waitForReaderIdle()
+    }
+
+    @Test("an empty queue is not idle while its job is running")
+    func idleWaitRejectsRunningQueueJob() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        try await harness.waitForReaderIdle()
+
+        _ = try await harness.evaluate(
+            "void readerRendition.q.enqueue(function() { return new Promise(function(resolve) { window.__marginsResolveQueueJob = resolve; readerPost({type:'testQueueRunning'}); }); });"
+        )
+        _ = try await harness.waitForMessage(
+            "testQueueRunning", matching: nil, "the deliberately pending queue job")
+        #expect(try await harness.evaluate("readerRendition.q._q.length") as? Int == 0)
+        #expect(try await harness.evaluate("!!readerRendition.q.running") as? Bool == true)
+        await #expect(throws: ReaderLayoutHarnessError.self) {
+            try await harness.waitForReaderIdle(timeout: 0.2)
+        }
+        _ = try await harness.evaluate(
+            "window.__marginsResolveQueueJob(); delete window.__marginsResolveQueueJob"
+        )
+        try await harness.waitForReaderIdle()
     }
 
     // MARK: iOS preservation

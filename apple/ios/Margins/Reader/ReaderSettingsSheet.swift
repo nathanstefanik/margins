@@ -20,6 +20,8 @@ struct ReaderSettingsSheet: View {
     @Bindable var preferences: ReaderPreferences
     let onSelect: (ReaderDestination) -> Void
 
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         NavigationStack {
             Form {
@@ -32,29 +34,38 @@ struct ReaderSettingsSheet: View {
                     .accessibilityLabel("Reading theme")
                 }
                 Section("Text size") {
-                    HStack {
+                    HStack(spacing: DesignTokens.Spacing.actions) {
                         Button {
                             preferences.stepFont(-1)
                         } label: {
                             Text("A")
                                 .font(.system(size: 16, weight: .medium))
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .frame(
+                                    maxWidth: .infinity,
+                                    minHeight: DesignTokens.Control.fontSizeLabelHeight
+                                )
                                 .contentShape(Rectangle())
                         }
                         .disabled(!preferences.canStepFontSmaller)
                         .accessibilityLabel("Smaller text")
+                        .accessibilityIdentifier("reader-smaller-text")
                         Button {
                             preferences.stepFont(1)
                         } label: {
                             Text("A")
                                 .font(.system(size: 30, weight: .medium))
-                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .frame(
+                                    maxWidth: .infinity,
+                                    minHeight: DesignTokens.Control.fontSizeLabelHeight
+                                )
                                 .contentShape(Rectangle())
                         }
                         .disabled(!preferences.canStepFontLarger)
                         .accessibilityLabel("Larger text")
+                        .accessibilityIdentifier("reader-larger-text")
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
                 }
                 Section("Typeface") {
                     Picker("Typeface", selection: $preferences.typeface) {
@@ -64,35 +75,38 @@ struct ReaderSettingsSheet: View {
                     .pickerStyle(.segmented)
                 }
                 Section {
-                    Button {
-                        onSelect(.contents)
-                    } label: {
-                        Label("Contents", systemImage: "list.bullet")
-                    }
-                    Button {
-                        onSelect(.bookmarks)
-                    } label: {
-                        Label("Bookmarks", systemImage: "bookmark")
-                    }
-                    Button {
-                        onSelect(.marks)
-                    } label: {
-                        Label("Marks", systemImage: "highlighter")
-                    }
-                    Button {
-                        onSelect(.chapterNote)
-                    } label: {
-                        Label("Chapter note", systemImage: "square.and.pencil")
-                    }
-                    Button {
-                        onSelect(.searchLibrary)
-                    } label: {
-                        Label("Search Library", systemImage: "magnifyingglass")
-                    }
+                    destinationButton("Contents", systemImage: "list.bullet", destination: .contents)
+                    destinationButton("Bookmarks", systemImage: "bookmark", destination: .bookmarks)
+                    destinationButton("Marks", systemImage: "highlighter", destination: .marks)
+                    destinationButton(
+                        "Chapter note", systemImage: "square.and.pencil", destination: .chapterNote
+                    )
+                    destinationButton(
+                        "Search Library", systemImage: "magnifyingglass",
+                        destination: .searchLibrary)
                 }
             }
             .navigationTitle("Reader")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private func destinationButton(
+        _ title: String,
+        systemImage: String,
+        destination: ReaderDestination
+    ) -> some View {
+        Button {
+            onSelect(destination)
+        } label: {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
     }
 }

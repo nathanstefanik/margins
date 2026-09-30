@@ -56,6 +56,42 @@ struct ReaderRevealTests {
         #expect((message["cfi"] as? String)?.isEmpty == false)
     }
 
+    @Test("fixture startup surfaces a book-open failure")
+    @MainActor
+    func fixtureStartupRejectsBookFailure() async throws {
+        let harness = try ReaderLayoutHarness(
+            fixture: .reveal,
+            viewport: CGSize(width: 800, height: 900),
+            startupScript: """
+                (function() {
+                  var fetch = window.fetch.bind(window);
+                  window.fetch = function(resource, options) {
+                    if (String(resource).indexOf('book.epub') !== -1) {
+                      return Promise.reject(new Error('injected fixture fetch failure'));
+                    }
+                    return fetch(resource, options);
+                  };
+                })();
+                """
+        )
+        defer { harness.dismantle() }
+        await #expect(throws: ReaderLayoutHarnessError.self) {
+            try await harness.load()
+        }
+        #expect(harness.consoleTail().contains { $0.contains("injected fixture fetch failure") })
+    }
+
+    @Test("fixture load returns only after the book is rendered")
+    @MainActor
+    func fixtureLoadIsReady() async throws {
+        let harness = try ReaderLayoutHarness(
+            fixture: .reveal, viewport: CGSize(width: 800, height: 900))
+        defer { harness.dismantle() }
+        try await harness.load()
+        #expect(try await harness.evaluate("readerOpened") as? Bool == true)
+        #expect(try await harness.visibleParagraphIDs().isEmpty == false)
+    }
+
     @Test("a needle absent from the chapter reports found:false")
     @MainActor
     func revealMisses() async throws {

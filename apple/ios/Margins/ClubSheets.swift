@@ -25,7 +25,13 @@ struct CreateClubSheet: View {
                     } description: {
                         Text("A club reads one book from your library. Import an EPUB first.")
                     } actions: {
-                        Button("Import EPUB") { importPresented = true }
+                        Button {
+                            importPresented = true
+                        } label: {
+                            Text("Import EPUB")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
                     }
                 } else {
                     Form {

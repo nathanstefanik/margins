@@ -64,6 +64,7 @@ final class ReaderLayoutHarness {
     private var window: NSWindow?
     private var relay: MessageRelay?
     private let fixtureData: Data
+    private let startupScript: String?
     private var viewport: CGSize
     private var messages: [[String: Any]] = []
     private var consoleLines: [String] = []
@@ -73,9 +74,10 @@ final class ReaderLayoutHarness {
     private static let pollInterval = Duration.milliseconds(20)
     private static var installing = false
 
-    init(fixture: ReaderLayoutFixture, viewport: CGSize) throws {
+    init(fixture: ReaderLayoutFixture, viewport: CGSize, startupScript: String? = nil) throws {
         fixtureData = try fixture.data
         self.viewport = viewport
+        self.startupScript = startupScript
     }
 
     func dismantle() {
@@ -125,19 +127,29 @@ final class ReaderLayoutHarness {
         }
         try await installWebView()
         do {
-            try await navigate(to: url)
+            try await openFixture(at: url, typography: typography)
         } catch let error as ReaderLayoutHarnessError {
             guard case .timedOut = error else { throw error }
             dismantle()
             try await installWebView()
-            try await navigate(to: url)
+            try await openFixture(at: url, typography: typography)
         }
+    }
 
-        guard let typography else { return }
-        try await evaluate(
-            "readerApplyTypography(\(typography.fontSize),\(typography.lineHeight),\(typography.lineWidth),"
-                + "'\(typography.unit)')"
-        )
+    private func openFixture(
+        at url: URL,
+        typography: (fontSize: Double, lineHeight: Double, lineWidth: Double, unit: String)?
+    ) async throws {
+        try await navigate(to: url)
+        if let typography {
+            _ = try await evaluate(
+                "readerApplyTypography(\(typography.fontSize),\(typography.lineHeight),\(typography.lineWidth),"
+                    + "'\(typography.unit)')"
+            )
+        }
+        _ = try await waitForMessage(
+            "relocated", matching: nil, "fixture book to open")
+        try await waitForLayoutSettled()
     }
 
     /// Sets the viewport without waiting; for drag-like burst tests.
@@ -157,6 +169,8 @@ final class ReaderLayoutHarness {
 
     private func installWebView() async throws {
         if webView != nil { return }
+        messages.removeAll()
+        consoleLines.removeAll()
 
         let app = NSApplication.shared
         if app.activationPolicy() == .prohibited {
@@ -179,6 +193,15 @@ final class ReaderLayoutHarness {
                 forMainFrameOnly: true
             )
         )
+        if let startupScript {
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: startupScript,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
+            )
+        }
         let relay = MessageRelay(harness: self)
         configuration.userContentController.add(relay, name: "reader")
         let frame = NSRect(origin: .zero, size: viewport)
@@ -213,20 +236,35 @@ final class ReaderLayoutHarness {
         )
     }
 
+    private struct LayoutSnapshot: Decodable, Equatable {
+        var ready: Bool
+        var geometry: Geometry
+        var paragraphs: [ParagraphRect]
+    }
+
+    private func layoutSnapshot() async throws -> LayoutSnapshot {
+        guard
+            let json = try await evaluateJSON(Self.snapshotScript) as? [String: Any]
+        else {
+            throw ReaderLayoutHarnessError.javaScript("layoutSnapshot")
+        }
+        let data = try JSONSerialization.data(withJSONObject: json)
+        return try JSONDecoder().decode(LayoutSnapshot.self, from: data)
+    }
+
     /// Waits until the page has no pending layout work, epub.js's queue has
     /// drained, and the visible text stopped changing.
     func waitForLayoutSettled(timeout: TimeInterval = 10) async throws {
         let deadline = Date().addingTimeInterval(timeout)
-        var lastSet: [String]?
+        var previous: LayoutSnapshot?
         var stable = 0
         while Date() < deadline {
-            let settling = try? await pageLayoutState().settling
-            let depth =
-                try? await evaluate(
-                    "readerRendition && readerRendition.q ? readerRendition.q._q.length : -1"
-                ) as? Int
-            let current = (try? await visibleParagraphIDs()) ?? []
-            if settling == false, depth == 0, current == lastSet {
+            let snapshot = try await layoutSnapshot()
+            if snapshot.ready,
+                abs(snapshot.geometry.innerWidth - Double(viewport.width)) < 1,
+                abs(snapshot.geometry.innerHeight - Double(viewport.height)) < 1,
+                snapshot == previous
+            {
                 stable += 1
                 if stable >= 2 {
                     return
@@ -234,9 +272,12 @@ final class ReaderLayoutHarness {
             } else {
                 stable = 0
             }
-            lastSet = current
+            previous = snapshot
             try await Task.sleep(for: Self.pollInterval)
         }
+        throw ReaderLayoutHarnessError.timedOut(
+            "layout to settle (last: \(String(describing: previous)); console: \(consoleLines.suffix(8)))"
+        )
     }
 
     /// Number of section iframes currently visible on the reading surface.
@@ -388,7 +429,7 @@ final class ReaderLayoutHarness {
     }
 
     /// A visible paragraph's rect in outer-window coordinates.
-    struct ParagraphRect: Decodable {
+    struct ParagraphRect: Decodable, Equatable {
         var id: String
         var left: Double
         var right: Double
@@ -428,26 +469,7 @@ final class ReaderLayoutHarness {
     /// text has stopped changing, so a test can issue the next command
     /// without racing queued page turns.
     func waitForReaderIdle(timeout: TimeInterval = 5) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        var lastSet: [String]?
-        var stableCount = 0
-        while Date() < deadline {
-            let depth =
-                try? await evaluate(
-                    "readerRendition && readerRendition.q ? readerRendition.q._q.length : -1"
-                ) as? Int
-            let current = (try? await visibleParagraphIDs()) ?? []
-            if depth == 0, current == lastSet {
-                stableCount += 1
-                if stableCount >= 2 {
-                    return
-                }
-            } else {
-                stableCount = 0
-            }
-            lastSet = current
-            try await Task.sleep(for: Self.pollInterval)
-        }
+        try await waitForLayoutSettled(timeout: timeout)
     }
 
     func waitForVisibleParagraph(_ id: String, timeout: TimeInterval = 15) async throws {
@@ -462,7 +484,7 @@ final class ReaderLayoutHarness {
     }
 
     /// Outer `#viewer` and rendition geometry, in CSS px.
-    struct Geometry: Decodable {
+    struct Geometry: Decodable, Equatable {
         var innerWidth: Double
         var innerHeight: Double
         var pageWidth: Double
@@ -482,12 +504,12 @@ final class ReaderLayoutHarness {
         let deadline = Date().addingTimeInterval(timeout)
         var latest: Geometry?
         while Date() < deadline {
-            let current = try? await geometry()
-            if let current {
-                latest = current
-                if current.renderedDivisor == divisor {
-                    return current
-                }
+            try await waitForLayoutSettled(
+                timeout: max(0, deadline.timeIntervalSinceNow))
+            let current = try await geometry()
+            latest = current
+            if current.renderedDivisor == divisor {
+                return current
             }
             try await Task.sleep(for: Self.pollInterval)
         }
@@ -734,6 +756,21 @@ final class ReaderLayoutHarness {
             }
           };
         })();
+        """
+
+    private static let snapshotScript = """
+        (function() {
+          var state = window.readerPageLayoutState();
+          var rendition = readerRendition;
+          var queue = rendition && rendition.q;
+          var geometry = window.__marginsTest.geometry();
+          var paragraphs = window.__marginsTest.visibleParagraphRects();
+          var ready = !!(readerOpened && !state.settling && queue && queue._q.length === 0 && !queue.running && paragraphs.length > 0);
+          if (state.desktop) {
+            ready = ready && !!state.applied && state.applied.pages === geometry.renderedDivisor && Math.abs(state.applied.viewerWidthPx - geometry.viewerWidth) < 1 && Math.abs(geometry.stageWidth - (geometry.viewerWidth - 2 * geometry.viewerPaddingLeft)) < 1;
+          }
+          return { ready: ready, geometry: geometry, paragraphs: paragraphs };
+        })()
         """
 }
 #endif

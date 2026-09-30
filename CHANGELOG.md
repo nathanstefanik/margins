@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-29
+
+### Changed
+
+- iOS reader controls have larger touch targets and clearer separation;
+  native actions use larger system buttons and stack at larger text sizes
+- Mark rows group edit and delete in an accessible action menu; mark editing
+  supports multiline notes with separate Save and Cancel controls
+- Bookmarks, contents, and note links expose full-row touch targets, and
+  reader settings include an explicit Close action
+- Reader acceptance tests wait for settled navigation and geometry instead
+  of observing intermediate layout states
+
+### Fixed
+
+- macOS window resizing preserves the reading passage when layout
+  notifications are coalesced and the final page geometry is unchanged
+
 ## [0.6.0] - 2026-09-29
 
 ### Added
@@ -193,7 +211,9 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.6.1
+[0.6.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.6.0
 [0.5.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.1
 [0.5.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.0
 [0.2.5]: https://github.com/nathanstefanik/margins/releases/tag/v0.2.5

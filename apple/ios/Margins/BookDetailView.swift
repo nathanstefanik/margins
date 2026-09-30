@@ -129,6 +129,7 @@ struct BookDetailView: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
 
                 Picker("View", selection: $tab) {
                     Text("Contents").tag(Tab.contents)
@@ -271,6 +272,7 @@ private struct ContentsList: View {
         Text(text)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
+            .frame(minHeight: DesignTokens.Control.minimumTarget)
     }
 
     private func row(_ row: OutlineRow) -> some View {
@@ -302,6 +304,7 @@ private struct ContentsList: View {
                 }
             }
             .padding(.vertical, row.kind == .matter ? 6 : 8)
+            .frame(minHeight: DesignTokens.Control.minimumTarget)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -396,26 +399,19 @@ private struct NotesTab: View {
             Toggle("Show chapters without notes", isOn: $showEmptyChapters)
                 .font(.footnote)
 
-            HStack {
-                if let exportMarkdown {
-                    ShareLink(item: exportMarkdown, preview: SharePreview(notes.suggestedFilename)) {
-                        Label("Export .md", systemImage: "square.and.arrow.up")
-                    }
-                } else {
-                    Button {
-                        Task { await prepareExport(bookId: notes.bookId) }
-                    } label: {
-                        Label("Export .md", systemImage: "square.and.arrow.up")
-                    }
+            ViewThatFits {
+                HStack(spacing: DesignTokens.Spacing.actions) {
+                    exportAction(notes)
+                    Spacer(minLength: 8)
+                    clearAction
                 }
-                Spacer(minLength: 8)
-                Button(role: .destructive) {
-                    showClearDialog = true
-                } label: {
-                    Label("Clear All…", systemImage: "trash")
+                VStack(alignment: .leading, spacing: DesignTokens.Spacing.actions) {
+                    exportAction(notes)
+                    clearAction
                 }
             }
             .buttonStyle(.bordered)
+            .controlSize(.large)
             .confirmationDialog(
                 "Clear All Notes?",
                 isPresented: $showClearDialog,
@@ -445,6 +441,34 @@ private struct NotesTab: View {
         }
     }
 
+    private func exportAction(_ notes: CompiledNotes) -> some View {
+        Group {
+            if let exportMarkdown {
+                ShareLink(item: exportMarkdown, preview: SharePreview(notes.suggestedFilename)) {
+                    exportLabel
+                }
+            } else {
+                Button {
+                    Task { await prepareExport(bookId: notes.bookId) }
+                } label: {
+                    exportLabel
+                }
+            }
+        }
+    }
+
+    private var exportLabel: some View {
+        Label("Export .md", systemImage: "square.and.arrow.up")
+    }
+
+    private var clearAction: some View {
+        Button(role: .destructive) {
+            showClearDialog = true
+        } label: {
+            Label("Clear All…", systemImage: "trash")
+        }
+    }
+
     private func section(_ chapter: CompiledChapter) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Button {
@@ -462,6 +486,12 @@ private struct NotesTab: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: DesignTokens.Control.minimumTarget,
+                    alignment: .leading
+                )
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
             Text(chapterMetaLine(chapter))
@@ -517,7 +547,11 @@ private struct NotesTab: View {
                     .frame(width: 2)
             }
             .padding(.vertical, 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: DesignTokens.Control.minimumTarget,
+                alignment: .leading
+            )
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

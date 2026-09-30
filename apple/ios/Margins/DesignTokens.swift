@@ -18,6 +18,14 @@ enum DesignTokens {
         static let grid: CGFloat = 20
         static let gridCell: CGFloat = 16
         static let chrome: CGFloat = 10
+        static let actions: CGFloat = 12
+        static let controlInset: CGFloat = 12
+    }
+
+    enum Control {
+        static let minimumTarget: CGFloat = 44
+        static let readerTarget: CGFloat = 48
+        static let fontSizeLabelHeight: CGFloat = 36
     }
 
     enum Motion {

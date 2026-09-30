@@ -758,7 +758,9 @@ function readerScheduleLayoutUpdate() {
   }
   readerLayoutFrame = requestAnimationFrame(() => {
     readerLayoutFrame = null;
-    readerApplyPageLayout();
+    if (!readerApplyPageLayout()) {
+      readerQueueRelayout();
+    }
   });
 }
 
@@ -774,11 +776,13 @@ function readerInstallViewportObserver() {
   }
   readerViewportObserver = new ResizeObserver(() => readerScheduleLayoutUpdate());
   readerViewportObserver.observe(page);
+  window.addEventListener("resize", readerScheduleLayoutUpdate);
   window.addEventListener("unload", readerTeardownViewportObserver);
   window.addEventListener("pagehide", readerTeardownViewportObserver);
 }
 
 function readerTeardownViewportObserver() {
+  window.removeEventListener("resize", readerScheduleLayoutUpdate);
   if (readerViewportObserver) {
     readerViewportObserver.disconnect();
     readerViewportObserver = null;
