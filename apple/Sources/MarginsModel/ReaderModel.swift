@@ -206,6 +206,9 @@ public final class ReaderModel {
         flushNoteSave()
         jumpFragmentOverride = nil
         self.chapter = book.chapters[target]
+        currentCfi = nil
+        currentEndCfi = nil
+        progress = nil
         return self.chapter
     }
 
@@ -346,12 +349,15 @@ public final class ReaderModel {
     /// recognized when a layout change turns its page into the right page
     /// of a spread.
     public var pageIsBookmarked: Bool {
-        guard let chapter else { return false }
-        return bookmarks.contains {
-            $0.isAt(chapterKey: chapter.key, cfi: currentCfi)
-                // `isAt` treats two absent CFIs as equal, so only consult
-                // the second page when the renderer gave it a real CFI.
-                || (currentEndCfi != nil && $0.isAt(chapterKey: chapter.key, cfi: currentEndCfi))
+        !bookmarksOnPage.isEmpty
+    }
+
+    public var bookmarksOnPage: [Bookmark] {
+        guard let chapter else { return [] }
+        return bookmarks.filter {
+            $0.isVisible(
+                chapterKey: chapter.key, startCfi: currentCfi, endCfi: currentEndCfi
+            )
         }
     }
 

@@ -455,4 +455,314 @@ struct LibraryModelTests {
         await model.selectBook(id: nil)
         #expect(model.selectedBookBookmarks.isEmpty)
     }
+
+    @MainActor
+    private func openReader(
+        on model: LibraryModel, book: BookMeta
+    ) throws -> ReaderModel {
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(
+            page: 2,
+            totalPages: 8,
+            href: book.chapters[0].href,
+            cfi: "epubcfi(/6/4!/4/2/1:0)",
+            endPage: 2,
+            endHref: book.chapters[0].href,
+            endCfi: "epubcfi(/6/4!/4/2/1:99)"
+        )
+        return reader
+    }
+
+    @Test("the bookmark toggle adds and removes the page's pin")
+    @MainActor
+    func toggleBookmarkRoundTrips() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = try openReader(on: model, book: book)
+
+        let added = await model.toggleBookmark(reader: reader)
+        guard case .added(let pin) = added else {
+            Issue.record("expected .added, got \(String(describing: added))")
+            return
+        }
+        #expect(pin.epubCfi == "epubcfi(/6/4!/4/2/1:0)")
+        #expect(reader.pageIsBookmarked)
+        #expect(reader.bookmarks.map(\.id) == [pin.id])
+        #expect(model.selectedBookBookmarks.map(\.id) == [pin.id])
+        #expect(model.errorMessage == nil)
+
+        let removed = await model.toggleBookmark(reader: reader)
+        guard case .removed(let gone) = removed else {
+            Issue.record("expected .removed, got \(String(describing: removed))")
+            return
+        }
+        #expect(gone.id == pin.id)
+        #expect(reader.bookmarks.isEmpty)
+        #expect(!reader.pageIsBookmarked)
+        #expect(model.selectedBookBookmarks.isEmpty)
+        #expect(!model.bookmarkToggleInFlight)
+    }
+
+    @Test("toggling with several pins on the page asks which to remove")
+    @MainActor
+    func toggleBookmarkOffersChoice() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = try openReader(on: model, book: book)
+
+        let first = try #require(
+            await model.addBookmark(
+                bookId: book.id,
+                position: ReadingPosition(
+                    chapterKey: book.chapters[0].key,
+                    epubCfi: "epubcfi(/6/4!/4/2/1:0)",
+                    percent: 10
+                )
+            )
+        )
+        let second = try #require(
+            await model.addBookmark(
+                bookId: book.id,
+                position: ReadingPosition(
+                    chapterKey: book.chapters[0].key,
+                    epubCfi: "epubcfi(/6/4!/4/2/1:42)",
+                    percent: 20
+                )
+            )
+        )
+
+        let result = await model.toggleBookmark(reader: reader)
+        guard case .choose(let pins) = result else {
+            Issue.record("expected .choose, got \(String(describing: result))")
+            return
+        }
+        #expect(Set(pins.map(\.id)) == [first.id, second.id])
+        let stored = try await model.coreStore!.bookmarks(bookId: book.id)
+        #expect(stored.count == 2)
+        #expect(reader.bookmarks.count == 2)
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test("the toggle does nothing until the renderer reports a location")
+    @MainActor
+    func toggleBookmarkNeedsALocation() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.open(book: book, chapter: book.chapters[0])
+        #expect(reader.currentPosition()?.epubCfi == nil)
+
+        let result = await model.toggleBookmark(reader: reader)
+        #expect(result == nil)
+        #expect(reader.bookmarks.isEmpty)
+        let stored = try await model.coreStore!.bookmarks(bookId: book.id)
+        #expect(stored.isEmpty)
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test("overlapping toggles collapse to one decision")
+    @MainActor
+    func overlappingTogglesDoNotDuplicate() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = try openReader(on: model, book: book)
+
+        async let first = model.toggleBookmark(reader: reader)
+        async let second = model.toggleBookmark(reader: reader)
+        let results = [await first, await second]
+
+        #expect(results.filter { $0 == nil }.count == 1)
+        guard let decided = results.compactMap({ $0 }).first, case .added = decided else {
+            Issue.record("expected one .added, got \(String(describing: results))")
+            return
+        }
+        #expect(reader.bookmarks.count == 1)
+        let stored = try await model.coreStore!.bookmarks(bookId: book.id)
+        #expect(stored.count == 1)
+    }
+
+    @Test("a book switch mid-toggle never delivers a stale picker")
+    @MainActor
+    func staleChoiceIsDiscarded() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = try openReader(on: model, book: book)
+
+        for cfi in ["epubcfi(/6/4!/4/2/1:0)", "epubcfi(/6/4!/4/2/1:42)"] {
+            _ = try #require(
+                await model.addBookmark(
+                    bookId: book.id,
+                    position: ReadingPosition(
+                        chapterKey: book.chapters[0].key,
+                        epubCfi: cfi,
+                        percent: 10
+                    )
+                )
+            )
+        }
+
+        async let result = model.toggleBookmark(reader: reader)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !model.bookmarkToggleInFlight, ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+        #expect(model.bookmarkToggleInFlight)
+
+        var other = book
+        other.id = "other-book"
+        reader.open(book: other, chapter: other.chapters[0])
+
+        let outcome = await result
+        #expect(outcome == nil)
+        #expect(reader.bookmarks.isEmpty)
+
+        let stored = try await model.coreStore!.bookmarks(bookId: book.id)
+        #expect(stored.count == 2)
+    }
+
+    @Test("a page turn mid-toggle never delivers a stale picker")
+    @MainActor
+    func staleChoiceAfterPageTurnIsDiscarded() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = try openReader(on: model, book: book)
+
+        for cfi in ["epubcfi(/6/4!/4/2/1:0)", "epubcfi(/6/4!/4/2/1:42)"] {
+            _ = try #require(
+                await model.addBookmark(
+                    bookId: book.id,
+                    position: ReadingPosition(
+                        chapterKey: book.chapters[0].key,
+                        epubCfi: cfi,
+                        percent: 10
+                    )
+                )
+            )
+        }
+
+        async let result = model.toggleBookmark(reader: reader)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !model.bookmarkToggleInFlight, ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+        #expect(model.bookmarkToggleInFlight)
+
+        reader.relocated(
+            page: 3,
+            totalPages: 8,
+            href: book.chapters[0].href,
+            cfi: "epubcfi(/6/4!/4/2/2:0)",
+            endPage: 3,
+            endHref: book.chapters[0].href,
+            endCfi: "epubcfi(/6/4!/4/2/2:99)"
+        )
+
+        let outcome = await result
+        #expect(outcome == nil)
+        let stored = try await model.coreStore!.bookmarks(bookId: book.id)
+        #expect(stored.count == 2)
+    }
+
+    @Test("a reflow that shifts the visible range mid-toggle drops the picker")
+    @MainActor
+    func staleChoiceAfterRangeShiftIsDiscarded() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = try openReader(on: model, book: book)
+
+        for cfi in ["epubcfi(/6/4!/4/2/1:0)", "epubcfi(/6/4!/4/2/1:42)"] {
+            _ = try #require(
+                await model.addBookmark(
+                    bookId: book.id,
+                    position: ReadingPosition(
+                        chapterKey: book.chapters[0].key,
+                        epubCfi: cfi,
+                        percent: 10
+                    )
+                )
+            )
+        }
+
+        async let result = model.toggleBookmark(reader: reader)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !model.bookmarkToggleInFlight, ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+        #expect(model.bookmarkToggleInFlight)
+
+        reader.relocated(
+            page: 2,
+            totalPages: 6,
+            href: book.chapters[0].href,
+            cfi: "epubcfi(/6/4!/4/2/1:0)",
+            endPage: 3,
+            endHref: book.chapters[0].href,
+            endCfi: "epubcfi(/6/4!/4/4/2:0)"
+        )
+
+        let outcome = await result
+        #expect(outcome == nil)
+        let stored = try await model.coreStore!.bookmarks(bookId: book.id)
+        #expect(stored.count == 2)
+    }
+
+    @Test("a chapter move leaves nothing to pin until the renderer lands")
+    @MainActor
+    func toggleAfterChapterMoveWaitsForLocation() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+        let book = try #require(model.selectedBook)
+        let reader = try openReader(on: model, book: book)
+
+        reader.nextChapter()
+        #expect(reader.currentPosition()?.epubCfi == nil)
+        let blocked = await model.toggleBookmark(reader: reader)
+        #expect(blocked == nil)
+        #expect(reader.bookmarks.isEmpty)
+        let stored = try await model.coreStore!.bookmarks(bookId: book.id)
+        #expect(stored.isEmpty)
+
+        reader.relocated(
+            page: 1,
+            totalPages: 6,
+            href: book.chapters[1].href,
+            cfi: "epubcfi(/6/6!/4/2/1:0)",
+            endPage: 1,
+            endHref: book.chapters[1].href,
+            endCfi: "epubcfi(/6/6!/4/2/1:9)"
+        )
+        let added = await model.toggleBookmark(reader: reader)
+        guard case .added(let pin) = added else {
+            Issue.record("expected .added, got \(String(describing: added))")
+            return
+        }
+        #expect(pin.chapterKey == book.chapters[1].key)
+        #expect(pin.epubCfi == "epubcfi(/6/6!/4/2/1:0)")
+    }
 }

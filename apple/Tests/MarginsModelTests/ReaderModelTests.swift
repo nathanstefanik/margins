@@ -300,6 +300,101 @@ struct ReaderModelTests {
         #expect(reader.bookmarks == before)
     }
 
+    private func pin(
+        id: String, cfi: String?, chapterKey: String = "ch1", percent: Double = 20
+    ) -> Bookmark {
+        Bookmark(
+            id: id, label: "", chapterKey: chapterKey, epubCfi: cfi,
+            percent: percent,
+            createdAt: Date(timeIntervalSince1970: 1_767_225_600),
+            updatedAt: Date(timeIntervalSince1970: 1_767_225_600)
+        )
+    }
+
+    @Test("a pin anywhere inside the visible spread reads as the current page")
+    func pinInsideSpreadIsOnPage() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(
+            page: 4, totalPages: 20,
+            href: "one.xhtml", cfi: "epubcfi(/6/4!/4/2/1:0)",
+            endPage: 5, endHref: "one.xhtml", endCfi: "epubcfi(/6/4!/4/2/9:9)"
+        )
+        let interior = pin(id: "mid0000001", cfi: "epubcfi(/6/4!/4/2/5:0)", percent: 10)
+        let secondPage = pin(id: "mid0000002", cfi: "epubcfi(/6/4!/4/2/8:0)", percent: 20)
+        let pastEnd = pin(id: "mid0000003", cfi: "epubcfi(/6/4!/4/4/1:0)", percent: 30)
+        reader.bookmarksUpdated([interior, secondPage, pastEnd])
+        #expect(reader.pageIsBookmarked)
+        #expect(reader.bookmarksOnPage.map(\.id) == ["mid0000001", "mid0000002"])
+
+        reader.relocated(
+            page: 8, totalPages: 20,
+            href: "one.xhtml", cfi: "epubcfi(/6/4!/8/2/1:0)",
+            endPage: 9, endHref: "one.xhtml", endCfi: "epubcfi(/6/4!/8/2/9:9)"
+        )
+        #expect(!reader.pageIsBookmarked)
+        #expect(reader.bookmarksOnPage.isEmpty)
+    }
+
+    @Test("a single page still spans its own start-to-end range")
+    func singlePageRangeIncludesInterior() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(
+            page: 3, totalPages: 20,
+            href: "one.xhtml", cfi: "epubcfi(/6/4!/4/2/1:0)",
+            endPage: 3, endHref: "one.xhtml", endCfi: "epubcfi(/6/4!/4/2/9:9)"
+        )
+        reader.bookmarksUpdated([pin(id: "mid0000004", cfi: "epubcfi(/6/4!/4/2/5:0)")])
+        #expect(reader.pageIsBookmarked)
+    }
+
+    @Test("a spread end in another chapter does not widen the page")
+    func crossSectionEndDoesNotWiden() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(
+            page: 4, totalPages: 20,
+            href: "one.xhtml", cfi: "epubcfi(/6/4!/4/2/1:0)",
+            endPage: 5, endHref: "two.xhtml", endCfi: "epubcfi(/6/6!/4/2/1:0)"
+        )
+        reader.bookmarksUpdated([
+            pin(id: "mid0000005", cfi: "epubcfi(/6/4!/4/2/5:0)", percent: 10),
+            pin(id: "mid0000006", cfi: "epubcfi(/6/4!/4/2/1:0)", percent: 20),
+        ])
+        #expect(reader.bookmarksOnPage.map(\.id) == ["mid0000006"])
+    }
+
+    @Test("a chapter move drops the previous page anchor until relocation")
+    func moveChapterClearsAnchor() {
+        let reader = ReaderModel()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.relocated(
+            page: 3, totalPages: 10,
+            href: "one.xhtml", cfi: "epubcfi(/6/4!/4/2/1:0)",
+            endPage: 4, endHref: "one.xhtml", endCfi: "epubcfi(/6/4!/4/2/9:9)"
+        )
+        #expect(reader.currentPosition()?.epubCfi == "epubcfi(/6/4!/4/2/1:0)")
+
+        reader.nextChapter()
+        #expect(reader.chapter?.key == "ch2")
+        #expect(reader.currentCfi == nil)
+        #expect(reader.currentEndCfi == nil)
+        #expect(reader.currentPosition()?.epubCfi == nil)
+
+        reader.relocated(
+            page: 1, totalPages: 6,
+            href: "two.xhtml", cfi: "epubcfi(/6/6!/4/2/1:0)",
+            endPage: 1, endHref: "two.xhtml", endCfi: "epubcfi(/6/6!/4/2/9:9)"
+        )
+        #expect(reader.currentPosition()?.epubCfi == "epubcfi(/6/6!/4/2/1:0)")
+        #expect(reader.currentEndCfi == "epubcfi(/6/6!/4/2/9:9)")
+    }
+
     @Test("relocated follows the chapter across section boundaries")
     func relocatedFollowsChapter() {
         let reader = ReaderModel()

@@ -9,6 +9,14 @@ public enum BookmarkDisplay {
         count == 1 ? "1 bookmark" : "\(count) bookmarks"
     }
 
+    public static func toggleTitle(onPageCount count: Int) -> String {
+        switch count {
+        case 0: return "Bookmark This Page"
+        case 1: return "Remove Bookmark"
+        default: return "Choose Bookmark to Remove"
+        }
+    }
+
     /// The pin's label, or "Chapter · 42%" when untitled.
     public static func title(_ bookmark: Bookmark, chapters: [ChapterMeta]) -> String {
         let trimmed = bookmark.label.trimmingCharacters(in: .whitespacesAndNewlines)

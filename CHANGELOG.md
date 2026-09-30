@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Bookmarks pin a fixed content spot: a pin counts as on the page whenever
+  the visible page range contains its CFI, so reflow no longer orphans
+  bookmarks or lets a page collect duplicate pins
+- The bookmark key/button toggles: it adds a pin on an unmarked page,
+  removes the pin when exactly one is visible, and offers a picker to
+  choose which bookmark to remove when several share the page
+
 ## [0.6.1] - 2026-09-29
 
 ### Changed

@@ -152,6 +152,12 @@ public actor CoreStore {
         try library.deleteBookmark(bookID: bookId, id: id)
     }
 
+    public func toggleBookmark(
+        bookId: String, position: ReadingPosition, endCfi: String?
+    ) throws -> BookmarkToggleResult {
+        try library.toggleBookmark(bookID: bookId, position: position, endCfi: endCfi)
+    }
+
     /// Synchronous, thread-safe EPUB byte access for the reader's scheme
     /// handler, which runs on WebKit-owned threads: the path comes from the
     /// lock-guarded root above, never from actor state.

@@ -80,6 +80,209 @@ public enum CFI {
         return longer.starts(with: shorter)
     }
 
+    public static func comparePoints(_ lhs: String, _ rhs: String) -> ComparisonResult? {
+        guard let left = parsePoint(lhs), let right = parsePoint(rhs) else {
+            return nil
+        }
+        if left.base != right.base { return compareSteps(left.base, right.base) }
+        if left.path != right.path { return compareSteps(left.path, right.path) }
+        if left.offset != right.offset {
+            return left.offset < right.offset ? .orderedAscending : .orderedDescending
+        }
+        return .orderedSame
+    }
+
+    private struct Point {
+        var base: [Int]
+        var path: [Int]
+        var offset: Int
+    }
+
+    private static func parsePoint(_ raw: String) -> Point? {
+        let trimmed = raw.trimmed
+        guard
+            let inner = trimmed.strippingPrefix("epubcfi(")?
+                .strippingSuffix(")"),
+            !inner.isEmpty
+        else { return nil }
+
+        var inAssertion = false
+        var bang: String.Index?
+        var index = inner.startIndex
+        while index < inner.endIndex {
+            let character = inner[index]
+            if inAssertion {
+                if character == "^" {
+                    index = inner.index(after: index)
+                    guard index < inner.endIndex else { return nil }
+                } else if character == "]" {
+                    inAssertion = false
+                }
+            } else {
+                switch character {
+                case "^":
+                    index = inner.index(after: index)
+                    guard index < inner.endIndex else { return nil }
+                case "[":
+                    inAssertion = true
+                case "]":
+                    return nil
+                case "!":
+                    guard bang == nil else { return nil }
+                    bang = index
+                case ",":
+                    return nil
+                default:
+                    break
+                }
+            }
+            index = inner.index(after: index)
+        }
+        guard !inAssertion else { return nil }
+
+        let baseText: Substring
+        let pathText: Substring
+        if let bang {
+            baseText = inner[..<bang]
+            pathText = inner[inner.index(after: bang)...]
+        } else {
+            baseText = inner[...]
+            pathText = inner[inner.endIndex...]
+        }
+        guard let base = parsePointSteps(baseText, allowTerminal: bang == nil)
+        else { return nil }
+        var path: [Int] = []
+        var offset = base.offset
+        if bang != nil {
+            guard let local = parsePointSteps(pathText, allowTerminal: true)
+            else { return nil }
+            path = local.steps
+            offset = local.offset
+        }
+        return Point(base: base.steps, path: path, offset: offset)
+    }
+
+    private static func parsePointSteps(
+        _ text: Substring, allowTerminal: Bool
+    ) -> (steps: [Int], offset: Int)? {
+        guard text.first == "/" else { return nil }
+        let body = text[text.index(after: text.startIndex)...]
+        guard !body.isEmpty else { return nil }
+        var stepTexts: [Substring] = []
+        var inAssertion = false
+        var start = body.startIndex
+        var index = start
+        while index < body.endIndex {
+            let character = body[index]
+            if inAssertion {
+                if character == "^" {
+                    index = body.index(after: index)
+                    guard index < body.endIndex else { return nil }
+                } else if character == "]" {
+                    inAssertion = false
+                }
+            } else if character == "^" {
+                index = body.index(after: index)
+                guard index < body.endIndex else { return nil }
+            } else if character == "[" {
+                inAssertion = true
+            } else if character == "/" {
+                stepTexts.append(body[start..<index])
+                index = body.index(after: index)
+                start = index
+                continue
+            }
+            index = body.index(after: index)
+        }
+        guard !inAssertion else { return nil }
+        stepTexts.append(body[start..<body.endIndex])
+
+        var steps: [Int] = []
+        var offset = 0
+        for (stepIndex, stepText) in stepTexts.enumerated() {
+            let terminal = allowTerminal && stepIndex == stepTexts.count - 1
+            guard let parsed = parsePointStep(stepText, terminal: terminal) else {
+                return nil
+            }
+            steps.append(parsed.step)
+            if let terminalOffset = parsed.offset {
+                offset = terminalOffset
+            }
+        }
+        return (steps, offset)
+    }
+
+    private static func parsePointStep(
+        _ raw: Substring, terminal: Bool
+    ) -> (step: Int, offset: Int?)? {
+        var index = raw.startIndex
+        let digitsStart = index
+        while index < raw.endIndex, raw[index] >= "0", raw[index] <= "9" {
+            index = raw.index(after: index)
+        }
+        guard digitsStart < index, let step = Int(raw[digitsStart..<index]), step > 0
+        else { return nil }
+
+        var offset: Int?
+        guard consumeAssertions(raw, at: &index) else { return nil }
+        if index < raw.endIndex, raw[index] == ":" {
+            guard terminal else { return nil }
+            index = raw.index(after: index)
+            let offsetStart = index
+            while index < raw.endIndex, raw[index] >= "0", raw[index] <= "9" {
+                index = raw.index(after: index)
+            }
+            guard offsetStart < index, let value = Int(raw[offsetStart..<index])
+            else { return nil }
+            offset = value
+            guard consumeAssertions(raw, at: &index) else { return nil }
+        }
+
+        if index < raw.endIndex, raw[index] == ";" {
+            guard terminal else { return nil }
+            guard raw[index...] == ";s=a" || raw[index...] == ";s=b" else {
+                return nil
+            }
+            index = raw.endIndex
+        }
+
+        guard index == raw.endIndex else { return nil }
+        return (step, offset)
+    }
+
+    private static func consumeAssertions(
+        _ raw: Substring, at index: inout Substring.Index
+    ) -> Bool {
+        while index < raw.endIndex, raw[index] == "[" {
+            index = raw.index(after: index)
+            var closed = false
+            while index < raw.endIndex {
+                let character = raw[index]
+                if character == "^" {
+                    index = raw.index(after: index)
+                    guard index < raw.endIndex else { return false }
+                } else if character == "[" {
+                    return false
+                } else if character == "]" {
+                    closed = true
+                    index = raw.index(after: index)
+                    break
+                }
+                index = raw.index(after: index)
+            }
+            guard closed else { return false }
+        }
+        return true
+    }
+
+    private static func compareSteps(_ lhs: [Int], _ rhs: [Int]) -> ComparisonResult {
+        for (left, right) in zip(lhs, rhs) where left != right {
+            return left < right ? .orderedAscending : .orderedDescending
+        }
+        if lhs.count == rhs.count { return .orderedSame }
+        return lhs.count < rhs.count ? .orderedAscending : .orderedDescending
+    }
+
     /// Splits a path like `/6/14!/4/2[body01]/10:3` into
     /// `([6, 14, 4, 2, 10], 3)`. `nil` on an empty or non-numeric path; an
     /// offset is only accepted on the final step.

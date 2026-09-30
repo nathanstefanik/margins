@@ -230,11 +230,15 @@ final class ShellKeyboardController {
             model.requestHelp()
             return true
         case .dropBookmark:
-            guard reader.isOpen, let book = reader.book,
-                let position = reader.currentPosition()
-            else { return false }
+            guard reader.isOpen else { return false }
+            guard !model.bookmarkToggleInFlight,
+                let cfi = reader.currentCfi, !cfi.isEmpty
+            else { return true }
             Task {
-                await model.addBookmark(bookId: book.id, position: position, reader: reader)
+                let result = await model.toggleBookmark(reader: reader)
+                if case .choose = result {
+                    model.requestBookmarks()
+                }
             }
             return true
         case .showBookmarks:

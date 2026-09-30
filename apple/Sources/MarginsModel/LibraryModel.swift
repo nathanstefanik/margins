@@ -866,6 +866,42 @@ public final class LibraryModel {
         }
     }
 
+    public private(set) var bookmarkToggleInFlight = false
+
+    @discardableResult
+    public func toggleBookmark(reader: ReaderModel) async -> BookmarkToggleResult? {
+        guard let store, !bookmarkToggleInFlight else { return nil }
+        bookmarkToggleInFlight = true
+        defer { bookmarkToggleInFlight = false }
+        guard let book = reader.book,
+            let position = reader.currentPosition(),
+            let cfi = position.epubCfi, !cfi.isEmpty
+        else { return nil }
+        let bookId = book.id
+        let generation = reader.openGeneration
+        let chapterKey = reader.chapter?.key
+        let startCfi = reader.currentCfi
+        let endCfi = reader.currentEndCfi
+        do {
+            let result = try await store.toggleBookmark(
+                bookId: bookId, position: position, endCfi: endCfi
+            )
+            await rememberBookmarks(bookId: bookId, reader: reader)
+            if case .choose = result,
+                reader.book?.id != bookId || reader.openGeneration != generation
+                || reader.chapter?.key != chapterKey
+                || reader.currentCfi != startCfi
+                || reader.currentEndCfi != endCfi
+            {
+                return nil
+            }
+            return result
+        } catch {
+            errorMessage = String(describing: error)
+            return nil
+        }
+    }
+
     private func rememberBookmarks(bookId: String, reader: ReaderModel?) async {
         guard let store else { return }
         let list = (try? await store.bookmarks(bookId: bookId)) ?? []
