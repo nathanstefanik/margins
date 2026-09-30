@@ -868,6 +868,14 @@ public final class LibraryModel {
 
     public private(set) var bookmarkToggleInFlight = false
 
+    @ObservationIgnored var bookmarkToggleOperation:
+        @Sendable (CoreStore, String, ReadingPosition, String?) async throws
+            -> BookmarkToggleResult = { store, bookId, position, endCfi in
+                try await store.toggleBookmark(
+                    bookId: bookId, position: position, endCfi: endCfi
+                )
+            }
+
     @discardableResult
     public func toggleBookmark(reader: ReaderModel) async -> BookmarkToggleResult? {
         guard let store, !bookmarkToggleInFlight else { return nil }
@@ -883,8 +891,8 @@ public final class LibraryModel {
         let startCfi = reader.currentCfi
         let endCfi = reader.currentEndCfi
         do {
-            let result = try await store.toggleBookmark(
-                bookId: bookId, position: position, endCfi: endCfi
+            let result = try await bookmarkToggleOperation(
+                store, bookId, position, endCfi
             )
             await rememberBookmarks(bookId: bookId, reader: reader)
             if case .choose = result,
