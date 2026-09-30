@@ -1,6 +1,6 @@
 import Foundation
 import MarginsCore
-import MarginsModel
+@testable import MarginsModel
 import Testing
 
 @Suite("Library model")
@@ -572,7 +572,10 @@ struct LibraryModelTests {
         #expect(model.errorMessage == nil)
     }
 
-    @Test("overlapping toggles collapse to one decision")
+    @Test(
+        "overlapping toggles collapse to one decision",
+        .timeLimit(.minutes(5))
+    )
     @MainActor
     func overlappingTogglesDoNotDuplicate() async throws {
         let fixture = try #require(try fixtureEpubs().first)
@@ -582,13 +585,18 @@ struct LibraryModelTests {
         let book = try #require(model.selectedBook)
         let reader = try openReader(on: model, book: book)
 
-        async let first = model.toggleBookmark(reader: reader)
-        async let second = model.toggleBookmark(reader: reader)
-        let results = [await first, await second]
+        let gate = gateBookmarkToggle(model)
+        let first = Task { await model.toggleBookmark(reader: reader) }
+        await gate.waitForEntry()
+        #expect(model.bookmarkToggleInFlight)
 
-        #expect(results.filter { $0 == nil }.count == 1)
-        guard let decided = results.compactMap({ $0 }).first, case .added = decided else {
-            Issue.record("expected one .added, got \(String(describing: results))")
+        let second = await model.toggleBookmark(reader: reader)
+        await gate.release()
+        let outcome = await first.value
+
+        #expect(second == nil)
+        guard let outcome, case .added = outcome else {
+            Issue.record("expected .added, got \(String(describing: outcome))")
             return
         }
         #expect(reader.bookmarks.count == 1)
@@ -596,7 +604,10 @@ struct LibraryModelTests {
         #expect(stored.count == 1)
     }
 
-    @Test("a book switch mid-toggle never delivers a stale picker")
+    @Test(
+        "a book switch mid-toggle never delivers a stale picker",
+        .timeLimit(.minutes(5))
+    )
     @MainActor
     func staleChoiceIsDiscarded() async throws {
         let fixture = try #require(try fixtureEpubs().first)
@@ -619,18 +630,17 @@ struct LibraryModelTests {
             )
         }
 
-        async let result = model.toggleBookmark(reader: reader)
-        let deadline = ContinuousClock.now + .seconds(5)
-        while !model.bookmarkToggleInFlight, ContinuousClock.now < deadline {
-            await Task.yield()
-        }
+        let gate = gateBookmarkToggle(model)
+        let result = Task { await model.toggleBookmark(reader: reader) }
+        await gate.waitForEntry()
         #expect(model.bookmarkToggleInFlight)
 
         var other = book
         other.id = "other-book"
         reader.open(book: other, chapter: other.chapters[0])
 
-        let outcome = await result
+        await gate.release()
+        let outcome = await result.value
         #expect(outcome == nil)
         #expect(reader.bookmarks.isEmpty)
 
@@ -638,7 +648,10 @@ struct LibraryModelTests {
         #expect(stored.count == 2)
     }
 
-    @Test("a page turn mid-toggle never delivers a stale picker")
+    @Test(
+        "a page turn mid-toggle never delivers a stale picker",
+        .timeLimit(.minutes(5))
+    )
     @MainActor
     func staleChoiceAfterPageTurnIsDiscarded() async throws {
         let fixture = try #require(try fixtureEpubs().first)
@@ -661,11 +674,9 @@ struct LibraryModelTests {
             )
         }
 
-        async let result = model.toggleBookmark(reader: reader)
-        let deadline = ContinuousClock.now + .seconds(5)
-        while !model.bookmarkToggleInFlight, ContinuousClock.now < deadline {
-            await Task.yield()
-        }
+        let gate = gateBookmarkToggle(model)
+        let result = Task { await model.toggleBookmark(reader: reader) }
+        await gate.waitForEntry()
         #expect(model.bookmarkToggleInFlight)
 
         reader.relocated(
@@ -678,13 +689,17 @@ struct LibraryModelTests {
             endCfi: "epubcfi(/6/4!/4/2/2:99)"
         )
 
-        let outcome = await result
+        await gate.release()
+        let outcome = await result.value
         #expect(outcome == nil)
         let stored = try await model.coreStore!.bookmarks(bookId: book.id)
         #expect(stored.count == 2)
     }
 
-    @Test("a reflow that shifts the visible range mid-toggle drops the picker")
+    @Test(
+        "a reflow that shifts the visible range mid-toggle drops the picker",
+        .timeLimit(.minutes(5))
+    )
     @MainActor
     func staleChoiceAfterRangeShiftIsDiscarded() async throws {
         let fixture = try #require(try fixtureEpubs().first)
@@ -707,11 +722,9 @@ struct LibraryModelTests {
             )
         }
 
-        async let result = model.toggleBookmark(reader: reader)
-        let deadline = ContinuousClock.now + .seconds(5)
-        while !model.bookmarkToggleInFlight, ContinuousClock.now < deadline {
-            await Task.yield()
-        }
+        let gate = gateBookmarkToggle(model)
+        let result = Task { await model.toggleBookmark(reader: reader) }
+        await gate.waitForEntry()
         #expect(model.bookmarkToggleInFlight)
 
         reader.relocated(
@@ -724,7 +737,8 @@ struct LibraryModelTests {
             endCfi: "epubcfi(/6/4!/4/4/2:0)"
         )
 
-        let outcome = await result
+        await gate.release()
+        let outcome = await result.value
         #expect(outcome == nil)
         let stored = try await model.coreStore!.bookmarks(bookId: book.id)
         #expect(stored.count == 2)
@@ -765,4 +779,43 @@ struct LibraryModelTests {
         #expect(pin.chapterKey == book.chapters[1].key)
         #expect(pin.epubCfi == "epubcfi(/6/6!/4/2/1:0)")
     }
+}
+
+private actor BookmarkToggleGate {
+    private var entered = false
+    private var released = false
+    private var entryWaiter: CheckedContinuation<Void, Never>?
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func hold() async {
+        entered = true
+        entryWaiter?.resume()
+        entryWaiter = nil
+        if !released {
+            await withCheckedContinuation { releaseWaiter = $0 }
+        }
+    }
+
+    func waitForEntry() async {
+        if entered { return }
+        await withCheckedContinuation { entryWaiter = $0 }
+    }
+
+    func release() {
+        released = true
+        releaseWaiter?.resume()
+        releaseWaiter = nil
+    }
+}
+
+@MainActor
+private func gateBookmarkToggle(_ model: LibraryModel) -> BookmarkToggleGate {
+    let gate = BookmarkToggleGate()
+    model.bookmarkToggleOperation = { store, bookId, position, endCfi in
+        await gate.hold()
+        return try await store.toggleBookmark(
+            bookId: bookId, position: position, endCfi: endCfi
+        )
+    }
+    return gate
 }
