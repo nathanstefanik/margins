@@ -501,6 +501,62 @@ struct ReaderLayoutIntegrationTests {
         #expect(body == "ok")
     }
 
+    @Test("layout waits reject unfinished navigation")
+    func layoutWaitRejectsPendingNavigation() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        try await harness.waitForLayoutSettled()
+
+        _ = try await harness.evaluate("readerBeginNavigation()")
+        await #expect(throws: ReaderLayoutHarnessError.self) {
+            try await harness.waitForLayoutSettled(timeout: 0.2)
+        }
+        _ = try await harness.evaluate("readerEndNavigation()")
+        try await harness.waitForLayoutSettled()
+    }
+
+    @Test("idle waits reject unfinished navigation")
+    func idleWaitRejectsPendingNavigation() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        try await harness.waitForLayoutSettled()
+
+        _ = try await harness.evaluate("readerBeginNavigation()")
+        await #expect(throws: ReaderLayoutHarnessError.self) {
+            try await harness.waitForReaderIdle(timeout: 0.2)
+        }
+        _ = try await harness.evaluate("readerEndNavigation()")
+        try await harness.waitForReaderIdle()
+    }
+
+    @Test("an empty queue is not idle while its job is running")
+    func idleWaitRejectsRunningQueueJob() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        try await harness.waitForReaderIdle()
+
+        _ = try await harness.evaluate(
+            "void readerRendition.q.enqueue(function() { return new Promise(function(resolve) { window.__marginsResolveQueueJob = resolve; readerPost({type:'testQueueRunning'}); }); });"
+        )
+        _ = try await harness.waitForMessage(
+            "testQueueRunning", matching: nil, "the deliberately pending queue job")
+        #expect(try await harness.evaluate("readerRendition.q._q.length") as? Int == 0)
+        #expect(try await harness.evaluate("!!readerRendition.q.running") as? Bool == true)
+        await #expect(throws: ReaderLayoutHarnessError.self) {
+            try await harness.waitForReaderIdle(timeout: 0.2)
+        }
+        _ = try await harness.evaluate(
+            "window.__marginsResolveQueueJob(); delete window.__marginsResolveQueueJob"
+        )
+        try await harness.waitForReaderIdle()
+    }
+
     // MARK: iOS preservation
 
     @Test("the iOS page keeps its full-width single-column behavior")
