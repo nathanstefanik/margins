@@ -64,6 +64,7 @@ final class ReaderLayoutHarness {
     private var window: NSWindow?
     private var relay: MessageRelay?
     private let fixtureData: Data
+    private let startupScript: String?
     private var viewport: CGSize
     private var messages: [[String: Any]] = []
     private var consoleLines: [String] = []
@@ -73,9 +74,10 @@ final class ReaderLayoutHarness {
     private static let pollInterval = Duration.milliseconds(20)
     private static var installing = false
 
-    init(fixture: ReaderLayoutFixture, viewport: CGSize) throws {
+    init(fixture: ReaderLayoutFixture, viewport: CGSize, startupScript: String? = nil) throws {
         fixtureData = try fixture.data
         self.viewport = viewport
+        self.startupScript = startupScript
     }
 
     func dismantle() {
@@ -125,19 +127,29 @@ final class ReaderLayoutHarness {
         }
         try await installWebView()
         do {
-            try await navigate(to: url)
+            try await openFixture(at: url, typography: typography)
         } catch let error as ReaderLayoutHarnessError {
             guard case .timedOut = error else { throw error }
             dismantle()
             try await installWebView()
-            try await navigate(to: url)
+            try await openFixture(at: url, typography: typography)
         }
+    }
 
-        guard let typography else { return }
-        try await evaluate(
-            "readerApplyTypography(\(typography.fontSize),\(typography.lineHeight),\(typography.lineWidth),"
-                + "'\(typography.unit)')"
-        )
+    private func openFixture(
+        at url: URL,
+        typography: (fontSize: Double, lineHeight: Double, lineWidth: Double, unit: String)?
+    ) async throws {
+        try await navigate(to: url)
+        if let typography {
+            _ = try await evaluate(
+                "readerApplyTypography(\(typography.fontSize),\(typography.lineHeight),\(typography.lineWidth),"
+                    + "'\(typography.unit)')"
+            )
+        }
+        _ = try await waitForMessage(
+            "relocated", matching: nil, "fixture book to open")
+        try await waitForLayoutSettled()
     }
 
     /// Sets the viewport without waiting; for drag-like burst tests.
@@ -157,6 +169,8 @@ final class ReaderLayoutHarness {
 
     private func installWebView() async throws {
         if webView != nil { return }
+        messages.removeAll()
+        consoleLines.removeAll()
 
         let app = NSApplication.shared
         if app.activationPolicy() == .prohibited {
@@ -179,6 +193,15 @@ final class ReaderLayoutHarness {
                 forMainFrameOnly: true
             )
         )
+        if let startupScript {
+            configuration.userContentController.addUserScript(
+                WKUserScript(
+                    source: startupScript,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true
+                )
+            )
+        }
         let relay = MessageRelay(harness: self)
         configuration.userContentController.add(relay, name: "reader")
         let frame = NSRect(origin: .zero, size: viewport)
