@@ -98,3 +98,9 @@ Tests use Swift Testing (`import Testing`) via the
 ## Agent tasks
 
 When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When modifying notebook storage, update `docs/storage.md` and `docs/commonplace.md`; `notebooks/_index.json` must stay derivable from the files. When adding macOS keybindings, update the README table and `KeyHelp.swift` (the iOS app has no vim keymap). When changing the `CoreStore` surface, keep the method list and labels the apps call — check `MarginsModel`, both apps (macOS + iOS), and the tests.
+
+## Distribution verification
+
+- Validate signed artifacts with `xcrun altool --validate-app PATH --api-key "$KEY_ID" --api-issuer "$ISSUER_ID"` before upload. Current Xcode 26 altool uploads with `--upload-package PATH --wait` and the same authentication options; `--wait` reports processing completion.
+- Local `codesign --verify` does not establish that the app's signing certificate is permitted by its embedded provisioning profile. For Mac validation error 90284, compare the public certificate fingerprints and refresh the existing active `MAC_APP_STORE` profile for the bundle ID before creating new signing assets. A cached profile with the same name can contain an older certificate.
+- Keep provisioning profiles, export options, and release artifacts gitignored. Never upload an earlier main-only artifact after integrating a feature branch; verify the version/build and that bundled reader resources match the integrated source.
