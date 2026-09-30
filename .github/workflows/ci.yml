@@ -24,8 +24,11 @@ jobs:
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app
 
-      - name: Run the Swift Testing suite
-        run: swift test --package-path apple
+      - name: Run the core and model Swift Testing suites
+        run: swift test --package-path apple --skip 'ReaderLayoutIntegrationTests|ReaderLayoutMatrixTests|ReaderRevealTests'
+
+      - name: Run the reader WebKit acceptance suites
+        run: swift test --package-path apple --filter 'ReaderLayoutIntegrationTests|ReaderLayoutMatrixTests|ReaderRevealTests'
 
       - name: Build the iOS app for the simulator
         # Compiles the app scenes (apple/ios/Margins), which the SwiftPM

@@ -95,6 +95,11 @@ Tests use Swift Testing (`import Testing`) via the
 `MarginsModelTests`/`MarginsCoreTests` test targets — always verify with
 `swift test --package-path apple`.
 
+CI runs the WebKit acceptance suites (`ReaderLayoutIntegrationTests`,
+`ReaderLayoutMatrixTests`, and `ReaderRevealTests`) after the core/model
+tests in a separate process. Keep CI's `--skip` and `--filter` patterns
+identical so the two partitions cover the full suite.
+
 ## Agent tasks
 
 When modifying notes storage, update `docs/storage.md` and ensure `_index.json` stays consistent. When modifying notebook storage, update `docs/storage.md` and `docs/commonplace.md`; `notebooks/_index.json` must stay derivable from the files. When adding macOS keybindings, update the README table and `KeyHelp.swift` (the iOS app has no vim keymap). When changing the `CoreStore` surface, keep the method list and labels the apps call — check `MarginsModel`, both apps (macOS + iOS), and the tests.
