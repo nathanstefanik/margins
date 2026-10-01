@@ -343,7 +343,7 @@ final class ReaderBridge: NSObject {
         let preferences = reader.preferences
         // iOS text ladder: px on the rendition ('px' unit), fixed line
         // height, full-width column (0 disables the measure entirely) —
-        // plus the chosen system face (New York / SF Pro).
+        // plus the chosen face.
         evaluate(
             "readerApplyTypography(\(preferences.fontSizePx),\(ReaderPreferences.iosLineHeight),0,'px')"
         )

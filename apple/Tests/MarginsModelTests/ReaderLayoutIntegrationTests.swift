@@ -845,6 +845,165 @@ struct ReaderLayoutIntegrationTests {
         )
     }
 
+    // MARK: Typeface
+
+    @Test("each face resolves its family in section documents; Easy loads the bundled font and its fixed spacing")
+    func typefacesApplyInSectionDocuments() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load(typography: (110, 1.6, 72, "%"))
+
+        // Easy: the bundled face is served over the scheme handler into the
+        // section document (a FontFace for the family reaches "loaded"),
+        // pins letter/word spacing, and boosts the chosen 1.6 line height
+        // by 0.15.
+        try await harness.evaluate("readerSetFontFace('easy')")
+        try await harness.waitForLayoutSettled()
+        let easy = try await sectionTypography(harness, loadFont: true)
+        #expect((easy["atkinsonLoaded"] as? Int ?? 0) >= 1)
+        #expect((easy["atkinsonStatuses"] as? [String] ?? []).contains("loaded"))
+        let easyFamily = try #require(easy["fontFamily"] as? String)
+        #expect(unquoted(easyFamily).hasPrefix("Atkinson Hyperlegible Next"))
+        let easyFontSize = try #require(px(easy["fontSize"]))
+        let easyLetterSpacing = try #require(px(easy["letterSpacing"]))
+        let easyWordSpacing = try #require(px(easy["wordSpacing"]))
+        #expect(abs(easyLetterSpacing - easyFontSize * 0.03) < 0.02)
+        #expect(abs(easyWordSpacing - easyFontSize * 0.08) < 0.05)
+        let easyRatio = try #require(px(easy["lineHeight"])) / easyFontSize
+        #expect(abs(easyRatio - 1.75) < 0.01)
+
+        // The boost is capped: 2.1 + 0.15 lands on 2.2, not 2.25.
+        try await harness.evaluate("readerApplyTypography(110,2.1,72,'%')")
+        try await harness.waitForLayoutSettled()
+        let capped = try await sectionTypography(harness, loadFont: false)
+        let cappedFontSize = try #require(px(capped["fontSize"]))
+        let cappedRatio = try #require(px(capped["lineHeight"])) / cappedFontSize
+        #expect(abs(cappedRatio - 2.2) < 0.01)
+
+        // Sans and Serif keep publisher spacing and the chosen line height.
+        try await harness.evaluate("readerApplyTypography(110,1.6,72,'%')")
+        try await harness.evaluate("readerSetFontFace('sans')")
+        try await harness.waitForLayoutSettled()
+        let sans = try await sectionTypography(harness, loadFont: false)
+        let sansFamily = try #require(sans["fontFamily"] as? String)
+        #expect(unquoted(sansFamily).hasPrefix("Seravek"))
+        #expect(px(sans["letterSpacing"]) ?? 0 == 0)
+        #expect(px(sans["wordSpacing"]) ?? 0 == 0)
+        let sansFontSize = try #require(px(sans["fontSize"]))
+        let sansRatio = try #require(px(sans["lineHeight"])) / sansFontSize
+        #expect(abs(sansRatio - 1.6) < 0.01)
+
+        try await harness.evaluate("readerSetFontFace('serif')")
+        try await harness.waitForLayoutSettled()
+        let serif = try await sectionTypography(harness, loadFont: false)
+        let serifFamily = try #require(serif["fontFamily"] as? String)
+        #expect(unquoted(serifFamily).hasPrefix("Charter"))
+    }
+
+    /// The visible section document's first paragraph computed style, plus
+    /// the FontFace status of the bundled family inside that document.
+    /// `loadFont` first asks the section's FontFaceSet to load the family —
+    /// its resolution proves the scheme handler served the font bytes.
+    private func sectionTypography(
+        _ harness: ReaderLayoutHarness,
+        loadFont: Bool
+    ) async throws -> [String: Any] {
+        if loadFont {
+            // evaluateJavaScript does not await promises, so the
+            // FontFaceSet.load result is stashed on window for the poll.
+            _ = try await harness.evaluate(
+                """
+                (function() {
+                  var doc = null;
+                  var frames = document.querySelectorAll('iframe');
+                  for (var i = 0; i < frames.length; i++) {
+                    var r = frames[i].getBoundingClientRect();
+                    if (r.width <= 0 || r.height <= 0) { continue; }
+                    if (window.getComputedStyle(frames[i]).visibility === 'hidden') { continue; }
+                    try { doc = frames[i].contentDocument; } catch (e) { continue; }
+                    if (doc && doc.querySelector('p')) { break; }
+                    doc = null;
+                  }
+                  window.__marginsFontCheck = { error: 'no visible section document' };
+                  if (doc && doc.fonts && doc.fonts.load) {
+                    window.__marginsFontCheck = null;
+                    doc.fonts.load("16px 'Atkinson Hyperlegible Next'").then(function(faces) {
+                      window.__marginsFontCheck = { loaded: faces.length };
+                    }).catch(function(e) {
+                      window.__marginsFontCheck = { error: String(e) };
+                    });
+                  }
+                  return true;
+                })()
+                """
+            )
+            let deadline = Date().addingTimeInterval(10)
+            while Date() < deadline {
+                if let check = try await harness.evaluate("window.__marginsFontCheck") as? [String: Any],
+                    !(check is NSNull)
+                {
+                    if let error = check["error"] as? String {
+                        Issue.record("font load: \(error)")
+                    }
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        let script = """
+            (function() {
+              var frames = document.querySelectorAll('iframe');
+              for (var i = 0; i < frames.length; i++) {
+                var r = frames[i].getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) { continue; }
+                if (window.getComputedStyle(frames[i]).visibility === 'hidden') { continue; }
+                var doc = null;
+                try { doc = frames[i].contentDocument; } catch (e) { continue; }
+                if (!doc || !doc.querySelector('p')) { continue; }
+                var cs = frames[i].contentWindow.getComputedStyle(doc.querySelector('p'));
+                var atkinson = [];
+                if (doc.fonts && doc.fonts.forEach) {
+                  doc.fonts.forEach(function(face) {
+                    if (face.family.indexOf('Atkinson') !== -1) { atkinson.push(face.status); }
+                  });
+                }
+                var check = window.__marginsFontCheck || {};
+                return {
+                  fontFamily: cs.fontFamily,
+                  letterSpacing: cs.letterSpacing,
+                  wordSpacing: cs.wordSpacing,
+                  lineHeight: cs.lineHeight,
+                  fontSize: cs.fontSize,
+                  atkinsonStatuses: atkinson,
+                  atkinsonLoaded: check.loaded || 0
+                };
+              }
+              return { error: 'no visible section document' };
+            })()
+            """
+        guard let result = try await harness.evaluate(script) as? [String: Any] else {
+            throw ReaderLayoutHarnessError.javaScript("sectionTypography")
+        }
+        if let error = result["error"] as? String {
+            Issue.record("\(error)")
+        }
+        return result
+    }
+
+    /// Drops the quote characters WebKit wraps around computed
+    /// font-family names, so a family prefix can be compared plainly.
+    private func unquoted(_ family: String) -> String {
+        family.replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "\"", with: "")
+    }
+
+    /// Parses a computed CSS length like "19.2px"; nil for keywords such as
+    /// "normal".
+    private func px(_ value: Any?) -> Double? {
+        guard let string = value as? String else { return nil }
+        return Double(string.replacingOccurrences(of: "px", with: ""))
+    }
+
     private func glyphWidth(_ harness: ReaderLayoutHarness) async throws -> Double {
         try await harness.pageLayoutState().glyphWidthPx
     }

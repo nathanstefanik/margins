@@ -6,6 +6,12 @@ struct MarginsApp: App {
     @State private var app = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        // The bundled Easy face (Atkinson Hyperlegible Next) must be
+        // registered with Core Text before reader chrome asks for it.
+        ReaderFonts.registerBundled()
+    }
+
     var body: some Scene {
         WindowGroup {
             LibraryScene()

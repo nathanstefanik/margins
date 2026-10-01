@@ -37,6 +37,45 @@ struct ReaderPreferencesTests {
         #expect(ReaderPreferences(defaults: defaults).theme == ReaderTheme.light)
     }
 
+    @Test("typeface defaults to serif and round-trips every face through the store")
+    func typefaceRoundTripsThroughStore() {
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        let defaults = makeDefaults()
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.typeface == .serif)
+
+        for face in ReaderTypeface.allCases {
+            preferences.typeface = face
+            #expect(ReaderPreferences(defaults: defaults).typeface == face)
+        }
+    }
+
+    @Test("an unknown persisted typeface falls back to serif")
+    func unknownPersistedTypefaceFallsBack() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        defaults.set("comic", forKey: "reader.typeface")
+
+        #expect(ReaderPreferences(defaults: defaults).typeface == .serif)
+    }
+
+    @Test("a stored sans preference resolves to the sans face")
+    func storedSansResolvesToSans() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        defaults.set("sans", forKey: "reader.typeface")
+
+        #expect(ReaderPreferences(defaults: defaults).typeface == .sans)
+    }
+
+    @Test("each typeface names the family the reader resolves")
+    func typefaceFamilyNames() {
+        #expect(ReaderTypeface.serif.familyName == "Charter")
+        #expect(ReaderTypeface.sans.familyName == "Seravek")
+        #expect(ReaderTypeface.easy.familyName == "Atkinson Hyperlegible Next")
+    }
+
     @Test("preferences round-trip through the injected store")
     func roundTripsThroughStore() {
         defer { UserDefaults().removePersistentDomain(forName: suiteName) }
@@ -91,14 +130,17 @@ struct ReaderPreferencesTests {
         preferences.fontSize = 190
         preferences.lineHeight = 2.0
         preferences.lineWidth = 100
+        preferences.typeface = .easy
 
         preferences.resetFontSize()
         #expect(preferences.fontSize == ReaderPreferences.defaultFontSize)
+        #expect(preferences.typeface == .easy)
 
         preferences.resetTypography()
         #expect(preferences.fontSize == ReaderPreferences.defaultFontSize)
         #expect(preferences.lineHeight == ReaderPreferences.defaultLineHeight)
         #expect(preferences.lineWidth == ReaderPreferences.defaultLineWidth)
+        #expect(preferences.typeface == ReaderPreferences.defaultTypeface)
     }
 
     #if !os(iOS)

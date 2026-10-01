@@ -85,6 +85,22 @@ struct SettingsView: View {
                     }
                     .accessibilityLabel("Bigger text")
                 }
+                LabeledContent("Typeface") {
+                    Picker(
+                        "Typeface",
+                        selection: Binding(
+                            get: { reader.preferences.typeface },
+                            set: { reader.preferences.typeface = $0 }
+                        )
+                    ) {
+                        Text("Serif").tag(ReaderTypeface.serif)
+                        Text("Sans").tag(ReaderTypeface.sans)
+                        Text("Easy").tag(ReaderTypeface.easy)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 180)
+                }
                 LabeledContent("Line Width") {
                     Slider(
                         value: Binding(

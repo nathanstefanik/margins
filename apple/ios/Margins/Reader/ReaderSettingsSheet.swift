@@ -13,9 +13,10 @@ enum ReaderDestination {
 
 /// The hamburger menu: the reading-surface theme (cream paper or dark), text
 /// size as a small-A / large-A pair — the ladder behind it is internal, no
-/// numbers — a Serif/Sans typeface switch (the system's New York / SF Pro,
-/// nothing bundled), plus Contents, Bookmarks, Marks, and the chapter note, which lost
-/// their bars when the chrome went quiet. No line height, no measure.
+/// numbers — a Serif/Sans/Easy typeface switch (Charter / Seravek / the
+/// bundled Atkinson Hyperlegible Next), plus Contents, Bookmarks, Marks,
+/// and the chapter note, which lost their bars when the chrome went quiet.
+/// No line height, no measure.
 struct ReaderSettingsSheet: View {
     @Bindable var preferences: ReaderPreferences
     let onSelect: (ReaderDestination) -> Void
@@ -71,6 +72,7 @@ struct ReaderSettingsSheet: View {
                     Picker("Typeface", selection: $preferences.typeface) {
                         Text("Serif").tag(ReaderTypeface.serif)
                         Text("Sans").tag(ReaderTypeface.sans)
+                        Text("Easy").tag(ReaderTypeface.easy)
                     }
                     .pickerStyle(.segmented)
                 }

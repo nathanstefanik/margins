@@ -278,12 +278,14 @@ chosen passage; the marks sheet lists which notebooks cite each mark.
 ### `margins-reader://` scheme — security model
 
 The reader webview loads `margins-reader://app/reader.html?book=<id>`; a
-`WKURLSchemeHandler` serves **exactly five** resources: `reader.html`,
-`reader.js`, `epub.min.js`, `jszip.min.js`, and `book.epub` (bytes from
-`CoreStore.readEpubBytesSync`). Anything else — traversal, nested paths,
-unknown names — is rejected by the pure `ReaderResource` resolution before
-any I/O, so there is no arbitrary-path or filesystem exposure. EPUB content
-itself is unzipped in JS from the whole-book bytes, never from disk paths.
+`WKURLSchemeHandler` serves **exactly seven** resources: `reader.html`,
+`reader.js`, `epub.min.js`, `jszip.min.js`, `book.epub` (bytes from
+`CoreStore.readEpubBytesSync`), and the two bundled Atkinson Hyperlegible
+Next TTFs that back the reader's Easy face. Anything else — traversal,
+nested paths, unknown names (including the bundled OFL license text) — is
+rejected by the pure `ReaderResource` resolution before any I/O, so there
+is no arbitrary-path or filesystem exposure. EPUB content itself is
+unzipped in JS from the whole-book bytes, never from disk paths.
 
 Two response-type rules are load-bearing (both bit us once): `fetch()` needs
 HTTP semantics, so `book.epub` is served as an `HTTPURLResponse` — a plain

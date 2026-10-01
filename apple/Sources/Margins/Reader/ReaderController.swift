@@ -117,6 +117,7 @@ final class ReaderController: NSObject {
         evaluate(
             "readerApplyTypography(\(preferences.fontSize),\(preferences.lineHeight),\(preferences.lineWidth))"
         )
+        evaluate("readerSetFontFace(\(Self.javaScriptLiteral(preferences.typeface.rawValue)))")
     }
 
     /// Sends the requested page layout; the page resolves what actually
@@ -137,6 +138,7 @@ final class ReaderController: NSObject {
             _ = preferences.lineHeight
             _ = preferences.lineWidth
             _ = preferences.pageLayout
+            _ = preferences.typeface
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
