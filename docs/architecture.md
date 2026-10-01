@@ -146,9 +146,8 @@ without `#if canImport(UIKit)` guards everywhere. The entry point wires the
 shared `LibraryModel`; the library root is resolved per launch by
 `LibraryLocation` (ubiquity container paths change between installs),
 falling back to local `Documents/Library` with the reason surfaced in the
-UI. DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`, `MARGINS_SEARCH_FIXTURE`,
-`MARGINS_DELETE_FIXTURE`, `MARGINS_OPEN_FIXTURE`, `MARGINS_CHROME_FIXTURE`,
-`MARGINS_EVICT_FIXTURE`, `MARGINS_OFFLINE_FIXTURE`, `MARGINS_NOTEBOOK_FIXTURE`)
+UI. DEBUG launch env vars
+(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,EVICT,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR}_FIXTURE`)
 drive deterministic simulator verification flows. EPUBs handed over by
 Files/Mail arrive through `onOpenURL` as
 security-scoped URLs and are staged (`NSFileCoordinator`) before the core
@@ -213,7 +212,8 @@ for a book's contents would live inline over that content. Layout keys off
 size classes (`verticalSizeClass` shrinks the book-detail cover on a
 constrained height), never `interfaceOrientation`, so it survives Split
 View, landscape, and iPhone Mirroring. Shared sizing and rounding live in
-`DesignTokens.swift`.
+`DesignTokens.swift`. The reader's chrome and typography contract is
+`docs/ios-reader-chrome.md`.
 
 Navigation between surfaces is two environment actions installed by
 `LibraryScene` — `openPassage(PassageTarget)` (a search hit, notebook card,

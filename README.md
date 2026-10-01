@@ -4,7 +4,7 @@ Minimal EPUB reader for macOS and iOS with file-based, AI-friendly annotations.
 
 Inspired by zathura's restraint: keyboard-first navigation, no clutter, your library stays on disk in plain formats you can sync, grep, and hand to an agent.
 
-## Features (MVP)
+## Features
 
 - Import and browse EPUBs from a local library
 - Progress feedback while importing EPUBs
@@ -54,19 +54,22 @@ The iOS app itself builds from `apple/ios/Margins.xcodeproj` (open in Xcode,
 or `xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins -destination
 'platform=iOS Simulator,name=iPhone 17 Pro'`).
 
+The canonical Apple release workflow — live preflight against App Store
+Connect (build numbers must be checked there, including expired builds),
+signed IPA export, validation, upload, and distribution to all live
+TestFlight groups — lives in
+[`.agents/skills/margins-release/SKILL.md`](.agents/skills/margins-release/SKILL.md).
+Agents with skill support can invoke `margins-release`; any agent can
+read the file directly. Private configuration and release evidence stay outside Git.
+TestFlight distribution is not a public App Store release.
+
 **iOS TestFlight/App Store release**: the app record must exist in App Store
 Connect first (bundle ID `io.github.nathanstefanik.margins`, registered with
 the iCloud container on developer.apple.com — automatic signing creates the
-App ID during the archive if it is missing). Then, per upload:
-
-```bash
-make ios-bump    # increment CURRENT_PROJECT_VERSION (TestFlight rejects reused numbers)
-make ios-archive # Release archive at build/Margins.xcarchive
-```
-
-then in Xcode's Organizer: *Distribute App → App Store Connect → Upload*.
-`ITSAppUsesNonExemptEncryption` is already `false` in `Info.plist`, so no
-encryption-compliance answer is needed per build.
+App ID during the archive if it is missing). `make ios-archive` writes
+`build/Margins.xcarchive`; export, validation, and upload follow the release
+skill. `ITSAppUsesNonExemptEncryption` is already `false` in `Info.plist`, so
+no encryption-compliance answer is needed per build.
 
 **macOS App Store/TestFlight release**: the Mac platform of the same App
 Store Connect record takes a sandboxed, distribution-signed installer
@@ -79,11 +82,17 @@ MAC_APP_IDENTITY="Apple Distribution: NAME (TEAMID)" \
 MAC_INSTALLER_IDENTITY="3rd Party Mac Developer Installer: NAME (TEAMID)" \
 MARGINS_PROFILE=/path/to/Margins.provisionprofile \
 MARGINS_KEYCHAIN=/path/to/mas.keychain-db \
+MARGINS_BUILD_NUMBER="$BUILD_NUMBER" \
 make mas-pkg   # build/Margins-vX.Y.Z-mas.pkg
 ```
 
-Then upload with
-`xcrun altool --upload-app -f build/Margins-vX.Y.Z-mas.pkg -t osx --apiKey KEYID --apiIssuer ISSUER`.
+`BUILD_NUMBER` is the next build number chosen from a live App Store
+Connect preflight — see
+[the release skill](.agents/skills/margins-release/SKILL.md); without it
+the package defaults to build 1. Then validate and upload with
+`sh scripts/apple-upload.sh upload --confirm build build/Margins-vX.Y.Z-mas.pkg`
+— the script runs `altool --validate-app` on every artifact before any
+upload and keeps numbered logs in the output directory.
 The App Store build is sandboxed: its library defaults to the app container,
 and a custom root picked with the folder picker is remembered with a
 security-scoped bookmark (`LibraryRootBookmark`); the DMG build is
@@ -150,8 +159,6 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 
 ## Status
 
-Roadmap detail: [docs/architecture.md](docs/architecture.md).
-
 **Done**
 
 - Swift core: library, EPUB parsing, notes, marks, search, markdown export,
@@ -187,6 +194,8 @@ Roadmap detail: [docs/architecture.md](docs/architecture.md).
   automatic local-only fallback for unsigned builds; club model + UI on
   macOS (sidebar section, merged document, export/copy) and iOS (Clubs tab);
   simulator-verified on iOS with a DEBUG club fixture
+- Commonplace **notebooks** and full-text **library search** (iOS), with
+  mark quotes and thoughts searchable on both platforms
 
 **In progress**
 
@@ -195,10 +204,6 @@ Roadmap detail: [docs/architecture.md](docs/architecture.md).
   the gesture-only paths (native edit menu, tap zones, swipes) and the
   highlight overlay's visual paint — the data paths are verified
   end-to-end on the simulator via DEBUG launch seams
-
-**Next**
-
-- Mark-text search
 
 ## License
 

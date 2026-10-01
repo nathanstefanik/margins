@@ -24,12 +24,15 @@ DerivedData/
 *.dSYM
 *.dSYM.zip
 *.xcresult
+*.xcarchive/
 
 # SwiftPM build/cache state. Shared package resolution is tracked
 # (apple/Package.resolved and the iOS project's xcshareddata copy) so
 # builds are reproducible for everyone.
 .build/
 .swiftpm/
+__pycache__/
+*.py[cod]
 
 # Local build output
 /build/
@@ -37,6 +40,17 @@ DerivedData/
 
 # Local signing (team ID — never commit)
 apple/ios/Signing.local.xcconfig
+*.provisionprofile
+*.mobileprovision
+*.p8
+*.p12
+*.keychain-db
+*.keychain-db-*
+*.local.plist
+*[eE]xport*ptions*.plist
+
+# Release artifacts (keep local — never commit)
+*.pkg
 
 # Regeneration intermediates (scripts/make-icon.swift)
 scripts/assets/Margins.iconset/
@@ -55,10 +69,16 @@ scripts/assets/Margins.iconset/
 *.swp
 *.swo
 
-# Operator-local agent tooling (do not vendor)
-.agents/
+# Operator-local agent tooling (do not vendor). Shared skills under
+# .agents/skills/ ARE vendored; keep machine-local skills in *-local/ dirs.
+.agents/*
+!.agents/skills/
+.agents/skills/*-local/
 .claude/
 .codex/
 .cursor/
 opencode.json
 skills-lock.json
+.devin/*.local.json
+.devin/rules/*.local.md
+.devin/skills/*-local/

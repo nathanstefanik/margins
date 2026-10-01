@@ -1,7 +1,5 @@
 # iOS reader chrome & typography
 
-Status: Phases 1–2 landed · iOS only · Last updated: 2026-09-09
-
 macOS keeps its typography popover and keyboard chrome. This document is
 the iOS reader only.
 
@@ -13,7 +11,7 @@ way until a center tap. Text size is a short internal ladder of readable
 steps behind smaller/larger "A" buttons — never numbers — and it actually
 changes glyph size.
 
-## Locked behavior
+## Behavior
 
 **Resting page (no chrome).** Chapter title centered at the top of the
 paper, page number centered at the bottom. No eye, no note, no toolbars.
@@ -38,17 +36,13 @@ bars with the old chrome. No line height, no measure.
 
 **Paging.** Swipe still turns pages. Page-turn hides chrome again.
 
-## Why font size felt broken
+## Font-size implementation
 
-`readerStyleContents` set `html { font-size: 130% }` and
-`body { font-size: inherit }`. Gutenberg-style sheets set `p { font-size:
-14px }` (or similar), which ignores `%` on `html` — so the glyphs never
-moved. On top of that, `readerApplyViewerWidth` widened the column with
-font size (`maxWidth = lineWidth × fontSize/100`), so a size bump
-changed measure instead of type. On a phone the column is already full
-width, so you got neither a wider measure nor bigger type.
+Publisher sheets often set `p { font-size: 14px }` (or similar), which
+ignores a `%` size on `html`, and scaling the column width with font size
+changes the measure instead of the type.
 
-Fix in shared `reader.js` (helps macOS too): the root size lands on
+Shared `reader.js` (macOS too) therefore puts the root size on
 `html` with `!important` and a rule forces
 `body, p, li, div { font-size: inherit !important }`; the column width no
 longer scales with font size.
@@ -84,8 +78,7 @@ so body text clears the running header and footer. There is no
 `safeAreaInset` chrome, so showing buttons never reflows the page.
 
 `ReaderPreferences` keeps the macOS `%` / line-height / measure API
-untouched. The iOS sheet is `ReaderSettingsSheet` (hamburger);
-`TypographySheet` is gone.
+untouched. The iOS sheet is `ReaderSettingsSheet` (hamburger).
 
 ## Layout
 
@@ -128,14 +121,7 @@ delay and double-tap zoom. Swipes are a native
 - `apple/Sources/MarginsModel/Resources/reader/reader.html` — fixed page
   margins only
 
-## Phases
-
-### Phase 1 — book-like chrome + text size that works (this pass)
-
-Everything above: resting page, tap thirds, overlay chrome, hamburger
-sheet with the A pair, `reader.js` apply fix, fixed `#viewer` padding.
-
-### Phase 2 — typeface: two system faces (landed)
+## Typeface
 
 Sans = SF Pro, serif = New York — both pulled from the system at runtime
 (`-apple-system` / `ui-serif` in the webview), nothing bundled, zero MB,
@@ -151,12 +137,7 @@ When a face is chosen, reader.js sets
 with no choice, publisher fonts stand. Switching re-styles live sections
 and re-paginates. macOS never sets a face and is unchanged.
 
-### Next — device pass
-
-Install to a phone, read a real book, tune the fixed paddings if the
-running header/footer feel tight.
-
 ## Out of scope
 
-macOS chrome, App Store, storage changes, whole-book page counts, making
-line height or measure configurable on iOS, bundling font files.
+macOS chrome, whole-book page counts, making line height or measure
+configurable on iOS, bundling font files.
