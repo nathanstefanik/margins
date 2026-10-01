@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Reader typeface choice on macOS (typography popover and Settings) and a
+  new Easy face — bundled Atkinson Hyperlegible Next (SIL OFL 1.1) with
+  fixed extra letter/word spacing and a line-height boost for low-vision
+  readers
+
+### Changed
+
+- Reader serif is now Charter and sans is now Seravek on both platforms
+
 ## [0.6.2] - 2026-10-01
 
 ### Changed

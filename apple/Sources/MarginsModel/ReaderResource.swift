@@ -2,15 +2,18 @@ import Foundation
 
 /// The fixed set of resources served over `margins-reader://`.
 ///
-/// The scheme handler serves exactly these five flat names; resolution is
+/// The scheme handler serves exactly these seven flat names; resolution is
 /// intentionally strict so traversal, nested paths, and unknown names never
-/// reach the filesystem or the bridge.
+/// reach the filesystem or the bridge. The bundled Atkinson Hyperlegible
+/// Next license text is not served — only the two font files are.
 public enum ReaderResource: String, CaseIterable, Sendable {
     case readerHTML = "reader.html"
     case readerJS = "reader.js"
     case epubJS = "epub.min.js"
     case jszipJS = "jszip.min.js"
     case bookEpub = "book.epub"
+    case atkinson = "AtkinsonHyperlegibleNext.ttf"
+    case atkinsonItalic = "AtkinsonHyperlegibleNext-Italic.ttf"
 
     /// Resolves a `margins-reader://` URL path to a resource. Accepts an
     /// optional leading slash and nothing else: any nested path, traversal
@@ -51,13 +54,14 @@ public enum ReaderResource: String, CaseIterable, Sendable {
         case .readerHTML: "text/html"
         case .readerJS, .epubJS, .jszipJS: "text/javascript"
         case .bookEpub: "application/epub+zip"
+        case .atkinson, .atkinsonItalic: "font/ttf"
         }
     }
 
     public var textEncodingName: String? {
         switch self {
         case .readerHTML, .readerJS, .epubJS, .jszipJS: "utf-8"
-        case .bookEpub: nil
+        case .bookEpub, .atkinson, .atkinsonItalic: nil
         }
     }
 }

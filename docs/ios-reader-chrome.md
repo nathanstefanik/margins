@@ -56,16 +56,17 @@ ourselves, per section via the content hook, is deterministic.
 
 ## iOS typography model
 
-Five internal steps behind the A buttons, default **3** (18px — readable
+Six internal steps behind the A buttons, default **4** (18px — readable
 body text on a phone):
 
 | Step | px (applied to the rendition) |
 |------|-------------------------------|
-| 1    | 14 |
-| 2    | 16 |
-| 3    | 18 |
-| 4    | 21 |
-| 5    | 24 |
+| 1    | 12 |
+| 2    | 14 |
+| 3    | 16 |
+| 4    | 18 |
+| 5    | 21 |
+| 6    | 24 |
 
 The numbers exist only in code (`ReaderPreferences.fontStep`, persisted
 as `reader.fontStep`); the UI exposes smaller/larger "A" buttons that
@@ -111,33 +112,48 @@ delay and double-tap zoom. Swipes are a native
 - `apple/ios/Margins/Reader/ReaderScene.swift` — rest/revealed chrome;
   overlay header/footer; hamburger, bookmark, note
 - `apple/ios/Margins/Reader/ReaderSettingsSheet.swift` — font A pair,
-  Serif/Sans switch, Contents, Bookmarks, Marks, chapter note
+  Serif/Sans/Easy switch, Contents, Bookmarks, Marks, chapter note
 - `apple/ios/Margins/Reader/ReaderBridge.swift` — pass step/px/face;
   drop lineWidth on iOS
 - `apple/Sources/MarginsModel/ReaderPreferences.swift` — iOS `fontStep`
-  1…5 and `ReaderTypeface`
+  1…6 and the shared `ReaderTypeface`
+- `apple/Sources/MarginsModel/ReaderFonts.swift` — Core Text registration
+  of the bundled Easy face for native chrome
 - `apple/Sources/MarginsModel/Resources/reader/reader.js` — real
   font-size apply; no measure scaling
 - `apple/Sources/MarginsModel/Resources/reader/reader.html` — fixed page
   margins only
+- `apple/Sources/MarginsModel/Resources/reader/AtkinsonHyperlegibleNext*.ttf`
+  (+ `-OFL.txt`) — the bundled Easy face and its license
 
 ## Typeface
 
-Sans = SF Pro, serif = New York — both pulled from the system at runtime
-(`-apple-system` / `ui-serif` in the webview), nothing bundled, zero MB,
-no licensing question: this is the sanctioned on-device path (the
-bundled-font path from Apple's developer page is the restricted one). A
-segmented Serif/Sans choice in the settings sheet, persisted as
-`reader.typeface`, default **serif** — the printed-spread default.
+Three faces, shared by iOS and macOS, persisted as `reader.typeface`,
+default **serif** — the printed-spread default:
+
+- **Serif** — Charter (system-installed on both platforms).
+- **Sans** — Seravek (system-installed on both platforms).
+- **Easy** — Atkinson Hyperlegible Next (SIL OFL 1.1), bundled in the
+  MarginsModel resources. The webview gets it from `@font-face` rules
+  injected into every section document and served over
+  `margins-reader://`; native chrome gets it from
+  `ReaderFonts.registerBundled()` at app launch. Easy carries fixed,
+  non-configurable spacing for low-vision readers:
+  `letter-spacing: 0.03em`, `word-spacing: 0.08em`, and a +0.15
+  line-height boost over the chosen value (capped at 2.2).
 
 When a face is chosen, reader.js sets
 `html { font-family: <stack> !important }` and forces
 `body, p, li, div, h1–h6, blockquote, figcaption, td, th, dd, dt
 { font-family: inherit !important }` (code/pre keep their monospace);
-with no choice, publisher fonts stand. Switching re-styles live sections
-and re-paginates. macOS never sets a face and is unchanged.
+a face with fixed spacing also pins it on `html` for flow text to
+inherit, while other faces leave publisher spacing alone. Switching
+re-styles live sections and re-paginates. macOS applies the same choice
+through the typography popover and Settings, so publisher fonts never
+stand on either platform.
 
 ## Out of scope
 
 macOS chrome, whole-book page counts, making line height or measure
-configurable on iOS, bundling font files.
+configurable on iOS, user-configurable letter/word spacing (Easy's is
+fixed).

@@ -9,16 +9,29 @@ public enum ReaderTheme: String, CaseIterable, Sendable {
     case dark
 }
 
-#if os(iOS)
-/// The reader's two faces: system serif (New York) and system sans
-/// (SF Pro). Both resolve on-device in the webview via generic families
-/// (`ui-serif` / `-apple-system`) — no files bundled, zero MB, and the
-/// sanctioned production path to New York.
+/// The reader's three faces on both platforms. Charter and Seravek ship
+/// with macOS and iOS; Easy is Atkinson Hyperlegible Next — bundled in the
+/// reader resources, served to the webview over `margins-reader://`, and
+/// carrying fixed extra letter/word spacing and line height for low-vision
+/// readers (not user-configurable). Stored "sans" values from earlier
+/// versions now resolve to Seravek — intended.
 public enum ReaderTypeface: String, CaseIterable, Sendable {
     case serif
     case sans
+    case easy
+
+    /// The family the face resolves to — the Swift-side single source of
+    /// truth (the iOS chrome uses it; reader.js mirrors it in its stacks).
+    public var familyName: String {
+        switch self {
+        case .serif: "Charter"
+        case .sans: "Seravek"
+        case .easy: "Atkinson Hyperlegible Next"
+        }
+    }
 }
-#else
+
+#if !os(iOS)
 /// macOS page layout: let the reading viewport decide, or pin one or two
 /// pages. The web reader resolves the effective layout from the actual
 /// available width and text size; this preference only states intent.
@@ -40,7 +53,7 @@ public enum ReaderPageLayout: String, CaseIterable, Sendable {
 ///   top of the book's base size (100 = publisher default), line width is
 ///   the centered text column's max width in `ch` units, line height is a
 ///   unitless multiplier.
-/// - iOS drives the reader through `fontStep` (1…5) instead: a short
+/// - iOS drives the reader through `fontStep` (1…6) instead: a short
 ///   internal ladder mapped to px at apply time. The UI exposes only
 ///   smaller/larger "A" buttons; the numbers never reach the reader.
 @MainActor
@@ -49,11 +62,15 @@ public final class ReaderPreferences {
     /// Cream paper is the reader's native look; the app chrome follows the
     /// system appearance instead.
     public static let defaultTheme = ReaderTheme.light
+    /// Serif by default: the printed-spread reading face.
+    public static let defaultTypeface = ReaderTypeface.serif
 
     private static let themeKey = "reader.theme"
+    private static let typefaceKey = "reader.typeface"
 
     private let defaults: UserDefaults
     private var _theme: ReaderTheme
+    private var _typeface: ReaderTypeface
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
@@ -62,6 +79,7 @@ public final class ReaderPreferences {
         _theme =
             ReaderTheme(rawValue: defaults.string(forKey: Self.themeKey) ?? "")
             ?? Self.defaultTheme
+        _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)
@@ -77,7 +95,6 @@ public final class ReaderPreferences {
             ? storedStep
             : Self.defaultFontStep
         defaults.set(Self.fontLadderVersion, forKey: Self.fontLadderVersionKey)
-        _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
         #else
         _fontSize = Self.clamp(
             defaults.object(forKey: Self.fontSizeKey) as? Double ?? Self.defaultFontSize,
@@ -109,6 +126,20 @@ public final class ReaderPreferences {
         }
     }
 
+    /// The chosen face. The whole book follows it (publisher families are
+    /// forced to inherit; code/pre keep their monospace).
+    public var typeface: ReaderTypeface {
+        get { _typeface }
+        set {
+            _typeface = newValue
+            defaults.set(newValue.rawValue, forKey: Self.typefaceKey)
+        }
+    }
+
+    private static func typeface(from raw: String?) -> ReaderTypeface {
+        raw.flatMap(ReaderTypeface.init(rawValue:)) ?? Self.defaultTypeface
+    }
+
     #if os(iOS)
     /// The text ladder behind the smaller/larger controls, in px applied
     /// to the rendition. Deliberately short: six steps cover phone
@@ -120,19 +151,15 @@ public final class ReaderPreferences {
     public static let defaultFontStep = 4
     /// Fixed line height for the iOS reader (not configurable).
     public static let iosLineHeight = 1.65
-    /// Serif by default: the printed-spread reading face.
-    public static let defaultTypeface = ReaderTypeface.serif
 
     private static let fontStepKey = "reader.fontStep"
     private static let fontLadderVersionKey = "reader.fontStep.ladderVersion"
-    private static let typefaceKey = "reader.typeface"
 
     /// Bumped whenever `fontStepsPx` gains or loses a rung. v1 began at
     /// 14px; v2 added 12px at the bottom, shifting every index up by one.
     private static let fontLadderVersion = 2
 
     private var _fontStep: Int
-    private var _typeface: ReaderTypeface
 
     /// Current rung of the text ladder (1-based). The numbers are internal;
     /// the UI only steps up and down.
@@ -159,20 +186,6 @@ public final class ReaderPreferences {
 
     /// At the top of the ladder: the larger-A control disables.
     public var canStepFontLarger: Bool { _fontStep < Self.fontStepsPx.count }
-
-    /// The chosen face. The whole book follows it (publisher families are
-    /// forced to inherit; code/pre keep their monospace).
-    public var typeface: ReaderTypeface {
-        get { _typeface }
-        set {
-            _typeface = newValue
-            defaults.set(newValue.rawValue, forKey: Self.typefaceKey)
-        }
-    }
-
-    private static func typeface(from raw: String?) -> ReaderTypeface {
-        raw.flatMap(ReaderTypeface.init(rawValue:)) ?? Self.defaultTypeface
-    }
     #else
     public static let minFontSize = 70.0
     public static let maxFontSize = 200.0
@@ -253,11 +266,13 @@ public final class ReaderPreferences {
         fontSize = Self.defaultFontSize
     }
 
-    /// Restores every typography preference to its default.
+    /// Restores every typography preference to its default. Page layout is
+    /// deliberately excluded — it is a layout choice, not typography.
     public func resetTypography() {
         fontSize = Self.defaultFontSize
         lineHeight = Self.defaultLineHeight
         lineWidth = Self.defaultLineWidth
+        typeface = Self.defaultTypeface
     }
 
     private static func clamp(_ value: Double, _ lower: Double, _ upper: Double) -> Double {

@@ -1,7 +1,7 @@
 import Foundation
 import WebKit
 
-/// Serves the five fixed `margins-reader://` resources. Everything else —
+/// Serves the seven fixed `margins-reader://` resources. Everything else —
 /// traversal, nested paths, unknown names — fails without touching the
 /// filesystem beyond the vendored reader directory.
 ///

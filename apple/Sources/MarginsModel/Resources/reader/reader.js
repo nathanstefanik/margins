@@ -24,15 +24,42 @@ let readerRendition = null;
 // to inherit it, because publisher sheets pin `p { font-size: ... }` and
 // would otherwise ignore the root size entirely.
 let readerTypography = null;
-// Chosen typeface key ("serif" | "sans" on iOS), resolved in the webview
-// to the system's New York / SF Pro — nothing is bundled. null (macOS)
-// leaves publisher fonts alone.
+// Chosen typeface key ("serif" | "sans" | "easy"), resolved in the
+// webview to Charter / Seravek / the bundled Atkinson Hyperlegible Next.
+// The family stacks mirror ReaderTypeface.familyName (the Swift-side
+// single source). Easy carries fixed extra spacing for low-vision
+// readers — a face property, not a user control.
 let readerFontFace = null;
 
 const READER_FONT_FACES = {
-  serif: "ui-serif, Georgia, serif",
-  sans: "-apple-system, 'Helvetica Neue', sans-serif",
+  serif: { family: "Charter, 'Iowan Old Style', ui-serif, Georgia, serif" },
+  sans: { family: "Seravek, -apple-system, 'Helvetica Neue', sans-serif" },
+  easy: {
+    family: "'Atkinson Hyperlegible Next', Seravek, -apple-system, sans-serif",
+    letterSpacing: "0.03em",
+    wordSpacing: "0.08em",
+    lineHeightBoost: 0.15,
+  },
 };
+// The bundled Easy face, served to section documents over
+// margins-reader://. The URLs resolve against the top document, so the
+// same sheet works inside the sandboxed section iframes. Injected into
+// every section whether or not Easy is chosen — a dormant @font-face
+// costs nothing.
+const READER_FONT_FACE_CSS = `
+  @font-face {
+    font-family: "Atkinson Hyperlegible Next";
+    font-style: normal;
+    font-weight: 200 800;
+    src: url("${new URL("AtkinsonHyperlegibleNext.ttf", window.location.href).href}") format("truetype");
+  }
+  @font-face {
+    font-family: "Atkinson Hyperlegible Next";
+    font-style: italic;
+    font-weight: 200 800;
+    src: url("${new URL("AtkinsonHyperlegibleNext-Italic.ttf", window.location.href).href}") format("truetype");
+  }
+`;
 // Reading-surface palettes, mirrored by the native chrome (Paper.swift /
 // DesignTokens.swift) and reader.html's pre-paint styles. Keep in sync.
 const READER_THEMES = {
@@ -819,6 +846,20 @@ function readerApplyTheme(theme) {
   }
 }
 
+// Serializes a {selector: {property: value}} rules object to CSS text.
+// Values carry their own `!important`; keyed addStylesheetCss replaces the
+// target sheet, so this also removes rules a previous style pass emitted.
+function readerRulesCss(rules) {
+  return Object.keys(rules)
+    .map((selector) => {
+      const declarations = Object.keys(rules[selector])
+        .map((property) => `${property}:${rules[selector][property]};`)
+        .join("");
+      return `${selector}{${declarations}}`;
+    })
+    .join("\n");
+}
+
 function readerStyleContents(contents) {
   if (!contents || !contents.document) {
     return;
@@ -852,13 +893,20 @@ function readerStyleContents(contents) {
       "mix-blend-mode": "multiply",
     },
   };
+  const face = readerFontFace ? READER_FONT_FACES[readerFontFace] : null;
   if (readerTypography) {
     // Root size on html; body and the common flow containers forced to
     // inherit it, so publisher rules like `p { font-size: 14px }` cannot
-    // pin glyphs and ignore the preference.
+    // pin glyphs and ignore the preference. A face can add a fixed line
+    // height boost (Easy does); the cap keeps it inside the supported
+    // range.
     rules.html["font-size"] = `${readerTypography.fontSize}${readerTypography.unit} !important`;
+    const lineHeight = Math.min(
+      readerTypography.lineHeight + ((face && face.lineHeightBoost) || 0),
+      2.2,
+    );
     rules.body = {
-      "line-height": `${readerTypography.lineHeight} !important`,
+      "line-height": `${lineHeight} !important`,
     };
     rules["body, p, li, div"] = {
       "font-size": "inherit !important",
@@ -871,14 +919,33 @@ function readerStyleContents(contents) {
     };
   }
   // With a face chosen, html carries the family and everything that
-  // usually pins one inherits it; code/pre keep their monospace.
-  if (readerFontFace) {
-    rules.html["font-family"] = `${READER_FONT_FACES[readerFontFace]} !important`;
-    rules[flowText] = Object.assign(rules[flowText], {
-      "font-family": "inherit !important",
-    });
+  // usually pins one inherits it; code/pre keep their monospace. A face
+  // with fixed spacing (Easy) also pins letter/word spacing on html and
+  // flow text inherits; faces without spacing emit no spacing rules, so
+  // publisher spacing is left alone.
+  if (face) {
+    rules.html["font-family"] = `${face.family} !important`;
+    const inherited = { "font-family": "inherit !important" };
+    if (face.letterSpacing || face.wordSpacing) {
+      if (face.letterSpacing) {
+        rules.html["letter-spacing"] = `${face.letterSpacing} !important`;
+      }
+      if (face.wordSpacing) {
+        rules.html["word-spacing"] = `${face.wordSpacing} !important`;
+      }
+      inherited["letter-spacing"] = "inherit !important";
+      inherited["word-spacing"] = "inherit !important";
+    }
+    rules[flowText] = Object.assign(rules[flowText], inherited);
   }
-  contents.addStylesheetRules(rules);
+  // The bundled Easy face is declared in every section document (see
+  // READER_FONT_FACE_CSS); dormant until a rule references the family.
+  // Both sheets go through keyed addStylesheetCss, which replaces the
+  // sheet's text wholesale — addStylesheetRules would append, and a
+  // dropped property (Easy's spacing when switching away) would survive
+  // as a stale rule.
+  contents.addStylesheetCss(READER_FONT_FACE_CSS, "margins-fonts");
+  contents.addStylesheetCss(readerRulesCss(rules), "margins-rules");
   console.log(
     `readerStyleContents: theme=${readerTheme}` +
       (readerTypography

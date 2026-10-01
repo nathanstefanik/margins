@@ -208,3 +208,6 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
 ## License
 
 GPL-3.0-or-later — fork freely; derivatives must remain open source under the same license.
+
+The bundled reader font Atkinson Hyperlegible Next is licensed under the
+SIL Open Font License 1.1 (`apple/Sources/MarginsModel/Resources/reader/AtkinsonHyperlegibleNext-OFL.txt`).

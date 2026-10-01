@@ -1,9 +1,10 @@
 import MarginsModel
 import SwiftUI
 
-/// Books-style typography popover: page theme (cream paper or dark), text
-/// size (A−/A+), line width, and line height. Few controls, all backed by
-/// `ReaderPreferences`.
+/// Books-style typography popover: page theme (cream paper or dark),
+/// typeface (Charter / Seravek / the bundled Atkinson Hyperlegible Next),
+/// text size (A−/A+), line width, and line height. Few controls, all
+/// backed by `ReaderPreferences`.
 struct TypographyPopover: View {
     @Bindable var preferences: ReaderPreferences
     /// How many pages the renderer actually laid out, or nil while loading.
@@ -22,6 +23,22 @@ struct TypographyPopover: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Typeface")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Picker("Typeface", selection: $preferences.typeface) {
+                    Text("Serif").tag(ReaderTypeface.serif)
+                    Text("Sans").tag(ReaderTypeface.sans)
+                    Text("Easy").tag(ReaderTypeface.easy)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel("Typeface")
             }
 
             Divider()

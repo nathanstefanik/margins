@@ -460,13 +460,11 @@ struct ReaderScene: View {
             .transition(.opacity)
     }
 
-    /// Chapter title and page number follow the reader's Serif/Sans choice
-    /// (New York / SF Pro), not the publisher face, at footnote size.
+    /// Chapter title and page number follow the reader's Serif/Sans/Easy
+    /// choice (Charter / Seravek / Atkinson Hyperlegible Next, the last
+    /// registered from the bundle at launch), at footnote size.
     private var runningChromeFont: Font {
-        switch reader.preferences.typeface {
-        case .serif: .system(.footnote, design: .serif)
-        case .sans: .system(.footnote, design: .default)
-        }
+        .custom(reader.preferences.typeface.familyName, size: 13, relativeTo: .footnote)
     }
 
     private var pageNumberFont: Font {
