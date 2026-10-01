@@ -24,6 +24,11 @@ jobs:
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app
 
+      - name: Verify Apple release tooling offline
+        run: |
+          sh -n scripts/apple-upload.sh
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+
       - name: Run the core and model Swift Testing suites
         run: swift test --package-path apple --skip 'ReaderLayoutIntegrationTests|ReaderLayoutMatrixTests|ReaderRevealTests'
 

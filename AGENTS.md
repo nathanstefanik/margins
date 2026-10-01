@@ -45,8 +45,10 @@ apple/                 # shared Apple SwiftPM package (macOS + iOS)
                        # MarginsCoreTests/Fixtures/legacy-library/ is a library
                        # written by the pre-Swift core — keep it reading
   ios/                 # iOS app: Margins.xcodeproj + SwiftUI scenes
-scripts/               # make-app.sh, bump-version.sh, bump-build.sh,
-                       # vendor-reader.sh
+scripts/               # make-app.sh, make-mas-pkg.sh, bump-version.sh,
+                       # bump-build.sh, vendor-reader.sh, make-icon.swift,
+                       # make-reader-layout-fixtures.py, apple-upload.sh,
+                       # appstore-connect.py, tests/
 ```
 
 ## Conventions
@@ -70,7 +72,7 @@ make test        # the same suite via make
 make build       # build the Swift package
 make ios-build   # build the iOS app for the simulator (no signing)
 make ios-archive # Release iOS archive at build/Margins.xcarchive (needs ASC app record + Signing.local.xcconfig)
-make ios-bump    # bump CURRENT_PROJECT_VERSION (run before every TestFlight upload)
+make ios-bump    # +1 CURRENT_PROJECT_VERSION; releases set an explicit number (see margins-release skill)
 make mas-pkg     # sandboxed, distribution-signed Mac App Store pkg (needs MAS identities + profile)
 make app         # assemble build/Margins.app (ad-hoc signed)
 make run         # app + open it
@@ -81,11 +83,9 @@ make bump VERSION=x.y.z  # bump version everywhere, commit, tag vx.y.z
 Everything needs **full Xcode** (26.x): the iOS SDK for `ios-build` and the
 iOS targets. The iOS library root lives in the iCloud Documents container
 when available, falling back to local `Documents/Library` at runtime
-(`LibraryLocation`); DEBUG launch env vars (`MARGINS_IMPORT_FIXTURE`,
-`MARGINS_SEARCH_FIXTURE`, `MARGINS_DELETE_FIXTURE`,
-`MARGINS_EVICT_FIXTURE`, `MARGINS_OFFLINE_FIXTURE`,
-`MARGINS_NOTEBOOK_FIXTURE`) drive simulator
-verification flows. FileStore refuses evicted iCloud reads rather than
+(`LibraryLocation`); DEBUG launch env vars
+(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,EVICT,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR}_FIXTURE`)
+drive simulator verification flows. FileStore refuses evicted iCloud reads rather than
 waiting; see `docs/architecture.md` (iOS) and `docs/testing/ios-offline.md`.
 Device signing uses the team ID in
 `apple/ios/Signing.local.xcconfig` (gitignored — created from
@@ -106,6 +106,9 @@ When modifying notes storage, update `docs/storage.md` and ensure `_index.json` 
 
 ## Distribution verification
 
+- For any iOS/macOS build, App Store Connect upload, or TestFlight distribution task, invoke the `margins-release` skill or read `.agents/skills/margins-release/SKILL.md` directly. It is the canonical release workflow; use its reusable scripts instead of recreating release commands.
+- Publishing requires explicit user authorization. Never expire an existing build or cancel its review without approval for that specific action. Keep credentials, concrete account/signing details, tester metadata, and release receipts out of Git.
+- Verify release-tool changes offline with `python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v` and `sh -n scripts/apple-upload.sh`. These tests use synthetic data and mocked Apple tools/API calls; verification must not publish or require Apple credentials.
 - Validate signed artifacts with `xcrun altool --validate-app PATH --api-key "$KEY_ID" --api-issuer "$ISSUER_ID"` before upload. Current Xcode 26 altool uploads with `--upload-package PATH --wait` and the same authentication options; `--wait` reports processing completion.
 - Local `codesign --verify` does not establish that the app's signing certificate is permitted by its embedded provisioning profile. For Mac validation error 90284, compare the public certificate fingerprints and refresh the existing active `MAC_APP_STORE` profile for the bundle ID before creating new signing assets. A cached profile with the same name can contain an older certificate.
 - Keep provisioning profiles, export options, and release artifacts gitignored. Never upload an earlier main-only artifact after integrating a feature branch; verify the version/build and that bundled reader resources match the integrated source.
