@@ -168,7 +168,7 @@ struct MarksSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
+                    Button(role: .close) { dismiss() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Chapter note…") {
@@ -402,7 +402,7 @@ struct ChapterNoteEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
+                    Button(role: .close) { dismiss() }
                 }
             }
             .presentationDetents([.large])

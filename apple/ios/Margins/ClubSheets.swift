@@ -37,7 +37,7 @@ struct CreateClubSheet: View {
                     Form {
                         Section("Club") {
                             TextField("Club Name", text: $name)
-                            TextField("Name", text: $displayName)
+                            TextField("Your Name", text: $displayName)
                         }
                         Section("Book") {
                             Picker("Book", selection: $bookID) {
@@ -146,7 +146,7 @@ struct JoinClubSheet: View {
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                 }
-                Section("Name") {
+                Section("Your Name") {
                     TextField("Name", text: $displayName)
                 }
             }

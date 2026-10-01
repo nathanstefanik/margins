@@ -88,6 +88,8 @@ struct NotebooksScene: View {
                     createTitle = ""
                     createAlert = true
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
         } else {
             List {

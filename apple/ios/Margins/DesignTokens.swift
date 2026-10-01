@@ -20,6 +20,7 @@ enum DesignTokens {
         static let chrome: CGFloat = 10
         static let actions: CGFloat = 12
         static let controlInset: CGFloat = 12
+        static let readerHeaderLift: CGFloat = 10
     }
 
     enum Control {

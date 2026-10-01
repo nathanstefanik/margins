@@ -121,14 +121,10 @@ struct ClubsScene: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                             Text(
-                                club.members.count == 1
-                                    ? "1 member" : "\(club.members.count) members"
+                                "\(club.members.count == 1 ? "1 member" : "\(club.members.count) members") · \(club.createdAt.formatted(date: .abbreviated, time: .omitted))"
                             )
                             .font(.caption)
                             .foregroundStyle(.tertiary)
-                            Text(club.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
                         }
                         .padding(.vertical, 2)
                     }
