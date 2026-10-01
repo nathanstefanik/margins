@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- macOS reader keeps its passage across successive window resizes instead
+  of drifting back a page with each settled reflow
+
 ## [0.7.0] - 2026-10-01
 
 ### Added

@@ -445,8 +445,9 @@ struct ReaderLayoutIntegrationTests {
         try await harness.waitForReaderIdle()
         let anchor = try await anchorParagraph(harness)
 
-        // Drag-like burst: several widths before the scheduler fires.
-        for width in [1400.0, 700.0, 1300.0, 800.0, 1200.0, 900.0] {
+        // Drag-like burst: several widths before the scheduler fires, wide
+        // enough to cross the 120 % default's two-page threshold (~1440 px).
+        for width in [1600.0, 700.0, 1500.0, 800.0, 1300.0, 900.0] {
             try await harness.setViewport(width: width, height: 700)
             try await Task.sleep(for: .milliseconds(30))
         }
@@ -454,6 +455,33 @@ struct ReaderLayoutIntegrationTests {
 
         let after = try await harness.visibleParagraphIDs()
         #expect(after.contains(anchor), "anchor \(anchor) left the screen after rapid resizes")
+    }
+
+    @Test("settled resizes never ratchet the passage backward")
+    func settledResizesKeepPassage() async throws {
+        let harness = try makeHarness(width: 900, height: 700)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(1)
+        var visible = try await harness.visibleParagraphIDs()
+
+        try await harness.evaluate("readerScrollBy(1)")
+        visible = try await harness.waitForVisibleParagraphChange(from: visible)
+        try await harness.waitForReaderIdle()
+        let anchor = try await anchorParagraph(harness)
+
+        // Each width settles fully, so every reflow must restore the
+        // passage — an anchor that drifts early compounds across steps.
+        for width in [600.0, 900.0, 650.0, 900.0, 700.0, 900.0] {
+            try await harness.resize(to: CGSize(width: width, height: 700))
+            try await harness.waitForLayoutSettled()
+            if width == 900 {
+                #expect(
+                    try await harness.visibleParagraphIDs().contains(anchor),
+                    "anchor \(anchor) left the screen after settled resize to \(width)")
+            }
+        }
     }
 
     @Test("window resize repairs the passage when policy geometry is unchanged")
