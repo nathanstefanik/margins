@@ -99,6 +99,7 @@ struct ReaderScene: View {
         .overlay(alignment: .top) {
             headerOverlay
                 .safeAreaPadding(.top)
+                .offset(y: -DesignTokens.Spacing.readerHeaderLift)
         }
         .overlay(alignment: .bottom) {
             footerOverlay
