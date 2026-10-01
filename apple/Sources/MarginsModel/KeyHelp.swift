@@ -75,7 +75,7 @@ extension ReaderKeymap {
                 entries: [
                     KeyHelpEntry(keys: ["⌘O"], description: "Import EPUB"),
                     KeyHelpEntry(keys: ["⌘F"], description: "Find"),
-                    KeyHelpEntry(keys: ["⌘="], description: "Bigger text"),
+                    KeyHelpEntry(keys: ["⌘+", "⌘="], description: "Bigger text"),
                     KeyHelpEntry(keys: ["⌘-"], description: "Smaller text"),
                     KeyHelpEntry(keys: ["⌘0"], description: "Reset text size"),
                     KeyHelpEntry(keys: ["⌘,"], description: "Settings"),

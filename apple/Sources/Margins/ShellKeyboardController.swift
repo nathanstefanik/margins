@@ -57,6 +57,14 @@ final class ShellKeyboardController {
 
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        // ⌘= is unshifted "+": the menu's Bigger Text shortcut only fires
+        // on ⌘⇧=, so handle the unshifted form here directly.
+        if flags == [.command], event.charactersIgnoringModifiers == "=" {
+            reader.preferences.stepFontSize(ReaderPreferences.fontSizeStep)
+            return nil
+        }
+
         if flags.contains(.command) || flags.contains(.control) || flags.contains(.option) {
             return event
         }

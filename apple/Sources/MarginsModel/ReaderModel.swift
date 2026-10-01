@@ -412,6 +412,16 @@ public final class ReaderModel {
         await positionSaveChain?.value
     }
 
+    /// Flushes every pending write (note + position) and waits for the
+    /// serialized save chains to land — used before switching the library
+    /// root so the old root's writes commit before the store moves.
+    public func flushPendingSaves() async {
+        flushNoteSave()
+        flushPositionSave()
+        await noteSaveChain?.value
+        await positionSaveChain?.value
+    }
+
     // MARK: Notes pane state (Part III)
 
     /// How the notes editor's content relates to the last save.

@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Reader serif is now Charter and sans is now Seravek on both platforms
 
+### Fixed
+
+- macOS: ⌘= now enlarges text (previously only ⌘⇧= did); text-size
+  controls disable at the ends of the range
+- macOS: opening the notes pane focuses the editor
+- macOS: opening a search hit selects its book in the sidebar
+- macOS: switching the library directory saves and closes the open book
+  first, so its note and position land in the old library
+- macOS: moving the book selection with j/k while a club is shown switches
+  the detail to the book
+- macOS: reader-only menu items are disabled with no book open, and each
+  error banner keeps its own dismiss timer
+
 ## [0.6.2] - 2026-10-01
 
 ### Changed

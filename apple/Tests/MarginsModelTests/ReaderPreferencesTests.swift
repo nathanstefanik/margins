@@ -179,6 +179,24 @@ struct ReaderPreferencesTests {
         #expect(preferences.pageLayout == .double)
         #expect(ReaderPreferences(defaults: defaults).pageLayout == .double)
     }
+
+    @Test("the text-size step controls disable at the bounds")
+    func fontSizeStepControlsDisableAtBounds() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        let preferences = ReaderPreferences(defaults: defaults)
+
+        #expect(preferences.canStepFontSmaller)
+        #expect(preferences.canStepFontLarger)
+
+        preferences.fontSize = ReaderPreferences.maxFontSize
+        #expect(!preferences.canStepFontLarger)
+        #expect(preferences.canStepFontSmaller)
+
+        preferences.fontSize = ReaderPreferences.minFontSize
+        #expect(!preferences.canStepFontSmaller)
+        #expect(preferences.canStepFontLarger)
+    }
     #endif
 
     @Test("out-of-range persisted values are clamped on load")

@@ -82,6 +82,7 @@ struct TypographyPopover: View {
                 }
                 .accessibilityLabel("Smaller text")
                 .help("Smaller text (⌘−)")
+                .disabled(!preferences.canStepFontSmaller)
                 Text("\(Int(preferences.fontSize.rounded()))%")
                     .monospacedDigit()
                     .frame(minWidth: 40)
@@ -94,6 +95,7 @@ struct TypographyPopover: View {
                 }
                 .accessibilityLabel("Bigger text")
                 .help("Bigger text (⌘+)")
+                .disabled(!preferences.canStepFontLarger)
             }
 
             Divider()

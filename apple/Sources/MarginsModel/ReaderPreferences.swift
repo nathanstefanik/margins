@@ -256,6 +256,12 @@ public final class ReaderPreferences {
         }
     }
 
+    /// At the bottom of the range: the smaller-A control disables.
+    public var canStepFontSmaller: Bool { fontSize > Self.minFontSize }
+
+    /// At the top of the range: the larger-A control disables.
+    public var canStepFontLarger: Bool { fontSize < Self.maxFontSize }
+
     /// Steps text size by `delta` percent, clamped to the allowed range.
     public func stepFontSize(_ delta: Double) {
         fontSize += delta

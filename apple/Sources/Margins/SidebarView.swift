@@ -66,6 +66,12 @@ struct SidebarView: View {
             )
         }
         .onChange(of: model.selectedBookID) {
+            // Keyboard moves can pick a book while a club is selected;
+            // mouse taps clear the club via the row's tap gesture, keys go
+            // through here — the detail area must not keep showing the club.
+            if model.selectedBookID != nil, clubs.selectedClubID != nil {
+                Task { await clubs.selectClub(id: nil) }
+            }
             Task { await model.loadSelectedBook() }
         }
         .onChange(of: clubs.selectedClubID) {

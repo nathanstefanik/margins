@@ -75,6 +75,7 @@ struct SettingsView: View {
                         Text("A").font(.callout)
                     }
                     .accessibilityLabel("Smaller text")
+                    .disabled(!reader.preferences.canStepFontSmaller)
                     Text("\(Int(reader.preferences.fontSize.rounded()))%")
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -84,6 +85,7 @@ struct SettingsView: View {
                         Text("A").font(.title2)
                     }
                     .accessibilityLabel("Bigger text")
+                    .disabled(!reader.preferences.canStepFontLarger)
                 }
                 LabeledContent("Typeface") {
                     Picker(
