@@ -82,9 +82,11 @@ struct ClubDetailView: View {
                 }
                 .disabled(clubs.notes?.chapters.isEmpty ?? true)
                 if clubs.isAdmin(of: clubs.selectedClub) {
-                    Button("Rename") {
+                    Button {
                         renameText = clubs.selectedClub?.name ?? ""
                         renameOpen = true
+                    } label: {
+                        Label("Rename", systemImage: "pencil")
                     }
                 }
                 Divider()
@@ -114,25 +116,23 @@ struct ClubDetailView: View {
     private func header(_ club: Club) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(club.name)
-                    .font(.title2.weight(.semibold))
-                Text("\(club.bookTitle) — \(club.bookAuthor)")
+                Text(club.bookTitle)
+                    .font(.headline)
+                Text(club.bookAuthor)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Text(club.createdAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
-            HStack(spacing: 12) {
-                Toggle(
-                    "Spoiler protection",
-                    isOn: Binding(
-                        get: { clubs.spoilerProtection },
-                        set: { value in Task { await clubs.setSpoilerProtection(value) } }
-                    )
+            Toggle(
+                "Spoiler protection",
+                isOn: Binding(
+                    get: { clubs.spoilerProtection },
+                    set: { value in Task { await clubs.setSpoilerProtection(value) } }
                 )
-                .font(.subheadline)
-            }
+            )
+            .font(.subheadline)
             if clubs.supportsSharing, let code = clubs.selectedClub?.inviteCode {
                 HStack(spacing: 8) {
                     Text("Invite code")
@@ -429,7 +429,7 @@ private struct ExportSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button(role: .close) { dismiss() }
                 }
             }
         }

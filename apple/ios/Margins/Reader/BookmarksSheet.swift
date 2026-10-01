@@ -57,7 +57,7 @@ struct BookmarksSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
+                    Button(role: .close) { dismiss() }
                 }
             }
             .alert("Name", isPresented: $renameOpen) {

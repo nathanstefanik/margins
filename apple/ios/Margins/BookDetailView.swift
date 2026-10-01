@@ -392,26 +392,19 @@ private struct NotesTab: View {
     @ViewBuilder
     private func compiled(_ notes: CompiledNotes) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(LibraryModel.statsLine(for: notes))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            Toggle("Show chapters without notes", isOn: $showEmptyChapters)
-                .font(.footnote)
-
-            ViewThatFits {
-                HStack(spacing: DesignTokens.Spacing.actions) {
-                    exportAction(notes)
-                    Spacer(minLength: 8)
-                    clearAction
-                }
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.actions) {
+            HStack {
+                Text(LibraryModel.statsLine(for: notes))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: DesignTokens.Spacing.chrome) {
                     exportAction(notes)
                     clearAction
                 }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.circle)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
             .confirmationDialog(
                 "Clear All Notes?",
                 isPresented: $showClearDialog,
@@ -424,6 +417,9 @@ private struct NotesTab: View {
             } message: {
                 Text("Delete every chapter note for \"\(notes.bookTitle)\"? This cannot be undone.")
             }
+
+            Toggle("Show chapters without notes", isOn: $showEmptyChapters)
+                .font(.footnote)
 
             ForEach(notes.chapters) { chapter in
                 section(chapter)
