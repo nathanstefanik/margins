@@ -179,6 +179,24 @@ struct ReaderPreferencesTests {
         #expect(preferences.pageLayout == .double)
         #expect(ReaderPreferences(defaults: defaults).pageLayout == .double)
     }
+
+    @Test("the text-size step controls disable at the bounds")
+    func fontSizeStepControlsDisableAtBounds() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        let preferences = ReaderPreferences(defaults: defaults)
+
+        #expect(preferences.canStepFontSmaller)
+        #expect(preferences.canStepFontLarger)
+
+        preferences.fontSize = ReaderPreferences.maxFontSize
+        #expect(!preferences.canStepFontLarger)
+        #expect(preferences.canStepFontSmaller)
+
+        preferences.fontSize = ReaderPreferences.minFontSize
+        #expect(!preferences.canStepFontSmaller)
+        #expect(preferences.canStepFontLarger)
+    }
     #endif
 
     @Test("out-of-range persisted values are clamped on load")
@@ -192,5 +210,10 @@ struct ReaderPreferencesTests {
         #expect(preferences.fontSize == ReaderPreferences.maxFontSize)
         #expect(preferences.lineHeight == ReaderPreferences.lineHeightRange.lowerBound)
         #expect(preferences.lineWidth == ReaderPreferences.defaultLineWidth)
+
+        // A size persisted under the old 70 % floor clamps up to the new
+        // minimum — no migration, just the load clamp.
+        defaults.set(70, forKey: "reader.fontSize")
+        #expect(ReaderPreferences(defaults: defaults).fontSize == ReaderPreferences.minFontSize)
     }
 }

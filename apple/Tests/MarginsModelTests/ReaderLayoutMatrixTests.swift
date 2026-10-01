@@ -20,7 +20,7 @@ struct ReaderLayoutMatrixTests {
         var name: String
         var width: Double
         var height: Double
-        var fontSize: Double = 110
+        var fontSize: Double = 120
         var lineHeight: Double = 1.6
         var lineWidth: Double = 72
         var theme: String?
@@ -36,8 +36,8 @@ struct ReaderLayoutMatrixTests {
             Scenario(name: "normal-default", width: 1100, height: 800, expectedPages: 1),
             Scenario(name: "half-screen", width: 720, height: 800, expectedPages: 1),
             Scenario(name: "notes-open-window", width: 740, height: 800, expectedPages: 1),
-            Scenario(name: "large-text-200", width: 1100, height: 800, fontSize: 200, expectedPages: 1),
-            Scenario(name: "small-text-70", width: 1100, height: 800, fontSize: 70, expectedPages: 2),
+            Scenario(name: "large-text-210", width: 1100, height: 800, fontSize: 210, expectedPages: 1),
+            Scenario(name: "small-text-80", width: 1100, height: 800, fontSize: 80, expectedPages: 2),
             Scenario(name: "narrow-measure-50ch", width: 1100, height: 800, lineWidth: 50, expectedPages: 1),
             Scenario(name: "wide-measure-110ch", width: 1100, height: 800, lineWidth: 110, expectedPages: 1),
             Scenario(name: "low-window", width: 1100, height: 500, expectedPages: 1),

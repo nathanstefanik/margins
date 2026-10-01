@@ -130,6 +130,12 @@ public final class LibraryModel {
     /// notes move with the directory; the selection does not survive it.
     public func setLibraryRoot(_ path: String) async {
         guard let store else { return }
+        // The reader belongs to the old root: let its pending note and
+        // position writes land there, then close it before the store moves.
+        if let reader, reader.isOpen {
+            await reader.flushPendingSaves()
+            reader.close()
+        }
         do {
             try await store.setLibraryRoot(path: path)
             selectedBookID = nil

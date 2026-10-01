@@ -133,7 +133,7 @@ macOS keybindings:
 | `/` | Search notes (also ⌘F) |
 | `?` | Keyboard shortcuts cheat sheet (also ⌘/) |
 | ⌘S | Save note |
-| ⌘+ / ⌘− / ⌘0 | Bigger / smaller / reset text size |
+| ⌘+ (or ⌘=) / ⌘− / ⌘0 | Bigger / smaller / reset text size |
 | ⌘B | Toggle the library sidebar |
 | ⌘, | Settings (typography, library directory) |
 | Trackpad | Two-finger scroll turns pages |

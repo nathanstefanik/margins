@@ -26,7 +26,11 @@ struct NotesPane: View {
         .onChange(of: reader.noteBody) {
             reader.noteEdited()
         }
-        .onChange(of: reader.notesFocusRequest) {
+        // `.task` fires on mount too — unlike `.onChange`, which misses the
+        // request that opened the pane in the same update (openNotes bumps
+        // the counter before the pane exists to observe it).
+        .task(id: reader.notesFocusRequest) {
+            await Task.yield()
             editorFocused = true
         }
         .onChange(of: reader.readerFocusRequest) {

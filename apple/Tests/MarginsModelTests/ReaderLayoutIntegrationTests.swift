@@ -144,7 +144,7 @@ struct ReaderLayoutIntegrationTests {
         #expect(narrowMeasure <= narrow.stageWidth - 40 + 4)
         #expect(narrowMeasure >= narrow.stageWidth - 40 - 60)
 
-        try await harness.resize(to: CGSize(width: 1400, height: 800))
+        try await harness.resize(to: CGSize(width: 1500, height: 800))
         let wide = try await harness.waitForDivisor(2)
         // Two pages: each measure is half the stage after the outer body
         // padding and the fixed 40 px gutter.
@@ -202,30 +202,30 @@ struct ReaderLayoutIntegrationTests {
         let narrow = try await harness.waitForDivisor(1)
         #expect(narrow.renderedDivisor == 1)
 
-        try await harness.resize(to: CGSize(width: 1000, height: 700))
+        try await harness.resize(to: CGSize(width: 1100, height: 700))
         let wide = try await harness.waitForDivisor(2)
         #expect(wide.gap == 40)
     }
 
     @Test("a larger body font can force Automatic back to one page")
     func largeTextTriggersFallback() async throws {
-        let harness = try makeHarness(width: 1440, height: 820)
+        let harness = try makeHarness(width: 1500, height: 820)
         defer { harness.dismantle() }
         try await harness.load()
         _ = try await harness.waitForRelocation(after: 0)
         _ = try await harness.waitForDivisor(2)
 
-        try await harness.evaluate("readerApplyTypography(200,1.6,72,'%')")
+        try await harness.evaluate("readerApplyTypography(210,1.6,72,'%')")
         _ = try await harness.waitForDivisor(1)
 
         // Back to the default size: the wider viewport fits two pages again.
-        try await harness.evaluate("readerApplyTypography(110,1.6,72,'%')")
+        try await harness.evaluate("readerApplyTypography(120,1.6,72,'%')")
         _ = try await harness.waitForDivisor(2)
     }
 
     @Test("Automatic uses hysteresis around the fit threshold")
     func automaticHysteresis() async throws {
-        let harness = try makeHarness(width: 1400, height: 820)
+        let harness = try makeHarness(width: 1500, height: 820)
         defer { harness.dismantle() }
         try await harness.load()
         _ = try await harness.waitForRelocation(after: 0)
@@ -300,7 +300,7 @@ struct ReaderLayoutIntegrationTests {
         #expect(fallback["pages"] as? Int == 1)
 
         // Widening recovers the requested mode without touching it again.
-        try await harness.resize(to: CGSize(width: 1000, height: 700))
+        try await harness.resize(to: CGSize(width: 1100, height: 700))
         let recovered = try await harness.waitForMessage(
             "layoutChanged",
             matching: { $0["requested"] as? String == "double" && $0["pages"] as? Int == 2 },
@@ -334,7 +334,7 @@ struct ReaderLayoutIntegrationTests {
 
     @Test("a two-page spread reports its second page as the endpoint")
     func spreadReportsEndpoint() async throws {
-        let harness = try makeHarness(width: 1400, height: 800)
+        let harness = try makeHarness(width: 1500, height: 800)
         defer { harness.dismantle() }
         try await harness.load()
         _ = try await harness.waitForRelocation(after: 0)
@@ -406,7 +406,7 @@ struct ReaderLayoutIntegrationTests {
 
     @Test("a mode change keeps the visible passage")
     func modeChangeKeepsPassage() async throws {
-        let harness = try makeHarness(width: 1400, height: 800)
+        let harness = try makeHarness(width: 1500, height: 800)
         defer { harness.dismantle() }
         try await harness.load()
         _ = try await harness.waitForRelocation(after: 0)
@@ -445,8 +445,9 @@ struct ReaderLayoutIntegrationTests {
         try await harness.waitForReaderIdle()
         let anchor = try await anchorParagraph(harness)
 
-        // Drag-like burst: several widths before the scheduler fires.
-        for width in [1400.0, 700.0, 1300.0, 800.0, 1200.0, 900.0] {
+        // Drag-like burst: several widths before the scheduler fires, wide
+        // enough to cross the 120 % default's two-page threshold (~1440 px).
+        for width in [1600.0, 700.0, 1500.0, 800.0, 1300.0, 900.0] {
             try await harness.setViewport(width: width, height: 700)
             try await Task.sleep(for: .milliseconds(30))
         }
@@ -454,6 +455,33 @@ struct ReaderLayoutIntegrationTests {
 
         let after = try await harness.visibleParagraphIDs()
         #expect(after.contains(anchor), "anchor \(anchor) left the screen after rapid resizes")
+    }
+
+    @Test("settled resizes never ratchet the passage backward")
+    func settledResizesKeepPassage() async throws {
+        let harness = try makeHarness(width: 900, height: 700)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(1)
+        var visible = try await harness.visibleParagraphIDs()
+
+        try await harness.evaluate("readerScrollBy(1)")
+        visible = try await harness.waitForVisibleParagraphChange(from: visible)
+        try await harness.waitForReaderIdle()
+        let anchor = try await anchorParagraph(harness)
+
+        // Each width settles fully, so every reflow must restore the
+        // passage — an anchor that drifts early compounds across steps.
+        for width in [600.0, 900.0, 650.0, 900.0, 700.0, 900.0] {
+            try await harness.resize(to: CGSize(width: width, height: 700))
+            try await harness.waitForLayoutSettled()
+            if width == 900 {
+                #expect(
+                    try await harness.visibleParagraphIDs().contains(anchor),
+                    "anchor \(anchor) left the screen after settled resize to \(width)")
+            }
+        }
     }
 
     @Test("window resize repairs the passage when policy geometry is unchanged")
@@ -820,15 +848,15 @@ struct ReaderLayoutIntegrationTests {
 
     @Test("a saved spot stays bookmarked across reflow on the desktop spread")
     func savedSpotStaysBookmarkedThroughReflow() async throws {
-        let harness = try makeHarness(width: 1400, height: 800)
+        let harness = try makeHarness(width: 1500, height: 800)
         defer { harness.dismantle() }
         try await harness.load()
         _ = try await harness.waitForDivisor(2)
         try await savedSpotAcceptance(
             harness,
             pinId: "pin0000001",
-            initialTypography: "readerApplyTypography(200,1.6,72,'%')",
-            reflowTypography: "readerApplyTypography(110,1.6,72,'%')"
+            initialTypography: "readerApplyTypography(210,1.6,72,'%')",
+            reflowTypography: "readerApplyTypography(120,1.6,72,'%')"
         )
     }
 
@@ -851,7 +879,7 @@ struct ReaderLayoutIntegrationTests {
     func typefacesApplyInSectionDocuments() async throws {
         let harness = try makeHarness()
         defer { harness.dismantle() }
-        try await harness.load(typography: (110, 1.6, 72, "%"))
+        try await harness.load(typography: (120, 1.6, 72, "%"))
 
         // Easy: the bundled face is served over the scheme handler into the
         // section document (a FontFace for the family reaches "loaded"),
@@ -873,7 +901,7 @@ struct ReaderLayoutIntegrationTests {
         #expect(abs(easyRatio - 1.75) < 0.01)
 
         // The boost is capped: 2.1 + 0.15 lands on 2.2, not 2.25.
-        try await harness.evaluate("readerApplyTypography(110,2.1,72,'%')")
+        try await harness.evaluate("readerApplyTypography(120,2.1,72,'%')")
         try await harness.waitForLayoutSettled()
         let capped = try await sectionTypography(harness, loadFont: false)
         let cappedFontSize = try #require(px(capped["fontSize"]))
@@ -881,7 +909,7 @@ struct ReaderLayoutIntegrationTests {
         #expect(abs(cappedRatio - 2.2) < 0.01)
 
         // Sans and Serif keep publisher spacing and the chosen line height.
-        try await harness.evaluate("readerApplyTypography(110,1.6,72,'%')")
+        try await harness.evaluate("readerApplyTypography(120,1.6,72,'%')")
         try await harness.evaluate("readerSetFontFace('sans')")
         try await harness.waitForLayoutSettled()
         let sans = try await sectionTypography(harness, loadFont: false)

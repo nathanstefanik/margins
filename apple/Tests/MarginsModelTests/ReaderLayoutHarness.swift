@@ -98,7 +98,7 @@ final class ReaderLayoutHarness {
         bookID: String = "fixture",
         chapter: String = "ch1.xhtml",
         platform: String? = "macos",
-        typography: (fontSize: Double, lineHeight: Double, lineWidth: Double, unit: String)? = (110, 1.6, 72, "%")
+        typography: (fontSize: Double, lineHeight: Double, lineWidth: Double, unit: String)? = (120, 1.6, 72, "%")
     ) async throws {
         // Hold the process-wide gate through first navigation: the matrix
         // and integration suites otherwise spawn two WKWebViews at once,

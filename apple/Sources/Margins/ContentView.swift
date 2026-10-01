@@ -127,7 +127,7 @@ struct ContentView: View {
             .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
             .padding(20)
             .transition(.move(edge: .bottom).combined(with: .opacity))
-            .task {
+            .task(id: message) {
                 try? await Task.sleep(for: .seconds(8))
                 withAnimation {
                     clubs.errorMessage = nil

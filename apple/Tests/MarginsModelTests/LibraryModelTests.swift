@@ -254,6 +254,47 @@ struct LibraryModelTests {
         #expect(model.detailMode == .notes)
     }
 
+    @Test("switching the library root flushes the reader's pending note and closes it")
+    @MainActor
+    func setLibraryRootFlushesPendingSavesAndClosesReader() async throws {
+        let fixture = try #require(try fixtureEpubs().first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: fixture))
+
+        let book = try #require(model.selectedBook)
+        let reader = ReaderModel()
+        model.reader = reader
+        reader.noteSaver = { bookId, chapterKey, body in
+            await model.saveChapterNoteText(
+                bookId: bookId, chapterKey: chapterKey, body: body)
+        }
+        reader.open(book: book, chapter: book.chapters[0])
+        reader.noteBody = "a note the root switch must not lose"
+        #expect(reader.isNoteDirty)
+
+        let oldRoot = model.libraryRoot
+        let newRoot = try makeTempDataDir()
+        await model.setLibraryRoot(newRoot)
+
+        // The reader is closed rather than left open on a book from the
+        // old library.
+        #expect(!reader.isOpen)
+
+        // The dirty note landed in the old root before the store moved.
+        let oldStore = try CoreStore(dataDir: try makeTempDataDir())
+        try await oldStore.setLibraryRoot(path: oldRoot)
+        let note = try await oldStore.getChapterNote(
+            bookId: book.id, chapterKey: book.chapters[0].key)
+        #expect(note.body == "a note the root switch must not lose")
+
+        // Nothing for the book was written under the new root.
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: URL(fileURLWithPath: newRoot)
+                    .appendingPathComponent("books/\(book.id)").path))
+    }
+
     @Test("saving a note recompiles a stale compiled notes page")
     @MainActor
     func saveNoteRefreshesCompiledPage() async throws {

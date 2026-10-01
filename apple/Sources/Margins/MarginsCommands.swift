@@ -78,16 +78,19 @@ struct MarginsCommands: Commands {
                     "readerDisplay(\(ReaderController.javaScriptLiteral(reader.displayTarget)))"
                 )
             }
+            .disabled(!reader.isOpen)
             Button("Previous Chapter") {
                 guard reader.isOpen, reader.previousChapter() != nil else { return }
                 ReaderController.evaluateInReader(
                     "readerDisplay(\(ReaderController.javaScriptLiteral(reader.displayTarget)))"
                 )
             }
+            .disabled(!reader.isOpen)
             Divider()
             Button("Back to Library") {
                 reader.close()
             }
+            .disabled(!reader.isOpen)
         }
         CommandMenu("View") {
             Button("Book Notes") {
@@ -98,6 +101,7 @@ struct MarginsCommands: Commands {
             Button("Toggle Notes") {
                 reader.toggleNotes()
             }
+            .disabled(!reader.isOpen)
             Divider()
             Button(BookmarkDisplay.toggleTitle(onPageCount: reader.bookmarksOnPage.count)) {
                 Task {
@@ -120,10 +124,12 @@ struct MarginsCommands: Commands {
                 reader.preferences.stepFontSize(ReaderPreferences.fontSizeStep)
             }
             .keyboardShortcut("+", modifiers: .command)
+            .disabled(!reader.preferences.canStepFontLarger)
             Button("Smaller Text") {
                 reader.preferences.stepFontSize(-ReaderPreferences.fontSizeStep)
             }
             .keyboardShortcut("-", modifiers: .command)
+            .disabled(!reader.preferences.canStepFontSmaller)
             Button("Reset Text Size") {
                 reader.preferences.resetFontSize()
             }

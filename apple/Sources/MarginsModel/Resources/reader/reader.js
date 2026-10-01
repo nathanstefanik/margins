@@ -691,7 +691,14 @@ async function readerRunLayoutTransaction(generation, token, rendition) {
     return;
   }
   await readerNextFrame(document);
-  readerUpdateSettledCfi();
+  // The anchor survives the reflow: recapturing the new page start would
+  // ratchet backward with each reflow. Only navigation (which clears the
+  // pin in readerInvalidatePendingLayout) moves it.
+  if (anchor) {
+    readerPinSettledCfi(anchor);
+  } else {
+    readerUpdateSettledCfi();
+  }
   // Publish only the settled location; everything emitted during the
   // transaction was provisional and deliberately withheld.
   try {

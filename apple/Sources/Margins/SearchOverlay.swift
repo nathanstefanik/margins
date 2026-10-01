@@ -9,7 +9,6 @@ import SwiftUI
 /// Dismissal also: clicking anywhere outside the panel, or opening a hit.
 struct SearchOverlay: View {
     @Environment(LibraryModel.self) private var model
-    @Environment(ReaderModel.self) private var reader
     @FocusState private var fieldFocused: Bool
     // Keyboard navigation scrolls the selected row into view; hover-driven
     // selection must not (scrolling under the cursor would select row after
@@ -366,25 +365,14 @@ struct SearchOverlay: View {
     private func open(_ hit: NoteSearchHit) {
         controller.commitRecent(controller.query)
         Task {
-            // A mark hit lands on the mark's CFI, like opening it from the
-            // marks list (openPassage owns the jump).
-            if hit.kind == .mark {
-                await model.openPassage(
-                    bookId: hit.bookId, chapterKey: hit.chapterKey, cfi: hit.cfi
-                )
-                model.requestSearchDismissal()
-                return
-            }
-            guard let book = await model.getBook(id: hit.bookId) else { return }
-            let chapter: ChapterMeta?
-            if hit.chapterKey.isEmpty {
-                // Book-level target: land on its first chapter.
-                chapter = book.chapters.first
-            } else {
-                chapter = book.chapters.first(where: { $0.key == hit.chapterKey })
-            }
-            guard let chapter else { return }
-            reader.open(book: book, chapter: chapter)
+            // openPassage selects the hit's book in the sidebar and owns
+            // the jump: a mark lands on its CFI, an empty chapter key on
+            // the first chapter.
+            await model.openPassage(
+                bookId: hit.bookId,
+                chapterKey: hit.chapterKey,
+                cfi: hit.kind == .mark ? hit.cfi : nil
+            )
             model.requestSearchDismissal()
         }
     }
