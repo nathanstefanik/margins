@@ -141,29 +141,24 @@ struct ClubDetailView: View {
                     Text(code)
                         .font(.system(.body, design: .monospaced).weight(.semibold))
                         .textSelection(.enabled)
-                }
-                ViewThatFits {
-                    HStack(spacing: DesignTokens.Spacing.actions) {
+                    Spacer(minLength: 0)
+                    HStack(spacing: DesignTokens.Spacing.chrome) {
                         shareCodeButton(code)
                         if clubs.isAdmin(of: club) {
                             rotateCodeButton
                         }
                     }
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.actions) {
-                        shareCodeButton(code)
-                        if clubs.isAdmin(of: club) {
-                            rotateCodeButton
-                        }
-                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
             } else if !clubs.supportsSharing {
                 Label("This iPhone only — sign in to iCloud to invite readers.", systemImage: "icloud.slash")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
+        .padding(.vertical, 8)
     }
 
     private func shareCodeButton(_ code: String) -> some View {
