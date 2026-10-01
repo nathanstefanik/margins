@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-01
+
+### Changed
+
+- iOS invite-code and notes export/clear actions are compact icon buttons
+  beside the text they act on instead of large labelled buttons
+- iOS reader chrome sits higher, clear of the page text
+- iOS sheets use the system close button; the club card no longer repeats
+  the club name, has more padding, and club rows show member count and date
+  on one line
+
 ### Fixed
 
 - Bookmarks pin a fixed content spot: a pin counts as on the page whenever
