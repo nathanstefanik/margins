@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Reader serif is now Charter and sans is now Seravek on both platforms
+- macOS text size range moved up one step to 80–210 % with a 120 % default
+  (the old 70 % size was too small)
 
 ### Fixed
 

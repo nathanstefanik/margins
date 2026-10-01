@@ -128,7 +128,7 @@ fixture renders as a full-width single column with the iOS CSS padding
 
 Target machine: **15-inch MacBook Air M5 (Mac17,4)**, macOS 26.5.2,
 logical resolution 1920 × 1243 points at scale 2 (visible 1920 × 1205).
-Measured with the app's default typography (110 % / 1.6 / line width as
+Measured with the app's default typography (120 % / 1.6 / line width as
 noted). "Measure" is the text width of a full page. These viewports are
 the reading surface after native chrome and footer, so they stand in for
 window sizes: fullscreen ≈ 1920 × 1123, a normal window ≈ 1100 × 800,
@@ -137,16 +137,16 @@ half-screen ≈ 720 × 800, and the reader with the notes pane open at a
 
 | Viewport | Text | Line width | Pages | Viewer | Stage | Measure |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1920 × 1123 | 110 % | 72 ch | 2 | 1644 | 1596 | 756 (70 ch) |
-| 1100 × 800 | 110 % | 72 ch | 1 | 826 | 778 | 724 (67 ch) |
-| 720 × 800 | 110 % | 72 ch | 1 | 720 | 672 | 624 (58 ch) |
-| 740 × 800 | 110 % | 72 ch | 1 | 740 | 692 | 624 |
-| 1100 × 800 | 200 % | 72 ch | 1 | 1100 | 1052 | 982 |
-| 1100 × 800 | 70 % | 72 ch | 2 | 1078 | 1030 | 460 |
-| 1100 × 800 | 110 % | 50 ch | 1 | 588 | 540 | 486 |
-| 1100 × 800 | 110 % | 110 ch | 1 | 1100 | 1052 | 1011 |
-| 1100 × 500 | 110 % | 72 ch | 1 | 826 | 778 | 723 |
-| 1920 × 1123 (dark) | 110 % | 72 ch | 2 | 1644 | 1596 | 756 |
+| 1920 × 1123 | 120 % | 72 ch | 2 | 1785 | 1737 | 826 (70 ch) |
+| 1100 × 800 | 120 % | 72 ch | 1 | 896 | 848 | 790 (67 ch) |
+| 720 × 800 | 120 % | 72 ch | 1 | 720 | 672 | 621 (53 ch) |
+| 740 × 800 | 120 % | 72 ch | 1 | 740 | 692 | 621 |
+| 1100 × 800 | 210 % | 72 ch | 1 | 1100 | 1052 | 993 |
+| 1100 × 800 | 80 % | 72 ch | 2 | 1100 | 1052 | 480 |
+| 1100 × 800 | 120 % | 50 ch | 1 | 637 | 589 | 531 |
+| 1100 × 800 | 120 % | 110 ch | 1 | 1100 | 1052 | 955 |
+| 1100 × 500 | 120 % | 72 ch | 1 | 896 | 848 | 789 |
+| 1920 × 1123 (dark) | 120 % | 72 ch | 2 | 1785 | 1737 | 826 |
 
 Observed calibration notes:
 

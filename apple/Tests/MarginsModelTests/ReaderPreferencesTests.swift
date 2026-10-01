@@ -210,5 +210,10 @@ struct ReaderPreferencesTests {
         #expect(preferences.fontSize == ReaderPreferences.maxFontSize)
         #expect(preferences.lineHeight == ReaderPreferences.lineHeightRange.lowerBound)
         #expect(preferences.lineWidth == ReaderPreferences.defaultLineWidth)
+
+        // A size persisted under the old 70 % floor clamps up to the new
+        // minimum — no migration, just the load clamp.
+        defaults.set(70, forKey: "reader.fontSize")
+        #expect(ReaderPreferences(defaults: defaults).fontSize == ReaderPreferences.minFontSize)
     }
 }

@@ -187,13 +187,13 @@ public final class ReaderPreferences {
     /// At the top of the ladder: the larger-A control disables.
     public var canStepFontLarger: Bool { _fontStep < Self.fontStepsPx.count }
     #else
-    public static let minFontSize = 70.0
-    public static let maxFontSize = 200.0
+    public static let minFontSize = 80.0
+    public static let maxFontSize = 210.0
     public static let fontSizeStep = 10.0
-    /// One step above the publisher default: on common laptop aspect ratios
-    /// the column scales with font size, so this also widens the measure
-    /// enough to keep the side margins modest.
-    public static let defaultFontSize = 110.0
+    /// Two steps above the publisher default: on common laptop aspect
+    /// ratios the column scales with font size, so this also widens the
+    /// measure enough to keep the side margins modest.
+    public static let defaultFontSize = 120.0
     public static let defaultLineHeight = 1.6
     public static let defaultLineWidth = 72.0
 
