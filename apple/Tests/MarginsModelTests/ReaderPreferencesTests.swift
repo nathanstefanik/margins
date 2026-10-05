@@ -126,6 +126,35 @@ struct ReaderPreferencesTests {
         #expect(preferences.nightTheme == .dark)
     }
 
+    @Test("justify defaults off, ornaments on; both round-trip")
+    func proseOptionsRoundTrip() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.justify == false)
+        #expect(preferences.ornaments == true)
+
+        preferences.justify = true
+        preferences.ornaments = false
+        let second = ReaderPreferences(defaults: defaults)
+        #expect(second.justify == true)
+        #expect(second.ornaments == false)
+    }
+
+    @Test("reset restores prose defaults")
+    func resetRestoresProseDefaults() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        preferences.justify = true
+        preferences.ornaments = false
+        preferences.resetTypography()
+        #expect(preferences.justify == false)
+        #expect(preferences.ornaments == true)
+    }
+
     @Test("setting the resolved theme picks a fixed paper and unfollows")
     func themeSetterUnfollows() {
         let defaults = makeDefaults()

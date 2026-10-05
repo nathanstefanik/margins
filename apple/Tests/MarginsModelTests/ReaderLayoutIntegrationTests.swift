@@ -1039,5 +1039,153 @@ struct ReaderLayoutIntegrationTests {
     private func advertisedLineWidth(_ harness: ReaderLayoutHarness) async throws -> Double {
         try await harness.evaluate("readerTypography.lineWidthCh") as? Double ?? 72
     }
+
+    // MARK: Prose options (justify, ornaments, book language)
+
+    /// `text-align|hyphens` computed on a body paragraph — the pair
+    /// `readerSetProse` switches. WebKit reports `-webkit-hyphens`.
+    private func proseAlignAndHyphens(
+        _ harness: ReaderLayoutHarness, paragraphID: String = "p-1-01"
+    ) async throws -> (align: String?, hyphens: String?) {
+        let css = try await harness.evaluate(
+            """
+            (function () {
+              var doc = readerRendition.getContents()[0].document;
+              var p = doc.querySelector("#\(paragraphID)");
+              var cs = doc.defaultView.getComputedStyle(p);
+              var h = cs.getPropertyValue("hyphens")
+                || cs.getPropertyValue("-webkit-hyphens");
+              return cs.textAlign + "|" + h;
+            })()
+            """
+        ) as? String
+        let parts = css?.split(separator: "|") ?? []
+        return (parts.first.map(String.init), parts.count > 1 ? String(parts[1]) : nil)
+    }
+
+    /// `-webkit-initial-letter|font-variant-caps` computed on the
+    /// chapter-opening paragraph — the ornament pair.
+    private func openingOrnaments(
+        _ harness: ReaderLayoutHarness, paragraphID: String = "p-1-01"
+    ) async throws -> (letter: String?, caps: String?) {
+        let css = try await harness.evaluate(
+            """
+            (function () {
+              var doc = readerRendition.getContents()[0].document;
+              var p = doc.querySelector("#\(paragraphID)");
+              var view = doc.defaultView;
+              var fl = view.getComputedStyle(p, "::first-letter");
+              var fn = view.getComputedStyle(p, "::first-line");
+              var il = fl.getPropertyValue("-webkit-initial-letter")
+                || fl.getPropertyValue("initial-letter");
+              return il + "|" + fn.getPropertyValue("font-variant-caps");
+            })()
+            """
+        ) as? String
+        let parts = css?.split(separator: "|") ?? []
+        return (parts.first.map(String.init), parts.count > 1 ? String(parts[1]) : nil)
+    }
+
+    /// The fixture's publisher sheet justifies `p`; the reader forces
+    /// left until justify is on — then alignment flips and hyphenation
+    /// turns on (the load carried a book language).
+    @Test("justify switches body text to justified with hyphenation")
+    func justifyTogglesAlignment() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load(language: "en")
+
+        var prose = try await proseAlignAndHyphens(harness)
+        #expect(prose.align == "left")
+        #expect(prose.hyphens != "auto")
+
+        _ = try await harness.evaluate("readerSetProse(true, true); \"sent\"")
+        prose = try await proseAlignAndHyphens(harness)
+        #expect(prose.align == "justify")
+        #expect(prose.hyphens == "auto")
+
+        _ = try await harness.evaluate("readerSetProse(false, true); \"sent\"")
+        prose = try await proseAlignAndHyphens(harness)
+        #expect(prose.align == "left")
+        #expect(prose.hyphens != "auto")
+    }
+
+    /// The Easy face ignores justify — its spacing is the point.
+    @Test("the Easy face keeps flush-left text even when justify is on")
+    func easyStaysFlushLeft() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load(language: "en")
+
+        _ = try await harness.evaluate(
+            "readerSetFontFace(\"easy\"); readerSetProse(true, true); \"sent\""
+        )
+        let prose = try await proseAlignAndHyphens(harness)
+        #expect(prose.align == "left")
+
+        _ = try await harness.evaluate("readerSetFontFace(\"serif\"); \"sent\"")
+        let after = try await proseAlignAndHyphens(harness)
+        #expect(after.align == "justify")
+        #expect(after.hyphens == "auto")
+    }
+
+    /// With ornaments on, the paragraph right after the chapter heading
+    /// gets a three-line initial letter and a small-caps first line;
+    /// off — or the Easy face — leaves it plain. A mid-chapter paragraph
+    /// is never ornamented.
+    @Test("chapter ornaments mark only the opening paragraph")
+    func ornamentsMarkOpeningParagraph() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+
+        var ornament = try await openingOrnaments(harness)
+        #expect(ornament.letter == "3")
+        #expect(ornament.caps == "small-caps")
+        let mid = try await openingOrnaments(harness, paragraphID: "p-1-02")
+        #expect(mid.letter == "normal" || mid.letter == nil || mid.letter == "")
+        #expect(mid.caps != "small-caps")
+
+        _ = try await harness.evaluate("readerSetProse(false, false); \"sent\"")
+        ornament = try await openingOrnaments(harness)
+        #expect(ornament.letter == "normal" || ornament.letter == "")
+
+        _ = try await harness.evaluate(
+            "readerSetFontFace(\"easy\"); readerSetProse(false, true); \"sent\""
+        )
+        ornament = try await openingOrnaments(harness)
+        #expect(ornament.letter == "normal" || ornament.letter == "")
+    }
+
+    /// The book language lands on a section only when the document
+    /// declares none of its own — the fixture's html carries lang="en",
+    /// so it wins; stripped, the book's fills the gap.
+    @Test("the book language fills unlang'd sections but never overrides")
+    func bookLanguageFillsOnlyWhenAbsent() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load(language: "de")
+
+        // The fixture's own declaration wins over the URL's book language.
+        var lang = try await harness.evaluate(
+            "readerRendition.getContents()[0].document.documentElement.getAttribute(\"lang\")"
+        ) as? String
+        #expect(lang == "en")
+
+        // A section with no language of its own takes the book's.
+        lang = try await harness.evaluate(
+            """
+            (function () {
+              var contents = readerRendition.getContents()[0];
+              var html = contents.document.documentElement;
+              html.removeAttribute("lang");
+              html.removeAttribute("xml:lang");
+              readerStyleContents(contents);
+              return html.getAttribute("lang");
+            })()
+            """
+        ) as? String
+        #expect(lang == "de")
+    }
 }
 #endif

@@ -57,6 +57,14 @@ struct TypographyPopover: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 4) {
+                Toggle("Justify text", isOn: $preferences.justify)
+                Toggle("Chapter ornaments", isOn: $preferences.ornaments)
+                    .help("Drop cap and small caps at chapter openings")
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
                 Text("Page Layout")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

@@ -15,6 +15,10 @@ const readerStartCfi = readerParams.get("cfi");
 // width-aware one/two-page policy below. iOS omits it and keeps the
 // original full-width single-column behavior.
 const readerIsDesktop = readerParams.get("platform") === "macos";
+// The book's declared language, read from the OPF by the shell — needed
+// for hyphenation when justify is on. Only fills section documents that
+// declare no language of their own; absent stays absent (never invented).
+const readerBookLanguage = readerParams.get("lang") || null;
 
 let readerBook = null;
 let readerRendition = null;
@@ -30,6 +34,12 @@ let readerTypography = null;
 // single source). Easy carries fixed extra spacing for low-vision
 // readers — a face property, not a user control.
 let readerFontFace = null;
+// Prose options from the shell: justified alignment (with hyphenation)
+// and the chapter-opening ornaments. Both stay off under the Easy face —
+// its deliberate spacing is the point — and Easy is also why the checks
+// below key on the face rather than a combined flag.
+let readerJustify = false;
+let readerOrnaments = true;
 
 const READER_FONT_FACES = {
   serif: { family: "Charter, 'Iowan Old Style', ui-serif, Georgia, serif" },
@@ -907,6 +917,16 @@ function readerStyleContents(contents) {
   if (!contents || !contents.document) {
     return;
   }
+  // Hyphenation needs a language: the section's own declaration wins;
+  // only when it has neither lang nor xml:lang do we lend it the book's.
+  const sectionHtml = contents.document.documentElement;
+  if (
+    readerBookLanguage &&
+    !sectionHtml.getAttribute("lang") &&
+    !sectionHtml.getAttribute("xml:lang")
+  ) {
+    sectionHtml.setAttribute("lang", readerBookLanguage);
+  }
   const palette = READER_THEMES[readerTheme];
   // Every text container follows the surface ink: publisher rules like
   // `p { color: #000 }` would otherwise paint near-invisible text on the
@@ -955,11 +975,46 @@ function readerStyleContents(contents) {
     rules["body, p, li, div"] = {
       "font-size": "inherit !important",
     };
+    // Flow-text refinements: tidy line breaking, real kerning and
+    // ligatures, and hanging punctuation. Left unset by publisher sheets
+    // they just apply; a publisher that picks its own keeps it (no
+    // !important). orphans/widows are deliberately absent: as pagination
+    // constraints they push paragraphs across column boundaries, which
+    // broke the reflow anchor's keep-the-passage guarantee.
+    const proseAlign = "body, p, li, dd, dt, blockquote, td, th, figcaption";
+    rules[proseAlign] = {
+      "text-wrap": "pretty",
+      "hanging-punctuation": "first allow-end",
+      "font-kerning": "normal",
+      "font-variant-ligatures": "common-ligatures",
+    };
     // Publisher sheets commonly justify body text; ragged-right reads
     // better and avoids the uneven word spacing justification creates.
+    // Justify is the opt-in counterpoint, hyphenated via the section's
+    // language. Easy always stays ragged — its spacing is the point.
     // Headings and other display elements keep their own alignment.
-    rules["body, p, li, dd, dt, blockquote, td, th, figcaption"] = {
-      "text-align": "left !important",
+    if (readerJustify && readerFontFace !== "easy") {
+      rules[proseAlign]["text-align"] = "justify !important";
+      rules[proseAlign]["hyphens"] = "auto !important";
+      rules[proseAlign]["-webkit-hyphens"] = "auto !important";
+    } else {
+      rules[proseAlign]["text-align"] = "left !important";
+    }
+  }
+  // Chapter-opening ornaments: a three-line initial letter over a
+  // small-caps first line on the paragraph right after a chapter
+  // heading. Adjacency selectors only — books without that markup get
+  // nothing, and paragraphs leading with an image are skipped.
+  if (readerOrnaments && readerFontFace !== "easy") {
+    const opening = ":is(h1, h2) + p:not(:has(img, svg))";
+    rules[`${opening}::first-letter`] = {
+      "-webkit-initial-letter": "3",
+      "initial-letter": "3",
+      "margin-right": "0.08em",
+    };
+    rules[`${opening}::first-line`] = {
+      "font-variant-caps": "small-caps",
+      "letter-spacing": "0.03em",
     };
   }
   // With a face chosen, html carries the family and everything that
@@ -1008,6 +1063,22 @@ function readerSetFontFace(face) {
   }
   readerTypographyRevision += 1;
   // Different glyphs re-break lines; the column count can change.
+  readerApplyPageLayout();
+  if (readerRendition) {
+    readerQueueRelayout();
+  }
+}
+
+// Prose options (called from Swift): justified alignment (with
+// hyphenation) and the chapter-opening ornaments. Both re-break lines
+// like a face change — restyle every section, then re-paginate.
+function readerSetProse(justify, ornaments) {
+  readerJustify = justify === true;
+  readerOrnaments = ornaments !== false;
+  if (readerRendition) {
+    readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
+  }
+  readerTypographyRevision += 1;
   readerApplyPageLayout();
   if (readerRendition) {
     readerQueueRelayout();
@@ -1351,6 +1422,7 @@ window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
 window.readerApplyTypography = readerApplyTypography;
 window.readerSetFontFace = readerSetFontFace;
+window.readerSetProse = readerSetProse;
 window.readerSetTheme = readerApplyTheme;
 window.readerRelayout = readerQueueRelayout;
 // Desktop layout API: the shell selects the mode; the page resolves the

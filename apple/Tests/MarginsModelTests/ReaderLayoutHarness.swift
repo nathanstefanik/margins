@@ -98,6 +98,7 @@ final class ReaderLayoutHarness {
         bookID: String = "fixture",
         chapter: String = "ch1.xhtml",
         platform: String? = "macos",
+        language: String? = nil,
         typography: (fontSize: Double, lineHeight: Double, lineWidth: Double, unit: String)? = (120, 1.6, 72, "%")
     ) async throws {
         // Hold the process-wide gate through first navigation: the matrix
@@ -120,6 +121,9 @@ final class ReaderLayoutHarness {
         ]
         if let platform {
             queryItems.append(URLQueryItem(name: "platform", value: platform))
+        }
+        if let language {
+            queryItems.append(URLQueryItem(name: "lang", value: language))
         }
         components.queryItems = queryItems
         guard let url = components.url else {
@@ -698,8 +702,8 @@ final class ReaderLayoutHarness {
                 for (var p = 0; p < paragraphs.length; p++) {
                   // A paragraph split across a column boundary has a union
                   // element box spanning both columns; use the text fragment
-                  // boxes so a paragraph reads as the part actually on this
-                  // page.
+                  // boxes so a paragraph reads as the parts actually on each
+                  // column.
                   var range = doc.createRange();
                   range.selectNodeContents(paragraphs[p]);
                   var boxes = Array.prototype.slice.call(range.getClientRects());
@@ -707,7 +711,13 @@ final class ReaderLayoutHarness {
                     var elementRect = paragraphs[p].getBoundingClientRect();
                     boxes = [{ left: elementRect.left, top: elementRect.top, width: elementRect.width, height: elementRect.height }];
                   }
-                  var union = null;
+                  // Fragment boxes in different page columns are
+                  // horizontally disjoint by at least the gutter; merge
+                  // runs that overlap or nearly touch (a drop cap sits
+                  // ~2px left of its paragraph's text) so a paragraph
+                  // split at a column break reports its per-column piece,
+                  // not a spread-wide box.
+                  var groups = [];
                   for (var b = 0; b < boxes.length; b++) {
                     var box = boxes[b];
                     var left = frameRect.left + box.left;
@@ -717,16 +727,24 @@ final class ReaderLayoutHarness {
                     if (right <= clipLeft || left >= clipRight || bottom <= clipTop || top >= clipBottom) {
                       continue;
                     }
-                    union = union
-                      ? {
-                          left: Math.min(union.left, left),
-                          right: Math.max(union.right, right),
-                          top: Math.min(union.top, top),
-                          bottom: Math.max(union.bottom, bottom)
-                        }
-                      : { left: left, right: right, top: top, bottom: bottom };
+                    var group = null;
+                    for (var g = 0; g < groups.length; g++) {
+                      if (left < groups[g].right + 20 && right > groups[g].left - 20) {
+                        group = groups[g];
+                        break;
+                      }
+                    }
+                    if (group) {
+                      group.left = Math.min(group.left, left);
+                      group.right = Math.max(group.right, right);
+                      group.top = Math.min(group.top, top);
+                      group.bottom = Math.max(group.bottom, bottom);
+                    } else {
+                      groups.push({ left: left, right: right, top: top, bottom: bottom });
+                    }
                   }
-                  if (union) {
+                  for (var g2 = 0; g2 < groups.length; g2++) {
+                    var union = groups[g2];
                     rects.push({
                       id: paragraphs[p].id,
                       left: union.left,

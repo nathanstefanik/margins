@@ -118,6 +118,7 @@ final class ReaderController: NSObject {
             "readerApplyTypography(\(preferences.fontSize),\(preferences.lineHeight),\(preferences.lineWidth))"
         )
         evaluate("readerSetFontFace(\(Self.javaScriptLiteral(preferences.typeface.rawValue)))")
+        evaluate("readerSetProse(\(preferences.justify),\(preferences.ornaments))")
     }
 
     /// Sends the requested page layout; the page resolves what actually
@@ -139,6 +140,8 @@ final class ReaderController: NSObject {
             _ = preferences.lineWidth
             _ = preferences.pageLayout
             _ = preferences.typeface
+            _ = preferences.justify
+            _ = preferences.ornaments
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -202,6 +205,11 @@ final class ReaderController: NSObject {
             // carries the persisted mode here too.
             URLQueryItem(name: "platform", value: "macos"),
         ]
+        // The book's declared language: justified hyphenation needs it,
+        // and section documents that omit lang inherit the book's.
+        if let language = reader.book?.language, !language.isEmpty {
+            queryItems.append(URLQueryItem(name: "lang", value: language))
+        }
         if let cfi = reader.resumeCfi {
             queryItems.append(URLQueryItem(name: "cfi", value: cfi))
         }

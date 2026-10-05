@@ -86,11 +86,18 @@ public final class ReaderPreferences {
     /// Serif by default: the printed-spread reading face.
     public static let defaultTypeface = ReaderTypeface.serif
 
+    /// Flush-left is the default read; justification is opt-in.
+    public static let defaultJustify = false
+    /// Drop cap and small caps at chapter openings; off means plain.
+    public static let defaultOrnaments = true
+
     private static let themeKey = "reader.theme"
     private static let followsSystemKey = "reader.theme.followsSystem"
     private static let dayThemeKey = "reader.theme.day"
     private static let nightThemeKey = "reader.theme.night"
     private static let typefaceKey = "reader.typeface"
+    private static let justifyKey = "reader.justify"
+    private static let ornamentsKey = "reader.ornaments"
 
     private let defaults: UserDefaults
     private var _fixedTheme: ReaderTheme
@@ -98,6 +105,8 @@ public final class ReaderPreferences {
     private var _dayTheme: ReaderTheme
     private var _nightTheme: ReaderTheme
     private var _typeface: ReaderTypeface
+    private var _justify: Bool
+    private var _ornaments: Bool
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
@@ -120,6 +129,9 @@ public final class ReaderPreferences {
             ReaderTheme(rawValue: defaults.string(forKey: Self.nightThemeKey) ?? "")
             .flatMap { $0.isDayPaper ? nil : $0 } ?? Self.defaultNightTheme
         _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
+        _justify = defaults.bool(forKey: Self.justifyKey)
+        _ornaments =
+            defaults.object(forKey: Self.ornamentsKey) as? Bool ?? Self.defaultOrnaments
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)
@@ -207,6 +219,25 @@ public final class ReaderPreferences {
     /// The current system appearance, pushed in by each app's root view
     /// (`@Environment(\.colorScheme)`). Not persisted.
     public var systemIsDark = false
+
+    /// Justified body text with hyphenation. The Easy face ignores it —
+    /// its spacing is the point.
+    public var justify: Bool {
+        get { _justify }
+        set {
+            _justify = newValue
+            defaults.set(newValue, forKey: Self.justifyKey)
+        }
+    }
+
+    /// Drop cap and small caps on the paragraph opening a chapter.
+    public var ornaments: Bool {
+        get { _ornaments }
+        set {
+            _ornaments = newValue
+            defaults.set(newValue, forKey: Self.ornamentsKey)
+        }
+    }
 
     /// The chosen face. The whole book follows it (publisher families are
     /// forced to inherit; code/pre keep their monospace).
@@ -361,6 +392,8 @@ public final class ReaderPreferences {
         lineHeight = Self.defaultLineHeight
         lineWidth = Self.defaultLineWidth
         typeface = Self.defaultTypeface
+        justify = Self.defaultJustify
+        ornaments = Self.defaultOrnaments
     }
 
     private static func clamp(_ value: Double, _ lower: Double, _ upper: Double) -> Double {
