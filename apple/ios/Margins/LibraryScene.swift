@@ -140,17 +140,11 @@ struct LibraryScene: View {
                         "Remove \"\(bookPendingDeletion?.title ?? "")\" and its notes from the library? The original EPUB file is untouched."
                     )
                 }
-                .alert(
-                    "Something went wrong",
-                    isPresented: Binding(
-                        get: { library.errorMessage != nil },
-                        set: { if !$0 { library.errorMessage = nil } }
-                    )
-                ) {
-                    Button("OK") {}
-                } message: {
-                    Text(library.errorMessage ?? "")
-                }
+                .errorBanner(
+                    Binding(
+                        get: { library.errorMessage },
+                        set: { library.errorMessage = $0 }
+                    ))
         }
     }
 

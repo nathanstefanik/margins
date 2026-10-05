@@ -45,6 +45,13 @@ struct ReaderScene: View {
     @State private var flashVisible = false
     /// The badge's current copy — "Mark saved", "Added to …".
     @State private var flashText = "Mark saved"
+    /// Bumped on every flash so a second badge cancels the first's
+    /// pending dismissal instead of being cut short by it.
+    @State private var flashGeneration = 0
+    /// Trigger counter for the mark-saved / passage-added haptic.
+    @State private var flashTick = 0
+    /// Trigger counter for the bookmark-toggle haptic.
+    @State private var bookmarkTick = 0
     /// A selection queued for the Add to Notebook sheet.
     @State private var notebookCandidate: NotebookAddCandidate?
     /// The "Search Library" sheet's own query state.
@@ -111,6 +118,10 @@ struct ReaderScene: View {
                 .safeAreaPadding(.bottom)
         }
         .animation(reduceMotion ? nil : DesignTokens.Motion.chrome, value: chromeVisible)
+        // A gentle pulse when a mark lands or a passage joins a notebook;
+        // a tick when a bookmark flips.
+        .sensoryFeedback(.success, trigger: flashTick)
+        .sensoryFeedback(.selection, trigger: bookmarkTick)
         // The reading surface owns its own palette (light by default, dark
         // on request), applied to the page and to the floating chrome ink.
         // The chrome itself follows the system appearance: sheets presented
@@ -323,12 +334,19 @@ struct ReaderScene: View {
         }
     }
 
+    /// Quick confirmation badge: fade in, hold, fade out. Each call bumps
+    /// a generation so a second flash's countdown replaces the first's
+    /// rather than cutting it short, and the haptic trigger rides with it.
     private func flash(_ text: String = "Mark saved") {
         flashText = text
-        withAnimation(reduceMotion ? nil : DesignTokens.Motion.chrome) { flashVisible = true }
+        flashTick += 1
+        flashGeneration += 1
+        let generation = flashGeneration
+        withAnimation(reduceMotion ? nil : DesignTokens.Motion.flashIn) { flashVisible = true }
         Task {
-            try? await Task.sleep(for: .seconds(1.4))
-            withAnimation(reduceMotion ? nil : DesignTokens.Motion.chrome) { flashVisible = false }
+            try? await Task.sleep(for: .seconds(1.6))
+            guard generation == flashGeneration else { return }
+            withAnimation(reduceMotion ? nil : DesignTokens.Motion.flashOut) { flashVisible = false }
         }
     }
 
@@ -499,6 +517,7 @@ struct ReaderScene: View {
     }
 
     private func bookmarkPage() {
+        bookmarkTick += 1
         Task {
             let result = await library.toggleBookmark(reader: reader)
             if case .choose(let pins) = result {

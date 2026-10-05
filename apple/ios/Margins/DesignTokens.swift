@@ -32,6 +32,8 @@ enum DesignTokens {
     enum Motion {
         static let chrome = Animation.easeOut(duration: 0.2)
         static let prompt = Animation.spring(response: 0.35, dampingFraction: 0.82)
+        static let flashIn = Animation.easeOut(duration: 0.25)
+        static let flashOut = Animation.easeInOut(duration: 0.6)
     }
 
     /// The reader's paper — a thin `Color` adapter over `ReaderPalette`,

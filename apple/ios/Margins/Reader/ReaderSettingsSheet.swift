@@ -76,6 +76,7 @@ struct ReaderSettingsSheet: View {
                         .accessibilityLabel("Larger text")
                         .accessibilityIdentifier("reader-larger-text")
                     }
+                    .sensoryFeedback(.selection, trigger: preferences.fontStep)
                     .buttonStyle(.bordered)
                     .controlSize(.regular)
                 }
