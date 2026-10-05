@@ -33,6 +33,14 @@ struct ReaderView: View {
                     break
                 }
             }
+            // The chapter-end sheet covers the reading column only —
+            // the notes pane, if open, stays usable.
+            .overlay {
+                if let finished = reader.chapterEnd {
+                    ChapterEndView(chapter: finished)
+                        .transition(.opacity)
+                }
+            }
             if reader.notesVisible {
                 // One hairline between the page column and the notes pane —
                 // the pane is part of the same sheet, so no box, just a rule.
@@ -47,6 +55,7 @@ struct ReaderView: View {
             }
         }
         .animation(.easeOut(duration: 0.22), value: reader.notesVisible)
+        .animation(.easeOut(duration: 0.2), value: reader.chapterEnd != nil)
         // Focus mode strips the window chrome too — toolbar hides; the
         // notes pane, if open, stays.
         .toolbar(reader.focusMode ? .hidden : .automatic, for: .windowToolbar)

@@ -724,6 +724,19 @@ public final class LibraryModel {
         bookmarksOpen = false
     }
 
+    /// Read-only look at a chapter's note for the chapter-end page —
+    /// unlike `loadChapterNote` this never touches reader state.
+    public func chapterEndContent(
+        for chapter: ChapterMeta, in book: BookMeta
+    ) async -> ChapterEndContent {
+        guard let store else {
+            return ChapterEndContent.make(for: chapter, in: book, body: "", marks: [])
+        }
+        let note = try? await store.getChapterNote(bookId: book.id, chapterKey: chapter.key)
+        return ChapterEndContent.make(
+            for: chapter, in: book, body: note?.body ?? "", marks: note?.marks ?? [])
+    }
+
     /// Loads the note for the reader's current chapter into its state.
     public func loadChapterNote(reader: ReaderModel) async {
         guard let store, let book = reader.book, let chapter = reader.chapter else { return }

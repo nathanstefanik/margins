@@ -28,7 +28,7 @@ public final class ReaderModel {
     /// Typography preferences applied to the reading surface. Owned here so
     /// the shell and the reader webview drive the same instance; survives
     /// `close()` (chrome state, persisted separately).
-    public let preferences = ReaderPreferences()
+    public let preferences: ReaderPreferences
 
     /// The learned seconds-per-page rate behind the "min left" footer
     /// mode; samples persist across launches but reset on typography
@@ -88,7 +88,30 @@ public final class ReaderModel {
     private var positionSaveTask: Task<Void, Never>?
     private var pendingPosition: (bookId: String, position: ReadingPosition)?
 
-    public init() {}
+    /// The finished chapter behind the end-of-chapter page, or nil.
+    /// Session-only; shown at most once per chapter (the silence key is
+    /// marked when the page shows), cleared by dismiss, close, and any
+    /// jump.
+    public private(set) var chapterEnd: ChapterMeta?
+
+    public func dismissChapterEnd() {
+        chapterEnd = nil
+    }
+
+    #if DEBUG
+        /// `MARGINS_CHAPTER_END_FIXTURE`: arm the end page for the first
+        /// chapter so simulator/verification runs can see it without
+        /// paging through a book.
+        public func debugShowChapterEnd() {
+            guard let book, let chapter = book.chapters.first else { return }
+            chapterEnd = chapter
+            preferences.silenceChapterEndPage(bookId: book.id, chapterKey: chapter.key)
+        }
+    #endif
+
+    public init(preferences: ReaderPreferences = ReaderPreferences()) {
+        self.preferences = preferences
+    }
 
     public var isOpen: Bool { book != nil }
 
@@ -107,6 +130,7 @@ public final class ReaderModel {
         currentCfi = nil
         currentEndCfi = nil
         pendingReveal = nil
+        chapterEnd = nil
         #if os(macOS)
         // The renderer will report again once it has re-resolved; keeping
         // the old count would leave a stale fallback note in the popover.
@@ -175,6 +199,7 @@ public final class ReaderModel {
         flushPositionSave()
         pace.noteJump()
         focusMode = false
+        chapterEnd = nil
         book = nil
         chapter = nil
         resumeCfi = nil
@@ -293,6 +318,32 @@ public final class ReaderModel {
             || previousChapterIndex != currentChapterIndex
         {
             pace.noteJump()
+        }
+        // Chapter-end page: a plain turn past the last page into the
+        // immediate successor pauses once per chapter (marked shown via
+        // the silence key). Any other real relocation — and `open`/`close`
+        // — clears it; a re-reported same-spot relocation does not.
+        if let book, let chapter,
+            let previousIndex = previousChapterIndex,
+            book.chapters.indices.contains(previousIndex),
+            let finished = Self.finishedChapter(
+                previousKey: book.chapters[previousIndex].key,
+                previousProgress: previousProgress,
+                newKey: chapter.key,
+                newProgress: progress,
+                chapters: book.chapters
+            ),
+            preferences.pauseAtChapterEnds,
+            !preferences.chapterEndPageSilenced(bookId: book.id, chapterKey: finished.key)
+        {
+            chapterEnd = finished
+            preferences.silenceChapterEndPage(bookId: book.id, chapterKey: finished.key)
+        } else if chapterEnd != nil,
+            previousProgress != progress
+                || previousCfi != cfi
+                || previousChapterIndex != currentChapterIndex
+        {
+            chapterEnd = nil
         }
         schedulePositionSave(cfi: cfi)
     }

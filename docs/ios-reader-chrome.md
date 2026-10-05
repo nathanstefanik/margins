@@ -17,24 +17,42 @@ changes glyph size.
 paper, page number centered at the bottom. No eye, no note, no toolbars.
 
 **Single tap.** Existing thirds stay: left/right turn the page (and hide
-chrome). Center tap toggles chrome. That tap also expands the footer from
-`12` to `12 of 40`. Those counts are **this chapter's paginated pages**
-(what epub.js reports). The app has no whole-book page total, only a
-percent.
+chrome). Center tap toggles chrome. While chrome is up the footer becomes
+the **scrubber rail** — contents, previous/next chapter chevrons, and a
+page slider over the chapter's paginated pages (`12 of 40`, jumping on
+release). Those counts are **this chapter's paginated pages** (what
+epub.js reports). The app has no whole-book page total, only a percent.
 
 **Revealed chrome.** A hamburger (`line.3.horizontal`), a bookmark button
 (toggles the pin at this page: adds one when the visible range holds none,
 removes it when one does, and offers a removal picker when several pins
 land here; filled while any pin is on the page), and the
 new-note button. Back lives here too (leading chevron) so leaving the
-reader is not buried in a sheet. Title and page number stay put.
+reader is not buried in a sheet. Title and footer stay put.
 
-**Hamburger sheet.** Text size as a small-A / large-A pair — no numbers,
-no slider, no ladder labels shown; the steps below are internal. Also
-Contents, Bookmarks, Marks, and chapter note — those controls lost their
-bars with the old chrome. No line height, no measure.
+**Resting footer.** The footer text follows `reader.pageIndicator`:
+Pages (`12`), Time left (the pace meter's estimate, "~6 min left",
+falling back to the page number until the pace is learned), or None.
+
+**Hamburger sheet.** `ReaderSettingsSheet`: paper swatches (Light /
+Sepia / Dark / Night, or Match system appearance — the system is
+inverted), text size as a small-A / large-A pair (internal ladder only),
+typeface (Serif/Sans/Easy), justify text, chapter ornaments, page
+indicator, "Pause at chapter ends", plus Contents, Bookmarks, Marks, and
+the chapter-note editor. No line height, no measure.
 
 **Paging.** Swipe still turns pages. Page-turn hides chrome again.
+
+**Chapter ends.** A forward turn past a chapter's last page into its
+successor pauses once per chapter on an opaque paper end page — "END OF
+CHAPTER N", the title, up to three of the chapter's marked quotes, the
+note's first lines, "Anything worth keeping?", Write a thought / Continue.
+Tap, swipe, or any page key continues without turning; Write steps back
+into the finished chapter and opens the note editor. Detection lives in
+`ReaderModel.relocated` (the finished-chapter predicate requires the
+successor chapter, so TOC jumps never pause); each chapter pauses once
+via the `notePrompt.dismissed.<book>.<chapter>` defaults key, marked
+when the page shows. `reader.chapterEndPause` gates it.
 
 ## Font-size implementation
 
@@ -114,7 +132,11 @@ delay and double-tap zoom. Swipes are a native
 - `apple/ios/Margins/Reader/ReaderSettingsSheet.swift` — font A pair,
   Serif/Sans/Easy switch, Contents, Bookmarks, Marks, chapter note
 - `apple/ios/Margins/Reader/ReaderBridge.swift` — pass step/px/face;
-  drop lineWidth on iOS
+  drop lineWidth on iOS; hardware page keys dismiss the end page
+- `apple/ios/Margins/Reader/ChapterEndPage.swift` — the end-of-chapter
+  paper sheet (macOS twin: `apple/Sources/Margins/Reader/ChapterEndView.swift`)
+- `apple/Sources/MarginsModel/ChapterEndContent.swift` — the page's
+  label/quotes/excerpt assembly
 - `apple/Sources/MarginsModel/ReaderPreferences.swift` — iOS `fontStep`
   1…6 and the shared `ReaderTypeface`
 - `apple/Sources/MarginsModel/ReaderFonts.swift` — Core Text registration

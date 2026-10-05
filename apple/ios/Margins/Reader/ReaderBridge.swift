@@ -203,6 +203,12 @@ final class ReaderBridge: NSObject {
         let webView = KeyHandlingWebView(frame: .zero, configuration: configuration)
         webView.onKey = { [weak self] direction in
             self?.callbacks.userPageTurn()
+            // The chapter-end page owns page keys while it's up: they
+            // dismiss it instead of turning the page it covers.
+            if self?.reader.chapterEnd != nil {
+                self?.reader.dismissChapterEnd()
+                return
+            }
             switch direction {
             case .forward: self?.pageForward()
             case .back: self?.pageBack()

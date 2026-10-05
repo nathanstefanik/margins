@@ -106,7 +106,7 @@ Everything needs **full Xcode** (26.x): the iOS SDK for `ios-build` and the
 iOS targets. The iOS library root lives in the iCloud Documents container
 when available, falling back to local `Documents/Library` at runtime
 (`LibraryLocation`); DEBUG launch env vars
-(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,EVICT,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR}_FIXTURE`)
+(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,EVICT,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR,CHAPTER_END}_FIXTURE`)
 drive simulator verification flows. FileStore refuses evicted iCloud reads rather than
 waiting; see `docs/architecture.md` (iOS) and `docs/testing/ios-offline.md`.
 Device signing uses the team ID in

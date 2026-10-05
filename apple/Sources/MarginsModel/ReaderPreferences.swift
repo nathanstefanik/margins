@@ -120,6 +120,7 @@ public final class ReaderPreferences {
     private static let ornamentsKey = "reader.ornaments"
     private static let pageIndicatorKey = "reader.pageIndicator"
     private static let hideSidebarKey = "reader.hideSidebarWhileReading"
+    private static let chapterEndPauseKey = "reader.chapterEndPause"
 
     private let defaults: UserDefaults
     private var _fixedTheme: ReaderTheme
@@ -131,6 +132,7 @@ public final class ReaderPreferences {
     private var _ornaments: Bool
     private var _pageIndicator: ReaderPageIndicator
     private var _hideSidebarWhileReading: Bool
+    private var _pauseAtChapterEnds: Bool
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
@@ -160,6 +162,8 @@ public final class ReaderPreferences {
             ReaderPageIndicator(rawValue: defaults.string(forKey: Self.pageIndicatorKey) ?? "")
             ?? Self.defaultPageIndicator
         _hideSidebarWhileReading = defaults.bool(forKey: Self.hideSidebarKey)
+        _pauseAtChapterEnds =
+            defaults.object(forKey: Self.chapterEndPauseKey) as? Bool ?? true
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)
@@ -287,6 +291,31 @@ public final class ReaderPreferences {
             _hideSidebarWhileReading = newValue
             defaults.set(newValue, forKey: Self.hideSidebarKey)
         }
+    }
+
+    /// Pause on the chapter-end page when a forward turn runs past a
+    /// chapter's last page into its successor.
+    public var pauseAtChapterEnds: Bool {
+        get { _pauseAtChapterEnds }
+        set {
+            _pauseAtChapterEnds = newValue
+            defaults.set(newValue, forKey: Self.chapterEndPauseKey)
+        }
+    }
+
+    // MARK: Chapter-end page silences
+
+    /// `notePrompt.dismissed.<bookId>.<chapterKey>` — the original iOS
+    /// prompt's silence key, kept so already-dismissed chapters stay
+    /// silent. Marked when the page is *shown*: each chapter pauses once.
+    public func chapterEndPageSilenced(bookId: String, chapterKey: String) -> Bool {
+        defaults.bool(forKey: "notePrompt.dismissed.\(bookId).\(chapterKey)")
+    }
+
+    /// Marks the chapter's end page as shown (or dismissed) — it will not
+    /// pause again.
+    public func silenceChapterEndPage(bookId: String, chapterKey: String) {
+        defaults.set(true, forKey: "notePrompt.dismissed.\(bookId).\(chapterKey)")
     }
 
     /// The fingerprint the pace meter keys on: anything that changes how

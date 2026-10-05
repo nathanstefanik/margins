@@ -132,6 +132,13 @@ struct SettingsView: View {
             }
             Section("Reading") {
                 Toggle(
+                    "Pause at chapter ends",
+                    isOn: Binding(
+                        get: { reader.preferences.pauseAtChapterEnds },
+                        set: { reader.preferences.pauseAtChapterEnds = $0 }
+                    )
+                )
+                Toggle(
                     "Hide sidebar while reading",
                     isOn: Binding(
                         get: { reader.preferences.hideSidebarWhileReading },

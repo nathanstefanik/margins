@@ -1,4 +1,5 @@
 import AppKit
+import MarginsCore
 import MarginsModel
 import WebKit
 
@@ -105,6 +106,14 @@ final class ShellKeyboardController {
                 return nil
             }
             return event
+        }
+
+        // The chapter-end page owns every key while it's up: `i` opens
+        // the finished chapter's notes pane; anything else dismisses.
+        // Nothing may pass through to turn the page it covers.
+        if reader.isOpen, let finished = reader.chapterEnd, !modalPanelUp {
+            continueFromChapterEnd(finished, writing: event.characters?.first == "i")
+            return nil
         }
 
         // Reader Esc backs out one layer at a time: the editor case above
@@ -282,6 +291,16 @@ final class ShellKeyboardController {
             reader.focusMode.toggle()
             return true
         }
+    }
+
+    /// Leave the chapter-end page: plain dismiss, or step the reader back
+    /// into the finished chapter and open its notes pane for `i`.
+    private func continueFromChapterEnd(_ finished: ChapterMeta, writing: Bool) {
+        reader.dismissChapterEnd()
+        guard writing, let book = reader.book else { return }
+        reader.open(book: book, chapter: finished)
+        _ = displayCurrentChapter()
+        reader.openNotes()
     }
 
     private func displayCurrentChapter() -> Bool {

@@ -60,9 +60,7 @@ struct ReaderScene: View {
     /// The "Search Library" sheet's own query state.
     @State private var searchLibraryPresented = false
     @State private var searchLibrarySearch = LibrarySearch()
-    /// The chapter just finished (last page turned past); drives the quiet
-    /// write-the-note prompt.
-    @State private var finishedChapter: ChapterMeta?
+
     /// The representable's coordinator, handed over on creation; the
     /// chrome drives the page through it.
     @State private var bridge: ReaderBridge?
@@ -99,9 +97,9 @@ struct ReaderScene: View {
             .accessibilityAction(named: Text(bookmarkActionName)) {
                 bookmarkPage()
             }
-            if let finished = finishedChapter {
-                notePrompt(for: finished)
-                    .transition(promptTransition)
+            if let finished = reader.chapterEnd {
+                chapterEndPage(for: finished)
+                    .transition(.opacity)
             }
             if flashVisible {
                 flashBadge
@@ -237,7 +235,6 @@ struct ReaderScene: View {
         .onChange(
             of: reader.progress,
             { oldValue, newValue in
-                detectChapterFinish(to: newValue)
                 restoreHighlightsIfReady()
                 revealPendingPassageIfReady()
             }
@@ -245,6 +242,11 @@ struct ReaderScene: View {
         .onAppear {
             appliedJumpGeneration = library.passageJumpGeneration
             loadedBookId = reader.book?.id
+            #if DEBUG
+                if ProcessInfo.processInfo.environment["MARGINS_CHAPTER_END_FIXTURE"] != nil {
+                    reader.debugShowChapterEnd()
+                }
+            #endif
         }
         .onChange(of: library.passageJumpGeneration) {
             applyPassageJumpIfNeeded()
@@ -410,11 +412,7 @@ struct ReaderScene: View {
         .accessibilityLabel(label)
     }
 
-    /// Motion explains structure: the prompt rises from its control. Under
-    /// Reduce Motion only opacity changes.
-    private var promptTransition: AnyTransition {
-        reduceMotion ? .opacity : .scale(scale: 0.9, anchor: .bottom).combined(with: .opacity)
-    }
+
 
     /// The running head: chapter title centered at the top of the paper,
     /// with back / bookmark / new note / hamburger fading in around it. The title is
@@ -644,99 +642,32 @@ struct ReaderScene: View {
         pendingDestination = nil
     }
 
-    // MARK: End-of-chapter prompt
+    // MARK: Chapter-end page
 
-    /// Quiet and dismissible: offered once when the reader pages past a
-    /// chapter's last page, silenced per finished chapter. The predicate
-    /// (shared with the tests) demands the new chapter be the finished
-    /// chapter's immediate successor, so TOC jumps don't trigger it.
-    private func detectChapterFinish(to newProgress: ReaderProgress?) {
-        defer {
-            previousTurn = (reader.chapter?.key ?? "", newProgress)
-        }
-        // `reader.chapter` has already followed the relocation; the
-        // previous snapshot holds the chapter that was just left.
-        guard let previous = previousTurn,
-            let finished = ReaderModel.finishedChapter(
-                previousKey: previous.key,
-                previousProgress: previous.progress,
-                newKey: reader.chapter?.key ?? "",
-                newProgress: newProgress,
-                chapters: reader.book?.chapters ?? []
-            )
-        else { return }
-        let silencedKey = "notePrompt.dismissed.\(reader.book?.id ?? "").\(finished.key)"
-        if !UserDefaults.standard.bool(forKey: silencedKey) {
-            withAnimation(reduceMotion ? nil : DesignTokens.Motion.prompt) {
-                finishedChapter = finished
-            }
-        }
-    }
-
-    @State private var previousTurn: (key: String, progress: ReaderProgress?)?
-
-    private func notePrompt(for chapter: ChapterMeta) -> some View {
-        VStack(spacing: 8) {
-            Text("Finished \"\(chapter.title)\"")
-                .font(.footnote.weight(.medium))
-            Text("Write the chapter note while it's fresh?")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ViewThatFits {
-                HStack(spacing: DesignTokens.Spacing.actions) {
-                    promptDismissButton(for: chapter)
-                    promptWriteButton(for: chapter)
-                }
-                VStack(spacing: DesignTokens.Spacing.actions) {
-                    promptDismissButton(for: chapter)
-                    promptWriteButton(for: chapter)
-                }
-            }
-            .controlSize(.large)
-        }
-        .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.Radius.card, style: .continuous))
-        .padding(.bottom, 16)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        .accessibilityElement(children: .contain)
-    }
-
-    private func promptDismissButton(for chapter: ChapterMeta) -> some View {
-        Button {
-            let bookID = reader.book?.id ?? ""
-            UserDefaults.standard.set(
-                true,
-                forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
-            )
-            withAnimation(reduceMotion ? nil : DesignTokens.Motion.prompt) {
-                finishedChapter = nil
-            }
-        } label: {
-            Text("Not now")
-        }
-        .buttonStyle(.bordered)
-    }
-
-    private func promptWriteButton(for chapter: ChapterMeta) -> some View {
-        Button {
-            let bookID = reader.book?.id ?? ""
-            UserDefaults.standard.set(
-                true,
-                forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
-            )
-            finishedChapter = nil
+    /// The opaque end-of-chapter sheet: a pause once per finished chapter
+    /// showing a couple of its marked quotes and a taste of its note. Tap
+    /// or swipe anywhere (outside the buttons) continues; hardware page
+    /// keys are intercepted in `KeyHandlingWebView` so they dismiss
+    /// instead of turning under it.
+    private func chapterEndPage(for chapter: ChapterMeta) -> some View {
+        ChapterEndPage(
+            chapter: chapter,
+            theme: reader.preferences.theme,
+            face: reader.preferences.typeface.familyName
+        ) { writing in
+            reader.dismissChapterEnd()
+            guard writing, let book = reader.book else { return }
             // The reader has already followed the page turn into
             // the finished chapter's successor, and the editor
             // always edits `reader.chapter`: step back before
             // opening it, or the note lands on the next chapter.
-            guard let book = reader.book else { return }
             reader.open(book: book, chapter: chapter)
             bridge?.jumpToChapter(reader.displayTarget)
             editorPresented = true
-        } label: {
-            Text("Write note")
+        } loadContent: {
+            guard let book = reader.book else { return nil }
+            return await library.chapterEndContent(for: chapter, in: book)
         }
-        .buttonStyle(.borderedProminent)
     }
 
     // MARK: Input
