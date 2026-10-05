@@ -66,20 +66,3 @@ CoreSimulator. If `xcodebuild` warns "CoreSimulator is out of date",
 Xcode update), which needs the user's password. Ask the user before
 starting any simulator work instead of retrying, and record iOS checks as
 build-only until it's fixed.
-
-Xcode 27 replaced `Simulator.app` with Device Hub
-(`/Applications/Xcode.app/Contents/Applications/DeviceHub.app`), so
-`open -a Simulator` fails; `simctl` is unchanged. A working sequence:
-
-```bash
-xcrun simctl boot "iPhone 17 Pro"
-open /Applications/Xcode.app/Contents/Applications/DeviceHub.app
-xcodebuild -project apple/ios/Margins.xcodeproj -scheme Margins \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -derivedDataPath /tmp/margins-dd CODE_SIGNING_ALLOWED=NO build
-xcrun simctl install booted /tmp/margins-dd/Build/Products/Debug-iphonesimulator/Margins.app
-SIMCTL_CHILD_MARGINS_IMPORT_FIXTURE="$PWD/apple/Tests/MarginsCoreTests/Fixtures/dostoyevsky_the_karamazov_brothers.epub" \
-  xcrun simctl launch booted io.github.nathanstefanik.margins
-```
-
-`SIMCTL_CHILD_` passes the DEBUG fixture env vars through to the app.
