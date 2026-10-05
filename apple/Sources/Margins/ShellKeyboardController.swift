@@ -18,6 +18,7 @@ import WebKit
 final class ShellKeyboardController {
     private let model: LibraryModel
     private let reader: ReaderModel
+    private let clubs: ClubModel
     private let keymap = ReaderKeymap(mode: .library)
     private static let pageScrollThreshold: CGFloat = 50
     // NSEvent monitor tokens are opaque and not Sendable-annotated; they are
@@ -26,9 +27,10 @@ final class ShellKeyboardController {
     nonisolated(unsafe) private var scrollMonitor: Any?
     private var scrollAccumulator: CGFloat = 0
 
-    init(model: LibraryModel, reader: ReaderModel) {
+    init(model: LibraryModel, reader: ReaderModel, clubs: ClubModel) {
         self.model = model
         self.reader = reader
+        self.clubs = clubs
     }
 
     func start() {
@@ -192,8 +194,16 @@ final class ShellKeyboardController {
             model.moveLibrarySelection(delta)
             return true
         case .openSelectedBook:
-            guard model.selectedBookID != nil else { return false }
-            openSelectedBook()
+            if model.selectedBookID != nil {
+                openSelectedBook()
+                return true
+            }
+            // Nothing selected: Enter is the continue card's button, but
+            // only while the card is the view the detail area is showing.
+            guard clubs.selectedClub == nil, model.detailMode == .book,
+                let id = model.continueBook?.id
+            else { return false }
+            Task { await model.openBookResuming(id: id) }
             return true
         case .openBookNotes:
             guard let id = model.selectedBookID else { return false }

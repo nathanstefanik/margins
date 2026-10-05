@@ -23,6 +23,11 @@ struct ReaderScene: View {
 
     /// Shared with the library grid so the reader grows out of the cover.
     let zoomNamespace: Namespace.ID
+    /// The `matchedTransitionSource` the reader zooms out of — a grid
+    /// cover is its book id, the continue card is `"continue-<id>"`. The
+    /// library picks it per open path because the card and the grid share
+    /// no id.
+    let zoomSourceID: String
 
     /// The page rests without chrome; a center tap reveals it.
     @State private var chromeVisible = false
@@ -112,7 +117,7 @@ struct ReaderScene: View {
         // from the reader are native views and must not inherit the paper.
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationTransition(.zoom(sourceID: reader.book?.id ?? "", in: zoomNamespace))
+        .navigationTransition(.zoom(sourceID: zoomSourceID, in: zoomNamespace))
         // The custom chrome carries the back affordance, the title, and
         // the actions and fades with `chromeVisible`; the system bar would
         // be a second, always-on header stacked on top of it (and push

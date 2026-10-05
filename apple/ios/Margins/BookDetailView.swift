@@ -65,6 +65,9 @@ struct BookDetailView: View {
                 Task {
                     await reader.flushPositionSaveAndWait()
                     await loadPosition()
+                    // The grid's progress bars and the library's continue
+                    // card read the same summaries — pick up the session.
+                    await library.refresh()
                 }
             }
         }

@@ -30,6 +30,21 @@ public final class LibraryModel {
     /// selection that also loads the book's metadata.
     public var selectedBookID: String?
 
+    /// The book the library offers to resume: the most recently read one
+    /// still in progress. Finished books (≥ 99%) drop out so the card
+    /// always points somewhere worth returning to.
+    public var continueBook: BookSummary? {
+        books
+            .filter { $0.lastReadAt != nil && ($0.progressPercent ?? 0) < 99 }
+            .max { ($0.lastReadAt ?? .distantPast) < ($1.lastReadAt ?? .distantPast) }
+    }
+
+    /// The title of the chapter `continueBook`'s saved position sits in,
+    /// loaded with the book list so the card can name where it resumes.
+    /// `nil` when there is no continue book or the position's chapter is
+    /// gone (re-import, evicted metadata).
+    public private(set) var continueChapterTitle: String?
+
     private let dataDir: String?
     private var store: CoreStore?
 
@@ -67,6 +82,7 @@ public final class LibraryModel {
         do {
             libraryRoot = try await store.libraryRoot()
             books = try await store.listBooks()
+            await updateContinueChapterTitle()
             notDownloadedBookIDs = await store.notDownloadedBookIDs()
             for id in notDownloadedBookIDs {
                 LibraryLocation.requestDownload(bookFilePath(id, "meta.json"))
@@ -417,6 +433,23 @@ public final class LibraryModel {
     public func readingPosition(bookId: String) async -> ReadingPosition? {
         guard let store else { return nil }
         return try? await store.readingPosition(bookId: bookId)
+    }
+
+    /// Resolves the chapter `continueBook`'s saved position points at.
+    /// Called from `refresh()`, the one place `books` changes.
+    private func updateContinueChapterTitle() async {
+        guard let store, let book = continueBook else {
+            continueChapterTitle = nil
+            return
+        }
+        guard let position = try? await store.readingPosition(bookId: book.id),
+            let meta = try? await store.getBook(id: book.id),
+            let chapter = meta.chapters.first(where: { $0.key == position.chapterKey })
+        else {
+            continueChapterTitle = nil
+            return
+        }
+        continueChapterTitle = chapter.title
     }
 
     /// Moves the sidebar selection by `delta` books (shell keyboard j/k).

@@ -33,6 +33,9 @@ struct LibraryScene: View {
     @State private var importPresented = false
     @State private var bookPendingDeletion: BookSummary?
     @State private var readerActive = false
+    /// Which `matchedTransitionSource` the reader zooms out of: a grid
+    /// cover is its book id, the continue card is `"continue-<id>"`.
+    @State private var zoomSourceID = ""
 
     /// Shared by the grid covers and the reader so the reader grows out of
     /// the cover that was tapped.
@@ -93,7 +96,10 @@ struct LibraryScene: View {
                 .navigationDestination(for: LibraryRoute.self) { _ in
                     BookDetailView(readerActive: $readerActive)
                         .navigationDestination(isPresented: $readerActive) {
-                            ReaderScene(zoomNamespace: zoomNamespace)
+                            ReaderScene(
+                                zoomNamespace: zoomNamespace,
+                                zoomSourceID: zoomSourceID
+                            )
                         }
                 }
                 .fileImporter(
@@ -157,6 +163,7 @@ struct LibraryScene: View {
         } else {
             ScrollView {
                 libraryStatusHeader
+                continueCard
                 if !library.books.isEmpty {
                     LazyVGrid(
                         columns: [
@@ -172,6 +179,13 @@ struct LibraryScene: View {
                             }
                             .buttonStyle(.plain)
                             .contextMenu {
+                                if book.lastReadAt != nil {
+                                    Button {
+                                        openContinue(book: book, zoomSourceID: book.id)
+                                    } label: {
+                                        Label("Continue reading", systemImage: "book")
+                                    }
+                                }
                                 Button(role: .destructive) {
                                     bookPendingDeletion = book
                                 } label: {
@@ -186,10 +200,88 @@ struct LibraryScene: View {
         }
     }
 
+    /// The resume hero above the grid: the most recently read book's
+    /// cover, where it stopped, and one tap back into the reader. It is
+    /// content, so it sits on the plain canvas — a quiet fill, no glass.
+    @ViewBuilder
+    private var continueCard: some View {
+        if let book = library.continueBook {
+            Button {
+                openContinue(book: book, zoomSourceID: "continue-\(book.id)")
+            } label: {
+                HStack(alignment: .top, spacing: DesignTokens.Spacing.gridCell) {
+                    CoverView(coverPath: book.coverPath, title: book.title)
+                        .frame(width: 96, height: 144)
+                        .clipShape(
+                            .rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous)
+                        )
+                        .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
+                        .matchedTransitionSource(
+                            id: "continue-\(book.id)", in: zoomNamespace
+                        )
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Continue reading", systemImage: "book.fill")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tint)
+                        Text(book.title)
+                            .font(.system(.title3, design: .serif).weight(.semibold))
+                            .lineLimit(2)
+                        if let chapter = library.continueChapterTitle {
+                            Text(chapter)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        if let progress = book.progressPercent {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(String(format: "%.0f%% read", progress))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                ProgressView(value: progress, total: 100)
+                                    .progressViewStyle(.linear)
+                                    .tint(.accentColor)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(DesignTokens.Spacing.gridCell)
+                .background(
+                    Color(.secondarySystemBackground),
+                    in: .rect(cornerRadius: DesignTokens.Radius.card)
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal)
+            .padding(.top, DesignTokens.Spacing.gridCell)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Continue reading \(book.title)")
+            .accessibilityValue(
+                book.progressPercent.map { String(format: "%.0f%% read", $0) } ?? ""
+            )
+        }
+    }
+
     private func select(_ id: String) {
         Task {
+            zoomSourceID = id
             await library.selectBook(id: id)
             libraryPath.append(.book(id: id))
+        }
+    }
+
+    /// Straight into the reader at the saved position: the detail goes on
+    /// the stack underneath so Back lands there, and `pendingReaderPresent`
+    /// lets the detail push the reader once it is up (the same hop the
+    /// passage-open path uses).
+    private func openContinue(book: BookSummary, zoomSourceID source: String) {
+        Task {
+            zoomSourceID = source
+            guard await app.prepareForReading(bookId: book.id) else { return }
+            await library.openBookResuming(id: book.id)
+            library.pendingReaderPresent = true
+            libraryPath = [.book(id: book.id)]
         }
     }
 
@@ -216,6 +308,7 @@ struct LibraryScene: View {
             markId: target.markId
         )
         selectedTab = .library
+        zoomSourceID = target.bookId
         libraryPath = [.book(id: target.bookId)]
     }
 

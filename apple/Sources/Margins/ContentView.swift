@@ -73,6 +73,13 @@ struct ContentView: View {
         .onChange(of: reader.isOpen) {
             if !reader.isOpen {
                 model.requestBookmarksDismissal()
+                Task {
+                    // The session's position writes land first so the
+                    // library list (and the continue card) show where
+                    // the book actually stopped.
+                    await reader.flushPositionSaveAndWait()
+                    await model.refresh()
+                }
             }
         }
         .sheet(isPresented: $clubs.createSheetPresented) {
@@ -97,7 +104,8 @@ struct ContentView: View {
         }
         .onAppear {
             if keyboardController == nil {
-                let controller = ShellKeyboardController(model: model, reader: reader)
+                let controller = ShellKeyboardController(
+                    model: model, reader: reader, clubs: clubs)
                 controller.start()
                 keyboardController = controller
             }

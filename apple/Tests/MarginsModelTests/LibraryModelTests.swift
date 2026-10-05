@@ -389,6 +389,65 @@ struct LibraryModelTests {
         #expect(rows[1].wordCount == 41)
     }
 
+    /// Writes a `position.json` with an explicit timestamp — the core's
+    /// `writePosition` always stamps now, and recency ordering needs
+    /// controlled dates.
+    private func writePositionFile(
+        root: String, bookId: String, updatedAt: String, percent: Double
+    ) throws {
+        let date = try #require(RFC3339.date(from: updatedAt))
+        let position = ReadingPosition(chapterKey: "001", percent: percent, updatedAt: date)
+        let path = URL(fileURLWithPath: root)
+            .appendingPathComponent("books", isDirectory: true)
+            .appendingPathComponent(bookId, isDirectory: true)
+            .appendingPathComponent("position.json")
+        try MarginsJSON.encode(position).write(to: path)
+    }
+
+    @Test("continue reading is the most recently read book still in progress")
+    @MainActor
+    func continueBookIsLatestUnfinished() async throws {
+        let fixtures = try fixtureEpubs()
+        let firstFixture = try #require(fixtures.first)
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+
+        // Nothing read yet: no card.
+        #expect(model.continueBook == nil)
+        #expect(model.continueChapterTitle == nil)
+
+        #expect(await model.importEpub(atPath: firstFixture))
+        let firstId = try #require(model.books.first?.id)
+        #expect(model.continueBook == nil)
+
+        // A finished book (≥ 99%) is not offered as continue reading.
+        try writePositionFile(
+            root: model.libraryRoot, bookId: firstId,
+            updatedAt: "2026-09-01T10:00:00Z", percent: 99)
+        await model.refresh()
+        #expect(model.continueBook == nil)
+        #expect(model.continueChapterTitle == nil)
+
+        // In progress: it becomes the continue book with its chapter named.
+        try writePositionFile(
+            root: model.libraryRoot, bookId: firstId,
+            updatedAt: "2026-09-02T10:00:00Z", percent: 40)
+        await model.refresh()
+        #expect(model.continueBook?.id == firstId)
+        #expect(model.continueChapterTitle != nil)
+
+        // A second book read more recently takes the slot.
+        let secondFixture = try #require(fixtures.dropFirst().first)
+        #expect(await model.importEpub(atPath: secondFixture))
+        let secondId = try #require(model.books.first { $0.id != firstId }?.id)
+        try writePositionFile(
+            root: model.libraryRoot, bookId: secondId,
+            updatedAt: "2026-09-03T10:00:00Z", percent: 10)
+        await model.refresh()
+        #expect(model.continueBook?.id == secondId)
+        #expect(model.continueChapterTitle == model.selectedBook?.chapters.first?.title)
+    }
+
     @Test("chapter → note word count join from the notes index")
     @MainActor
     func chapterNoteWordCountJoin() async throws {

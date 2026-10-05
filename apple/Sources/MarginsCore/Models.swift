@@ -204,6 +204,9 @@ public struct BookSummary: Codable, Sendable, Equatable, Hashable, Identifiable 
     /// Percent complete (0–100) from the book's reading position, or `nil`
     /// when the book was never opened.
     public var progressPercent: Double?
+    /// When the book's reading position was last saved — how recently it
+    /// was read. `nil` when the book was never opened.
+    public var lastReadAt: Date?
 
     public init(
         id: String,
@@ -214,7 +217,8 @@ public struct BookSummary: Codable, Sendable, Equatable, Hashable, Identifiable 
         notesCount: Int,
         cover: String? = nil,
         coverPath: String? = nil,
-        progressPercent: Double? = nil
+        progressPercent: Double? = nil,
+        lastReadAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -225,6 +229,7 @@ public struct BookSummary: Codable, Sendable, Equatable, Hashable, Identifiable 
         self.cover = cover
         self.coverPath = coverPath
         self.progressPercent = progressPercent
+        self.lastReadAt = lastReadAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -234,6 +239,7 @@ public struct BookSummary: Codable, Sendable, Equatable, Hashable, Identifiable 
         case notesCount = "notes_count"
         case cover
         case progressPercent = "progress_percent"
+        case lastReadAt = "last_read_at"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -247,6 +253,7 @@ public struct BookSummary: Codable, Sendable, Equatable, Hashable, Identifiable 
         cover = try container.decodeIfPresent(String.self, forKey: .cover)
         coverPath = nil
         progressPercent = try container.decodeIfPresent(Double.self, forKey: .progressPercent)
+        lastReadAt = try container.decodeDateIfPresent(forKey: .lastReadAt)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -259,6 +266,7 @@ public struct BookSummary: Codable, Sendable, Equatable, Hashable, Identifiable 
         try container.encode(notesCount, forKey: .notesCount)
         try container.encode(cover, forKey: .cover)
         try container.encode(progressPercent, forKey: .progressPercent)
+        try container.encodeDateIfPresent(lastReadAt, forKey: .lastReadAt)
     }
 }
 

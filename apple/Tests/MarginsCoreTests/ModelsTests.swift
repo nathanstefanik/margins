@@ -290,7 +290,29 @@ struct ModelsTests {
         #expect(book.cover == "cover.jpg")
         #expect(book.chapterCount == 42)
         #expect(book.progressPercent == 12.5)
+        #expect(book.lastReadAt == nil)
         #expect(String(decoding: try MarginsJSON.encode(index), as: UTF8.self) == raw)
+    }
+
+    @Test("a summary's last-read stamp round-trips through the catalog")
+    func bookSummaryLastReadAtRoundTrips() throws {
+        let at = try #require(RFC3339.date(from: "2026-09-10T20:47:05Z"))
+        let summary = BookSummary(
+            id: "a1b2c3",
+            title: "The Brothers Karamazov",
+            author: "Fyodor Dostoevsky",
+            addedAt: at,
+            chapterCount: 42,
+            notesCount: 3,
+            progressPercent: 12.5,
+            lastReadAt: at
+        )
+        let decoded = try MarginsJSON.decode(
+            BookSummary.self, from: try MarginsJSON.encode(summary))
+        #expect(decoded == summary)
+
+        let encoded = String(decoding: try MarginsJSON.encode(summary), as: UTF8.self)
+        #expect(encoded.contains("\"last_read_at\" : \"2026-09-10T20:47:05Z\""))
     }
 
     // MARK: Marks and frontmatter

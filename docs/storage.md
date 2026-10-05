@@ -186,8 +186,13 @@ reading and written on chapter/book changes:
 
 - `epub_cfi` locates the exact page within the chapter (omitted if unknown)
 - `percent` is the whole-book completion, clamped to 0–100
+- `updated_at` is when the position was last saved
 - Opening a book normally resumes here; opening a specific chapter jumps explicitly
 - A missing or corrupt file is treated as "never opened" — the reader starts at chapter 1
+
+Each book's `index.json` entry mirrors the position summary for the catalog:
+`percent` as `progress_percent` (`null` when the book was never opened) and
+`updated_at` as `last_read_at` (omitted when the book was never opened).
 
 ## Bookmarks
 
