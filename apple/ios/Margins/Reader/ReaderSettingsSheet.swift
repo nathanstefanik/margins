@@ -88,6 +88,15 @@ struct ReaderSettingsSheet: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                Section("Page indicator") {
+                    Picker("Page indicator", selection: $preferences.pageIndicator) {
+                        ForEach(ReaderPageIndicator.allCases, id: \.self) { mode in
+                            Text(mode.name).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("reader-page-indicator")
+                }
                 Section {
                     destinationButton("Contents", systemImage: "list.bullet", destination: .contents)
                     destinationButton("Bookmarks", systemImage: "bookmark", destination: .bookmarks)

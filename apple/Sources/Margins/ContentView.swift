@@ -100,6 +100,14 @@ struct ContentView: View {
         .onChange(of: colorScheme) {
             reader.preferences.systemIsDark = colorScheme == .dark
         }
+        // Away-from-app time isn't reading time: a backgrounding resets
+        // the pace meter's running interval.
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSApplication.willResignActiveNotification)
+        ) { _ in
+            reader.pace.noteJump()
+        }
         .task {
             MarginsApp.wireModels(model: model, reader: reader)
             await model.activate()

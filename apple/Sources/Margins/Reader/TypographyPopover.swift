@@ -89,6 +89,22 @@ struct TypographyPopover: View {
 
             Divider()
 
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Page Indicator")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Picker("Page Indicator", selection: $preferences.pageIndicator) {
+                    ForEach(ReaderPageIndicator.allCases, id: \.self) { mode in
+                        Text(mode.name).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityLabel("Page indicator")
+            }
+
+            Divider()
+
             HStack(spacing: 10) {
                 Text("Text Size")
                     .font(.subheadline)

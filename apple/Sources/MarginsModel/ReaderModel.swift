@@ -30,6 +30,11 @@ public final class ReaderModel {
     /// `close()` (chrome state, persisted separately).
     public let preferences = ReaderPreferences()
 
+    /// The learned seconds-per-page rate behind the "min left" footer
+    /// mode; samples persist across launches but reset on typography
+    /// change (they describe a layout, not a book).
+    public let pace = ReadingPace()
+
     public private(set) var book: BookMeta?
     public private(set) var chapter: ChapterMeta?
     public private(set) var progress: ReaderProgress?
@@ -163,6 +168,7 @@ public final class ReaderModel {
     public func close() {
         flushNoteSave()
         flushPositionSave()
+        pace.noteJump()
         book = nil
         chapter = nil
         resumeCfi = nil
@@ -226,6 +232,11 @@ public final class ReaderModel {
         endCfi: String? = nil
     ) {
         let safeTotal = max(totalPages, 0)
+        let previousProgress = progress
+        let previousChapterIndex = chapter.flatMap { current in
+            book.flatMap { $0.chapters.firstIndex(where: { $0.key == current.key }) }
+        }
+        let previousCfi = currentCfi
         let startChapter = href.flatMap { rawHref in
             book.flatMap { meta in Self.chapter(forHref: rawHref, in: meta) }
         }
@@ -259,7 +270,51 @@ public final class ReaderModel {
         // Transient, like `currentCfi`: the visible range explains the
         // current spread to the bookmark affordance; it is never stored.
         currentEndCfi = verifiedEndPage == nil ? nil : endCfi
+        // Pace bookkeeping: only a plain forward page turn counts; a jump
+        // (scrubber, TOC, backwards move, chapter skip) resets the running
+        // interval so the next turn isn't charged for it. A re-reported
+        // relocation at the same spot is neither — reflows emit those.
+        pace.typographyKey = preferences.typographyKey
+        if let progress, Self.isPageTurn(
+            from: previousProgress,
+            previousChapterIndex: previousChapterIndex,
+            to: progress,
+            nextChapterIndex: currentChapterIndex
+        ) {
+            pace.recordTurn()
+        } else if previousProgress != progress
+            || previousCfi != cfi
+            || previousChapterIndex != currentChapterIndex
+        {
+            pace.noteJump()
+        }
         schedulePositionSave(cfi: cfi)
+    }
+
+    /// The chapter's spine index under the open book, for the turn
+    /// predicate's chapter-boundary check.
+    private var currentChapterIndex: Int? {
+        guard let book, let chapter else { return nil }
+        return book.chapters.firstIndex(where: { $0.key == chapter.key })
+    }
+
+    /// Whether a relocation is a plain forward page turn: one view on
+    /// inside one chapter — the new start page follows the previous
+    /// view's last page — or the first page of the chapter right after
+    /// the current one. Anything else (scrub jumps, TOC picks, backwards
+    /// moves, chapter skips) is a jump and doesn't count.
+    public static func isPageTurn(
+        from previous: ReaderProgress?,
+        previousChapterIndex: Int?,
+        to next: ReaderProgress,
+        nextChapterIndex: Int?
+    ) -> Bool {
+        guard let previous, let previousChapterIndex, let nextChapterIndex
+        else { return false }
+        if nextChapterIndex == previousChapterIndex {
+            return next.page == (previous.endPage ?? previous.page) + 1
+        }
+        return nextChapterIndex == previousChapterIndex + 1 && next.page == 1
     }
 
     /// epub.js reports section hrefs *manifest-relative* ("wrap0000.html")

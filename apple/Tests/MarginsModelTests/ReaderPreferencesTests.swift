@@ -142,6 +142,41 @@ struct ReaderPreferencesTests {
         #expect(second.ornaments == false)
     }
 
+    @Test("page indicator defaults to pages and round-trips")
+    func pageIndicatorRoundTrips() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.pageIndicator == .pages)
+
+        preferences.pageIndicator = .timeLeft
+        let second = ReaderPreferences(defaults: defaults)
+        #expect(second.pageIndicator == .timeLeft)
+    }
+
+    @Test("an unknown stored page indicator falls back to pages")
+    func unknownPageIndicatorFallsBack() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        defaults.set("percent", forKey: "reader.pageIndicator")
+
+        #expect(ReaderPreferences(defaults: defaults).pageIndicator == .pages)
+    }
+
+    #if !os(iOS)
+    @Test("reset typography keeps the page indicator")
+    func resetKeepsPageIndicator() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        preferences.pageIndicator = .timeLeft
+        preferences.resetTypography()
+        #expect(preferences.pageIndicator == .timeLeft)
+    }
+    #endif
+
     @Test("reset restores prose defaults")
     func resetRestoresProseDefaults() {
         let defaults = makeDefaults()

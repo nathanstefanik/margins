@@ -218,6 +218,11 @@ struct ReaderScene: View {
                 reader.flushPositionSave()
                 reader.flushNoteSave()
             }
+            if scenePhase != .active {
+                // A break isn't a page turn — the next interval starts
+                // fresh after returning.
+                reader.pace.noteJump()
+            }
         }
         .task(id: "\(reader.chapter?.key ?? "")#\(app.downloadGeneration)") {
             // The chapter note (body + marks) feeds the sheets, the
@@ -584,12 +589,23 @@ struct ReaderScene: View {
     }
 
     /// Chapter-local page counts (what epub.js reports); the app has no
-    /// whole-book page total, only a percent.
+    /// whole-book page total, only a percent. Under Time left the resting
+    /// footer shows the pace estimate, falling back to the page number
+    /// until enough turns have been seen.
     private var pageText: String {
         guard let progress = reader.progress else { return "" }
-        return chromeVisible
+        let pageFallback =
+            chromeVisible
             ? "\(progress.page) of \(max(progress.totalPages, 1))"
             : "\(progress.page)"
+        switch reader.preferences.pageIndicator {
+        case .pages:
+            return pageFallback
+        case .timeLeft:
+            return reader.pace.shortTimeLeftText(for: progress) ?? pageFallback
+        case .none:
+            return ""
+        }
     }
 
     private func newNote() {

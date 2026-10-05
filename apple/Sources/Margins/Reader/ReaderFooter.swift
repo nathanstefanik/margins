@@ -42,8 +42,19 @@ struct ReaderFooter: View {
                             .monospacedDigit()
                     }
                 } else {
-                    Text(pageLabel(for: progress))
+                    switch reader.preferences.pageIndicator {
+                    case .pages:
+                        Text(pageLabel(for: progress))
+                            .monospacedDigit()
+                    case .timeLeft:
+                        Text(
+                            reader.pace.timeLeftText(for: progress)
+                                ?? pageLabel(for: progress)
+                        )
                         .monospacedDigit()
+                    case .none:
+                        EmptyView()
+                    }
                 }
             }
         }

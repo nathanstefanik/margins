@@ -48,6 +48,23 @@ public enum ReaderTypeface: String, CaseIterable, Sendable {
     }
 }
 
+/// What the page indicator shows while reading: the chapter-local page
+/// count, an estimate from the reader's own pace, or nothing.
+public enum ReaderPageIndicator: String, CaseIterable, Sendable {
+    case pages
+    case timeLeft
+    case none
+
+    /// The name the pickers and accessibility labels show.
+    public var name: String {
+        switch self {
+        case .pages: "Pages"
+        case .timeLeft: "Time left"
+        case .none: "None"
+        }
+    }
+}
+
 #if !os(iOS)
 /// macOS page layout: let the reading viewport decide, or pin one or two
 /// pages. The web reader resolves the effective layout from the actual
@@ -91,6 +108,9 @@ public final class ReaderPreferences {
     /// Drop cap and small caps at chapter openings; off means plain.
     public static let defaultOrnaments = true
 
+    /// The default page indicator: the plain page count.
+    public static let defaultPageIndicator = ReaderPageIndicator.pages
+
     private static let themeKey = "reader.theme"
     private static let followsSystemKey = "reader.theme.followsSystem"
     private static let dayThemeKey = "reader.theme.day"
@@ -98,6 +118,7 @@ public final class ReaderPreferences {
     private static let typefaceKey = "reader.typeface"
     private static let justifyKey = "reader.justify"
     private static let ornamentsKey = "reader.ornaments"
+    private static let pageIndicatorKey = "reader.pageIndicator"
 
     private let defaults: UserDefaults
     private var _fixedTheme: ReaderTheme
@@ -107,6 +128,7 @@ public final class ReaderPreferences {
     private var _typeface: ReaderTypeface
     private var _justify: Bool
     private var _ornaments: Bool
+    private var _pageIndicator: ReaderPageIndicator
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
@@ -132,6 +154,9 @@ public final class ReaderPreferences {
         _justify = defaults.bool(forKey: Self.justifyKey)
         _ornaments =
             defaults.object(forKey: Self.ornamentsKey) as? Bool ?? Self.defaultOrnaments
+        _pageIndicator =
+            ReaderPageIndicator(rawValue: defaults.string(forKey: Self.pageIndicatorKey) ?? "")
+            ?? Self.defaultPageIndicator
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)
@@ -237,6 +262,36 @@ public final class ReaderPreferences {
             _ornaments = newValue
             defaults.set(newValue, forKey: Self.ornamentsKey)
         }
+    }
+
+    /// The page indicator mode the footers show. Not part of macOS's
+    /// Reset Typography — it is display chrome, not typography.
+    public var pageIndicator: ReaderPageIndicator {
+        get { _pageIndicator }
+        set {
+            _pageIndicator = newValue
+            defaults.set(newValue.rawValue, forKey: Self.pageIndicatorKey)
+        }
+    }
+
+    /// The fingerprint the pace meter keys on: anything that changes how
+    /// many words land on a page. Both platforms' knobs are included so
+    /// the key only differs when the effective layout differs.
+    public var typographyKey: String {
+        var parts = [
+            "face=\(_typeface.rawValue)",
+            "justify=\(_justify)",
+            "ornaments=\(_ornaments)",
+        ]
+        #if os(iOS)
+        parts.append("step=\(_fontStep)")
+        #else
+        parts.append("size=\(_fontSize)")
+        parts.append("lh=\(_lineHeight)")
+        parts.append("lw=\(_lineWidth)")
+        parts.append("layout=\(_pageLayout.rawValue)")
+        #endif
+        return parts.joined(separator: "|")
     }
 
     /// The chosen face. The whole book follows it (publisher families are
