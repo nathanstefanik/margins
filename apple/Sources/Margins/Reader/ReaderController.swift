@@ -96,6 +96,13 @@ final class ReaderController: NSObject {
         return nil
     }
 
+    /// Jumps to a 1-based page inside the current chapter (the footer's
+    /// hover scrubber). Returns false when no reader webview is on screen.
+    @discardableResult
+    static func goToPage(_ page: Int) -> Bool {
+        evaluateInReader("readerGoToPage(\(page))")
+    }
+
     // MARK: Appearance
 
     /// Applies the reading-surface theme: the webview's appearance (so

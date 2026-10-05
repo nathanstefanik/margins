@@ -60,6 +60,93 @@ struct ReaderLayoutIntegrationTests {
         #expect(back["cfi"] as? String == firstCfi)
     }
 
+    @Test("the page scrubber jumps to a page and clamps at the ends")
+    func goToPageJumpsAndClamps() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        let first = try await harness.waitForRelocation(after: 0)
+        let total = try #require(first["totalPages"] as? Int)
+        #expect(total > 2)
+        #expect(first["page"] as? Int == 1)
+
+        // Middle of the chapter: the landed page brackets the target.
+        let target = min(3, total)
+        try await harness.evaluate("readerGoToPage(\(target))")
+        let jumped = try await harness.waitForRelocationChange(from: first)
+        let page = try #require(jumped["page"] as? Int)
+        let endPage = (jumped["endPage"] as? Int) ?? page
+        #expect(page <= target && endPage >= target)
+
+        // Out of range clamps: below 1 → first page, past the end → last.
+        try await harness.evaluate("readerGoToPage(0)")
+        let back = try await harness.waitForRelocationChange(from: jumped)
+        #expect(back["page"] as? Int == 1)
+
+        try await harness.evaluate("readerGoToPage(9999)")
+        let last = try await harness.waitForRelocationChange(from: back)
+        let lastPage = try #require(last["page"] as? Int)
+        let lastEnd = (last["endPage"] as? Int) ?? lastPage
+        #expect(lastEnd == total)
+    }
+
+    @Test("the page scrubber lands on the spread containing the page")
+    func goToPageLandsOnContainingSpread() async throws {
+        let harness = try makeHarness(width: 1500, height: 800)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(2)
+        // Big type stretches the chapter to three spreads so a mid-chapter
+        // even page can prove the landing spread brackets it.
+        try await harness.evaluate("readerApplyTypography(300,1.6,72,'%')")
+        try await harness.waitForLayoutSettled()
+        // The reflow re-anchors at the same CFI, so read the new total off
+        // the live location rather than waiting on a relocation change.
+        let total = try #require(
+            (try await harness.evaluate(
+                "readerRendition.currentLocation().start.displayed.total") as? NSNumber
+            )?.intValue)
+        #expect(total >= 6)
+        let settled = harness.lastRelocation
+
+        // Even page: the spread shows (3–4), not (4–5) — the spread that
+        // contains the requested page.
+        try await harness.evaluate("readerGoToPage(4)")
+        let even = try await harness.waitForRelocationChange(from: settled)
+        let evenPage = try #require(even["page"] as? Int)
+        let evenEnd = try #require(even["endPage"] as? Int)
+        #expect(evenPage <= 4 && evenEnd >= 4)
+
+        // Odd page: same bracketing for the other side of a spread.
+        try await harness.evaluate("readerGoToPage(6)")
+        let odd = try await harness.waitForRelocationChange(from: even)
+        let oddPage = try #require(odd["page"] as? Int)
+        let oddEnd = try #require(odd["endPage"] as? Int)
+        #expect(oddPage <= 6 && oddEnd >= 6)
+    }
+
+    @Test("a text-size change keeps the passage after a page scrub")
+    func goToPageThenReflowKeepsPassage() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        let first = try await harness.waitForRelocation(after: 0)
+        let total = try #require(first["totalPages"] as? Int)
+        #expect(total > 2)
+
+        try await harness.evaluate("readerGoToPage(\(min(4, total)))")
+        _ = try await harness.waitForRelocationChange(from: first)
+        try await harness.waitForReaderIdle()
+        let anchor = try await anchorParagraph(harness)
+
+        try await harness.evaluate("readerApplyTypography(160,1.6,72,'%')")
+        try await harness.waitForLayoutSettled()
+
+        let after = try await harness.visibleParagraphIDs()
+        #expect(after.contains(anchor), "anchor \(anchor) left the screen after a text-size change")
+    }
+
     @Test("a saved CFI reopens the same passage")
     func cfiNavigationKeepsThePassageVisible() async throws {
         let harness = try makeHarness()

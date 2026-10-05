@@ -52,6 +52,9 @@ struct ReaderScene: View {
     @State private var flashTick = 0
     /// Trigger counter for the bookmark-toggle haptic.
     @State private var bookmarkTick = 0
+    /// Footer scrubber state: the dragged page and whether a drag is live.
+    @State private var scrubValue: Double = 1
+    @State private var scrubbing = false
     /// A selection queued for the Add to Notebook sheet.
     @State private var notebookCandidate: NotebookAddCandidate?
     /// The "Search Library" sheet's own query state.
@@ -473,14 +476,100 @@ struct ReaderScene: View {
     /// home-indicator safe area because these overlays sit on the
     /// full-bleed ZStack, not the inset webview.
     private var footerOverlay: some View {
-        Text(pageText)
-            .font(pageNumberFont)
-            .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
-            .lineLimit(1)
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .allowsHitTesting(false)
-            .transition(.opacity)
+        Group {
+            if chromeVisible, let progress = reader.progress {
+                scrubberRail(progress)
+            } else {
+                Text(pageText)
+                    .font(pageNumberFont)
+                    .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(height: chromeVisible ? nil : 44)
+        .transition(.opacity)
+    }
+
+    /// The running foot with chrome up: one glass rail — Contents, the
+    /// chapter chevrons, and a page scrubber. A drag lifts "12 of 40"
+    /// above the rail in the reader typeface and jumps on release.
+    private func scrubberRail(_ progress: ReaderProgress) -> some View {
+        VStack(spacing: 6) {
+            if scrubbing {
+                Text("\(Int(scrubValue)) of \(progress.totalPages)")
+                    .font(pageNumberFont)
+                    .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
+            }
+            HStack(spacing: DesignTokens.Spacing.actions) {
+                railButton("list.bullet", "Contents") { tocPresented = true }
+                railButton("chevron.backward", "Previous chapter") { stepChapter(-1) }
+                    .disabled(!canStepChapter(-1))
+                Slider(
+                    value: $scrubValue,
+                    in: 1...Double(max(progress.totalPages, 1)),
+                    step: 1,
+                    onEditingChanged: { editing in
+                        scrubbing = editing
+                        if !editing {
+                            bridge?.goToPage(Int(scrubValue))
+                        }
+                    }
+                )
+                .disabled(progress.totalPages <= 1)
+                .accessibilityLabel("Page")
+                .accessibilityValue("\(Int(scrubValue)) of \(progress.totalPages)")
+                // A tick per integer crossed; gated on scrubbing so the
+                // resync after a page lands stays silent.
+                .sensoryFeedback(.selection, trigger: scrubbing ? Int(scrubValue) : 0)
+                railButton("chevron.forward", "Next chapter") { stepChapter(1) }
+                    .disabled(!canStepChapter(1))
+            }
+            .padding(.horizontal, DesignTokens.Spacing.controlInset)
+            .padding(.vertical, DesignTokens.Spacing.chrome)
+            .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.grid)
+        .onAppear { scrubValue = Double(progress.page) }
+        .onChange(of: progress.page) { _, page in
+            if !scrubbing { scrubValue = Double(page) }
+        }
+    }
+
+    /// Plain icon button inside the rail's shared glass — the pill is the
+    /// control plane, so the buttons don't carry their own glass.
+    private func railButton(
+        _ systemName: String,
+        _ label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.body.weight(.medium))
+                .frame(
+                    width: DesignTokens.Control.readerTarget,
+                    height: DesignTokens.Control.readerTarget
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// Whether the spine has a chapter `delta` steps from the current one.
+    private func canStepChapter(_ delta: Int) -> Bool {
+        guard let book = reader.book, let chapter = reader.chapter,
+            let index = book.chapters.firstIndex(where: { $0.key == chapter.key })
+        else { return false }
+        return book.chapters.indices.contains(index + delta)
+    }
+
+    private func stepChapter(_ delta: Int) {
+        guard delta > 0 ? reader.nextChapter() != nil : reader.previousChapter() != nil
+        else { return }
+        chromeVisible = false
+        bridge?.jumpToChapter(reader.displayTarget)
     }
 
     /// Chapter title and page number follow the reader's Serif/Sans/Easy

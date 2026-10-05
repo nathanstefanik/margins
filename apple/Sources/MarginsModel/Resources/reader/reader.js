@@ -1415,11 +1415,50 @@ function readerScrollBottom() {
   }
 }
 
+// Page scrubber: a 1-based page inside the current section. The engine's
+// own mapping turns a column's pixel band into the CFI at its start — the
+// same machinery the relocated reporter uses to number pages — so
+// display() lands on the spread holding the page and emits the normal
+// relocated. readerDisplayTarget's navigation bookkeeping makes the jump
+// count as a user navigation for the reflow anchor, exactly like a turn.
+function readerGoToPage(page) {
+  const manager = readerRendition && readerRendition.manager;
+  const view = readerRendition && readerRendition.views
+    ? readerRendition.views().first()
+    : null;
+  if (!manager || !manager.mapping || !view || !view.section || !view.contents) {
+    return;
+  }
+  const location = readerRendition.currentLocation();
+  const total =
+    (location && location.start && location.start.displayed.total) || 0;
+  if (!total) {
+    return;
+  }
+  const n = Math.min(Math.max(Math.round(page) || 1, 1), total);
+  const layoutProps = manager.layout && (manager.layout.props || manager.layout);
+  const columnWidth = layoutProps && layoutProps.columnWidth;
+  const gap = (layoutProps && layoutProps.gap) || 0;
+  if (!columnWidth) {
+    return;
+  }
+  // Column n's pixel band — the same arithmetic findRanges uses when it
+  // numbers pages: columnWidth wide, gap between columns.
+  const start = (n - 1) * (columnWidth + gap);
+  const end = n * columnWidth + (n - 1) * gap;
+  const range = manager.mapping.page(view.contents, view.section.cfiBase, start, end);
+  if (!range || !range.start) {
+    return;
+  }
+  readerDisplayTarget(range.start).catch(readerShowError);
+}
+
 window.readerOpen = readerOpen;
 window.readerDisplay = readerDisplay;
 window.readerScrollBy = readerScrollBy;
 window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
+window.readerGoToPage = readerGoToPage;
 window.readerApplyTypography = readerApplyTypography;
 window.readerSetFontFace = readerSetFontFace;
 window.readerSetProse = readerSetProse;
