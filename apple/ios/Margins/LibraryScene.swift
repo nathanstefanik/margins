@@ -175,31 +175,63 @@ struct LibraryScene: View {
                         ],
                         spacing: DesignTokens.Spacing.grid
                     ) {
-                        ForEach(library.books) { book in
-                            Button {
-                                select(book.id)
-                            } label: {
-                                BookGridCell(book: book, zoomNamespace: zoomNamespace)
+                        let shelves = nonEmptyShelves
+                        if shelves.count == 1 {
+                            // One shelf: plain grid, no heading needed.
+                            ForEach(shelves[0].books) { book in
+                                shelfCell(book)
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                if book.lastReadAt != nil {
-                                    Button {
-                                        openContinue(book: book, zoomSourceID: book.id)
-                                    } label: {
-                                        Label("Continue reading", systemImage: "book")
+                        } else {
+                            ForEach(shelves, id: \.name) { shelf in
+                                Section {
+                                    ForEach(shelf.books) { book in
+                                        shelfCell(book)
                                     }
-                                }
-                                Button(role: .destructive) {
-                                    bookPendingDeletion = book
-                                } label: {
-                                    Label("Delete…", systemImage: "trash")
+                                } header: {
+                                    Text(shelf.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
                         }
                     }
                     .padding()
                 }
+            }
+        }
+    }
+
+    /// The populated shelves in display order — Reading, Up next,
+    /// Finished — as named grid sections.
+    private var nonEmptyShelves: [(name: String, books: [BookSummary])] {
+        let shelves = library.shelves
+        return [
+            ("Reading", shelves.reading),
+            ("Up next", shelves.upNext),
+            ("Finished", shelves.finished),
+        ].compactMap { $0.1.isEmpty ? nil : (name: $0.0, books: $0.1) }
+    }
+
+    private func shelfCell(_ book: BookSummary) -> some View {
+        Button {
+            select(book.id)
+        } label: {
+            BookGridCell(book: book, zoomNamespace: zoomNamespace)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if book.lastReadAt != nil {
+                Button {
+                    openContinue(book: book, zoomSourceID: book.id)
+                } label: {
+                    Label("Continue reading", systemImage: "book")
+                }
+            }
+            Button(role: .destructive) {
+                bookPendingDeletion = book
+            } label: {
+                Label("Delete…", systemImage: "trash")
             }
         }
     }
@@ -214,7 +246,7 @@ struct LibraryScene: View {
                 openContinue(book: book, zoomSourceID: "continue-\(book.id)")
             } label: {
                 HStack(alignment: .top, spacing: DesignTokens.Spacing.gridCell) {
-                    CoverView(coverPath: book.coverPath, title: book.title)
+                    CoverView(coverPath: book.coverPath, title: book.title, author: book.author)
                         .frame(width: 96, height: 144)
                         .clipShape(
                             .rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous)
@@ -582,7 +614,7 @@ struct BookGridCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            CoverView(coverPath: book.coverPath, title: book.title)
+            CoverView(coverPath: book.coverPath, title: book.title, author: book.author)
                 .frame(height: 150)
                 .clipShape(.rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 2)

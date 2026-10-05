@@ -9,6 +9,7 @@ struct BookRowView: View {
             BookCoverView(
                 coverPath: book.coverPath,
                 title: book.title,
+                author: book.author,
                 width: 34,
                 height: 51
             )

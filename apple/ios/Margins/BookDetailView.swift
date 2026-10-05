@@ -15,11 +15,14 @@ struct BookDetailView: View {
     /// device orientation.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var readerActive: Bool
 
     @State private var tab: Tab = .contents
     @State private var showEmptyChapters = false
     @State private var position: ReadingPosition?
+    /// The real cover's average colour, softened into the header's wash.
+    @State private var headerTint: ReaderPalette.RGB?
 
     enum Tab: Hashable {
         case contents
@@ -40,6 +43,7 @@ struct BookDetailView: View {
             // position load and a pending reader present.
             await loadPosition()
             presentReaderIfPending()
+            await loadHeaderTint()
             #if DEBUG
             // Development seam: jump straight into the reader, or preselect
             // the Notes tab, for simulator verification.
@@ -90,6 +94,38 @@ struct BookDetailView: View {
         position = await library.readingPosition(bookId: id)
     }
 
+    /// The header wash tracks the real cover only — placeholder covers get
+    /// none. Off the main actor; the small result rides back.
+    private func loadHeaderTint() async {
+        guard let path = selectedMeta?.coverPath else {
+            headerTint = nil
+            return
+        }
+        headerTint = await Task.detached(priority: .userInitiated) {
+            CoverTint.average(ofImageAt: path)
+        }.value
+    }
+
+    /// The soft wash behind the header: the cover's colour, desaturated and
+    /// mid-clamped, dissolving downward. Content stays on the plain canvas.
+    @ViewBuilder
+    private var headerTintBackground: some View {
+        if let headerTint {
+            LinearGradient(
+                colors: [
+                    Color(CoverTint.softened(headerTint))
+                        .opacity(colorScheme == .dark ? 0.18 : 0.12),
+                    .clear,
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 320)
+            .frame(maxWidth: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+        }
+    }
+
     // MARK: Detail
 
     @ViewBuilder
@@ -98,7 +134,7 @@ struct BookDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 16) {
-                    CoverView(coverPath: meta.coverPath, title: meta.title)
+                    CoverView(coverPath: meta.coverPath, title: meta.title, author: meta.author)
                         .frame(width: coverSize.width, height: coverSize.height)
                         .clipShape(.rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
                         .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
@@ -153,6 +189,8 @@ struct BookDetailView: View {
             }
             .padding()
         }
+        .background(alignment: .top) { headerTintBackground }
+        .animation(.easeOut(duration: 0.3), value: headerTint != nil)
     }
 
     private var continueLabel: String {

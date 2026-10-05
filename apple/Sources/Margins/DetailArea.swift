@@ -51,6 +51,7 @@ private struct ContinueReadingCard: View {
             BookCoverView(
                 coverPath: book.coverPath,
                 title: book.title,
+                author: book.author,
                 width: 140,
                 height: 210
             )

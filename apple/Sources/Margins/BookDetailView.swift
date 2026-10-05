@@ -11,8 +11,11 @@ struct BookDetailView: View {
     /// for navigating to any chapter) and a "Show Notes" view listing only
     /// the annotated chapters with their stats. Persisted across launches.
     @AppStorage("bookDetailShowsNotes") private var showsNotes = false
+    @Environment(\.colorScheme) private var colorScheme
     @State private var frontExpanded = false
     @State private var backExpanded = false
+    /// The real cover's average colour, softened into the header's wash.
+    @State private var headerTint: ReaderPalette.RGB?
 
     var body: some View {
         ScrollView {
@@ -24,11 +27,32 @@ struct BookDetailView: View {
             .frame(maxWidth: .infinity)
             .padding(28)
         }
+        .background(alignment: .top) {
+            if let headerTint {
+                LinearGradient(
+                    colors: [
+                        Color(CoverTint.softened(headerTint))
+                            .opacity(colorScheme == .dark ? 0.18 : 0.12),
+                        .clear,
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 320)
+            }
+        }
+        .animation(.easeOut(duration: 0.3), value: headerTint != nil)
         .navigationTitle(book.title)
         .task(id: book.id) {
             // Coming back from the reader: percent and note indicators were
             // captured before the reading session; refresh them.
             await model.loadSelectedBook()
+            headerTint = nil
+            if let path = book.coverPath {
+                headerTint = await Task.detached(priority: .userInitiated) {
+                    CoverTint.average(ofImageAt: path)
+                }.value
+            }
         }
     }
 
@@ -39,6 +63,7 @@ struct BookDetailView: View {
             BookCoverView(
                 coverPath: book.coverPath,
                 title: book.title,
+                author: book.author,
                 width: 132,
                 height: 198
             )
