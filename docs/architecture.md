@@ -118,7 +118,15 @@ A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
   (eviction-proof copy of opened EPUBs under Application Support),
   `NotebookModel` (notebook list, the open notebook's debounced autosave
   and segment edits), `LibrarySearch` (debounced captured + full-text
-  query model behind the Search tab), the reader reveal
+  query model behind the Search tab), `ReaderPalette` (the shared paper
+  palettes behind both apps' papers, mirrored by the renderer),
+  `ReadingPace` (learned seconds-per-page behind the footer's
+  time-left mode), `BookCoverPlaceholder`/`CoverTint` (stable paper
+  palettes for cover-less books and the detail header's average-cover
+  wash), `FuzzyMatch` + `CommandPalette` (the ⌘K overlay's matcher and
+  item model), `ChapterEndContent` (the end-of-chapter page's
+  quotes/excerpt assembly), `LibraryModel.shelves` (the Reading / Up
+  next / Finished partition both libraries group by), the reader reveal
   (`ReaderModel.pendingReveal` + `requestReveal`/`consumeReveal` — a
   `revealText` passage opening requests an in-page text match, and a
   located mark gets its CFI backfilled), and
