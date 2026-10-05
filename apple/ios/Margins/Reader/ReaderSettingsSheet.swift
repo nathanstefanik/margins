@@ -32,9 +32,9 @@ struct ReaderSettingsSheet: View {
                         .accessibilityIdentifier("reader-follows-system")
                     if preferences.followsSystem {
                         paperRow(
-                            "Day", themes: [.light, .sepia], selection: $preferences.dayTheme)
+                            "Day", themes: ReaderTheme.dayPapers, selection: $preferences.dayTheme)
                         paperRow(
-                            "Night", themes: [.dark, .night], selection: $preferences.nightTheme)
+                            "Night", themes: ReaderTheme.nightPapers, selection: $preferences.nightTheme)
                     } else {
                         paperRow("Paper", themes: ReaderTheme.allCases, selection: $preferences.theme)
                     }

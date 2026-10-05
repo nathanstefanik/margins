@@ -37,7 +37,7 @@ struct CommandPaletteOverlay: View {
             VStack(alignment: .leading, spacing: 0) {
                 fieldRow
                 Divider()
-                content
+                content(results)
             }
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
@@ -110,13 +110,29 @@ struct CommandPaletteOverlay: View {
             ornaments: reader.preferences.ornaments)
     }
 
-    private var sections: [(group: CommandPalette.Group, items: [Item])] {
-        CommandPalette.sections(for: query, in: CommandPalette.items(for: context))
+    /// One pass over the model per render: the grouped rows for display
+    /// and the flat list the selection index walks.
+    private struct Results {
+        var flatItems: [Item]
+        var sectionedRows: [(group: CommandPalette.Group, rows: [(index: Int, item: Item)])]
+    }
+
+    private var results: Results {
+        let sections = CommandPalette.sections(for: query, in: CommandPalette.items(for: context))
+        var index = 0
+        let rows = sections.map { section in
+            let rowItems = section.items.map { item -> (Int, Item) in
+                defer { index += 1 }
+                return (index, item)
+            }
+            return (section.group, rowItems)
+        }
+        return Results(flatItems: sections.flatMap(\.items), sectionedRows: rows)
     }
 
     /// The flat result list the selection index walks, in display order.
     private var flatItems: [Item] {
-        sections.flatMap(\.items)
+        results.flatItems
     }
 
     // MARK: Field
@@ -150,22 +166,9 @@ struct CommandPaletteOverlay: View {
 
     // MARK: Content
 
-    /// Groups items into sections carrying the flat (selection-space)
-    /// index each row answers to.
-    private var sectionedRows: [(group: CommandPalette.Group, rows: [(index: Int, item: Item)])] {
-        var index = 0
-        return sections.map { section in
-            let rows = section.items.map { item -> (Int, Item) in
-                defer { index += 1 }
-                return (index, item)
-            }
-            return (section.group, rows)
-        }
-    }
-
     @ViewBuilder
-    private var content: some View {
-        if flatItems.isEmpty {
+    private func content(_ results: Results) -> some View {
+        if results.flatItems.isEmpty {
             VStack(spacing: 6) {
                 Text("No matches for “\(query)”")
                     .font(.callout)
@@ -180,7 +183,7 @@ struct CommandPaletteOverlay: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(sectionedRows, id: \.group) { section in
+                        ForEach(results.sectionedRows, id: \.group) { section in
                             sectionHeader(section.group)
                             ForEach(section.rows, id: \.index) { row in
                                 resultRow(row.item, index: row.index)
@@ -286,26 +289,16 @@ struct CommandPaletteOverlay: View {
             model.requestHelp()
         case .settings:
             openSettings()
-        case .paperLight:
-            reader.preferences.theme = .light
-        case .paperSepia:
-            reader.preferences.theme = .sepia
-        case .paperDark:
-            reader.preferences.theme = .dark
-        case .paperNight:
-            reader.preferences.theme = .night
+        case .paper(let theme):
+            reader.preferences.theme = theme
         case .paperMatchSystem:
             reader.preferences.followsSystem = true
         case .toggleJustify:
             reader.preferences.justify.toggle()
         case .toggleOrnaments:
             reader.preferences.ornaments.toggle()
-        case .indicatorPages:
-            reader.preferences.pageIndicator = .pages
-        case .indicatorTimeLeft:
-            reader.preferences.pageIndicator = .timeLeft
-        case .indicatorNone:
-            reader.preferences.pageIndicator = .none
+        case .pageIndicator(let mode):
+            reader.preferences.pageIndicator = mode
         case .toggleFocus:
             reader.focusMode.toggle()
         }

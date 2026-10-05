@@ -131,21 +131,6 @@ struct ReadingPaceTests {
         #expect(restored.secondsPerPage == 30)
     }
 
-    @Test("minutesLeft rounds up and follows the estimate")
-    func minutesLeftRounding() {
-        let defaults = makeDefaults()
-        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
-        let pace = ReadingPace(defaults: defaults)
-        #expect(pace.minutesLeft(pagesRemaining: 10) == nil)
-        feed(pace, count: 15, interval: 30)
-        #expect(pace.minutesLeft(pagesRemaining: 10) == 5)
-        // 2.5 minutes of pages still reads as three — never "0 min".
-        let slower = ReadingPace(defaults: defaults)
-        slower.typographyKey = "reset"
-        feed(slower, count: 15, interval: 50)
-        #expect(slower.minutesLeft(pagesRemaining: 3) == 3)
-    }
-
     @Test("display text: last page, sub-minute, minutes, unknown")
     func displayText() {
         let defaults = makeDefaults()

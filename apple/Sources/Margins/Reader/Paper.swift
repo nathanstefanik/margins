@@ -10,22 +10,24 @@ import SwiftUI
 /// the reader can flip between the light and dark papers.
 enum Paper {
     static func background(_ theme: ReaderTheme) -> Color {
-        color(theme.palette.background)
+        Color(theme.palette.background)
     }
 
     static func ink(_ theme: ReaderTheme) -> Color {
-        color(theme.palette.ink)
+        Color(theme.palette.ink)
     }
 
     static func secondaryInk(_ theme: ReaderTheme) -> Color {
-        color(theme.palette.secondaryInk)
+        Color(theme.palette.secondaryInk)
     }
+}
 
-    private static func color(_ rgb: ReaderPalette.RGB) -> Color {
-        Color(
+extension Color {
+    /// A model-layer 0–255 RGB triple, straight through.
+    init(_ rgb: ReaderPalette.RGB) {
+        self.init(
             red: Double(rgb.red) / 255,
             green: Double(rgb.green) / 255,
-            blue: Double(rgb.blue) / 255
-        )
+            blue: Double(rgb.blue) / 255)
     }
 }

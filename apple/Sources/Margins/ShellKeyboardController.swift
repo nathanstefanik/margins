@@ -61,6 +61,12 @@ final class ShellKeyboardController {
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
+        // A ⌘-shortcut dismisses the chapter-end page but still takes its
+        // normal path (⌘= below, menus otherwise).
+        if reader.isOpen, reader.chapterEnd != nil, flags.contains(.command) {
+            reader.dismissChapterEnd()
+        }
+
         // ⌘= is unshifted "+": the menu's Bigger Text shortcut only fires
         // on ⌘⇧=, so handle the unshifted form here directly.
         if flags == [.command], event.charactersIgnoringModifiers == "=" {
@@ -108,11 +114,12 @@ final class ShellKeyboardController {
             return event
         }
 
-        // The chapter-end page owns every key while it's up: `i` opens
-        // the finished chapter's notes pane; anything else dismisses.
-        // Nothing may pass through to turn the page it covers.
+        // The chapter-end page owns every unmodified key while it's up:
+        // `i` opens the finished chapter's notes pane; anything else
+        // dismisses. Nothing may pass through to turn the page it covers.
         if reader.isOpen, let finished = reader.chapterEnd, !modalPanelUp {
-            continueFromChapterEnd(finished, writing: event.characters?.first == "i")
+            ChapterEndView.leave(
+                finished, writing: event.characters?.first == "i", reader: reader)
             return nil
         }
 
@@ -291,16 +298,6 @@ final class ShellKeyboardController {
             reader.focusMode.toggle()
             return true
         }
-    }
-
-    /// Leave the chapter-end page: plain dismiss, or step the reader back
-    /// into the finished chapter and open its notes pane for `i`.
-    private func continueFromChapterEnd(_ finished: ChapterMeta, writing: Bool) {
-        reader.dismissChapterEnd()
-        guard writing, let book = reader.book else { return }
-        reader.open(book: book, chapter: finished)
-        _ = displayCurrentChapter()
-        reader.openNotes()
     }
 
     private func displayCurrentChapter() -> Bool {

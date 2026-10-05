@@ -1,4 +1,4 @@
-import AppKit
+
 import MarginsModel
 import SwiftUI
 
@@ -62,7 +62,7 @@ struct ReaderView: View {
         .onChange(of: reader.focusMode) {
             if !reader.focusMode { revealFooter() }
         }
-        .windowToolbarFullScreenVisibilityReader()
+        .fullScreenToolbarOnHover()
         .navigationTitle(reader.book?.title ?? "Reader")
         .task(id: reader.book?.id) {
             await model.loadBookmarks(reader: reader)
@@ -132,11 +132,11 @@ struct ReaderView: View {
     }
 }
 
-extension View {
+private extension View {
     /// Full-screen windows reveal their toolbar only under the pointer —
     /// applied unconditionally (focus mode or not). No-op before the API.
     @ViewBuilder
-    func windowToolbarFullScreenVisibilityReader() -> some View {
+    func fullScreenToolbarOnHover() -> some View {
         if #available(macOS 15.5, *) {
             self.windowToolbarFullScreenVisibility(.onHover)
         } else {

@@ -24,6 +24,16 @@ public enum ReaderTheme: String, CaseIterable, Sendable {
     /// Light papers the day preference accepts; the night preference
     /// accepts the dark pair.
     public var isDayPaper: Bool { !palette.isDark }
+
+    /// The light pair, in swatch order.
+    public static var dayPapers: [ReaderTheme] {
+        allCases.filter(\.isDayPaper)
+    }
+
+    /// The dark pair, in swatch order.
+    public static var nightPapers: [ReaderTheme] {
+        allCases.filter { !$0.isDayPaper }
+    }
 }
 
 /// The reader's three faces on both platforms. Charter and Seravek ship
@@ -110,6 +120,7 @@ public final class ReaderPreferences {
 
     /// The default page indicator: the plain page count.
     public static let defaultPageIndicator = ReaderPageIndicator.pages
+    public static let defaultPauseAtChapterEnds = true
 
     private static let themeKey = "reader.theme"
     private static let followsSystemKey = "reader.theme.followsSystem"
@@ -163,7 +174,8 @@ public final class ReaderPreferences {
             ?? Self.defaultPageIndicator
         _hideSidebarWhileReading = defaults.bool(forKey: Self.hideSidebarKey)
         _pauseAtChapterEnds =
-            defaults.object(forKey: Self.chapterEndPauseKey) as? Bool ?? true
+            defaults.object(forKey: Self.chapterEndPauseKey) as? Bool
+            ?? Self.defaultPauseAtChapterEnds
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)
@@ -283,8 +295,8 @@ public final class ReaderPreferences {
 
     /// macOS: collapse the library sidebar for the duration of a reading
     /// session, restoring the previous split state on close. Off by
-    /// default; composes with `f` focus mode (whichever entered last wins
-    /// the collapse; the last one standing keeps it collapsed).
+    /// default. The sidebar stays collapsed while either focus mode or
+    /// this setting applies and restores when neither does.
     public var hideSidebarWhileReading: Bool {
         get { _hideSidebarWhileReading }
         set {
@@ -308,14 +320,19 @@ public final class ReaderPreferences {
     /// `notePrompt.dismissed.<bookId>.<chapterKey>` — the original iOS
     /// prompt's silence key, kept so already-dismissed chapters stay
     /// silent. Marked when the page is *shown*: each chapter pauses once.
+    private static func chapterEndSilenceKey(bookId: String, chapterKey: String) -> String {
+        "notePrompt.dismissed.\(bookId).\(chapterKey)"
+    }
+
     public func chapterEndPageSilenced(bookId: String, chapterKey: String) -> Bool {
-        defaults.bool(forKey: "notePrompt.dismissed.\(bookId).\(chapterKey)")
+        defaults.bool(forKey: Self.chapterEndSilenceKey(bookId: bookId, chapterKey: chapterKey))
     }
 
     /// Marks the chapter's end page as shown (or dismissed) — it will not
     /// pause again.
     public func silenceChapterEndPage(bookId: String, chapterKey: String) {
-        defaults.set(true, forKey: "notePrompt.dismissed.\(bookId).\(chapterKey)")
+        defaults.set(
+            true, forKey: Self.chapterEndSilenceKey(bookId: bookId, chapterKey: chapterKey))
     }
 
     /// The fingerprint the pace meter keys on: anything that changes how

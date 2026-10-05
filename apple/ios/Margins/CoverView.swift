@@ -80,7 +80,7 @@ struct TypesetCover: View {
             VStack(spacing: width * 0.06) {
                 Spacer(minLength: 0)
                 Text(title)
-                    .font(.custom("Charter", size: max(width * 0.13, 8)).weight(.semibold))
+                    .font(.custom(ReaderTypeface.serif.familyName, size: max(width * 0.13, 8)).weight(.semibold))
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
                     .minimumScaleFactor(0.6)
@@ -106,12 +106,4 @@ struct TypesetCover: View {
     }
 }
 
-extension Color {
-    /// A model-layer 0–255 RGB triple, straight through.
-    init(_ rgb: ReaderPalette.RGB) {
-        self.init(
-            red: Double(rgb.red) / 255,
-            green: Double(rgb.green) / 255,
-            blue: Double(rgb.blue) / 255)
-    }
-}
+

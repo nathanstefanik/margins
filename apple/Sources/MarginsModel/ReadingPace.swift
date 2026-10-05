@@ -97,12 +97,6 @@ public final class ReadingPace {
             : sorted[mid]
     }
 
-    /// Estimated minutes for `pagesRemaining` — rounded up so the reader
-    /// never sees "0 min" mid-chapter — nil until the pace is known.
-    public func minutesLeft(pagesRemaining: Int) -> Int? {
-        secondsPerPage.map { Int(ceil(Double(pagesRemaining) * $0 / 60)) }
-    }
-
     /// The chapter-local estimate for the footers: "Last page" on the
     /// final page, "<1 min left in chapter" under a minute, nil while the
     /// pace is unknown (callers fall back to the page count).

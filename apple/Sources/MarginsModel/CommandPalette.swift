@@ -22,7 +22,7 @@ public enum CommandPalette {
 
     /// Commands gated by state are only offered when valid — e.g. Bookmarks
     /// needs an open reader.
-    public enum Command: String, CaseIterable, Equatable, Sendable {
+    public enum Command: Equatable, Hashable, Sendable {
         case importBook
         case toggleSidebar
         case notesPage
@@ -30,17 +30,31 @@ public enum CommandPalette {
         case searchNotes
         case keyboardShortcuts
         case settings
-        case paperLight
-        case paperSepia
-        case paperDark
-        case paperNight
+        case paper(ReaderTheme)
         case paperMatchSystem
         case toggleJustify
         case toggleOrnaments
-        case indicatorPages
-        case indicatorTimeLeft
-        case indicatorNone
+        case pageIndicator(ReaderPageIndicator)
         case toggleFocus
+
+        /// Stable identifier for result ids — payloads rule out rawValue.
+        var id: String {
+            switch self {
+            case .importBook: "importBook"
+            case .toggleSidebar: "toggleSidebar"
+            case .notesPage: "notesPage"
+            case .bookmarks: "bookmarks"
+            case .searchNotes: "searchNotes"
+            case .keyboardShortcuts: "keyboardShortcuts"
+            case .settings: "settings"
+            case .paper(let theme): "paper-\(theme.rawValue)"
+            case .paperMatchSystem: "paperMatchSystem"
+            case .toggleJustify: "toggleJustify"
+            case .toggleOrnaments: "toggleOrnaments"
+            case .pageIndicator(let mode): "indicator-\(mode.rawValue)"
+            case .toggleFocus: "toggleFocus"
+            }
+        }
     }
 
     public struct Item: Identifiable, Equatable, Sendable {
@@ -151,31 +165,23 @@ public enum CommandPalette {
             items.append(
                 command(.toggleFocus, "Focus Mode", context.readerFocused ? "On" : "Off"))
         }
-        for (command, title) in [
-            (Command.paperLight, "Paper: Light"),
-            (.paperSepia, "Paper: Sepia"),
-            (.paperDark, "Paper: Dark"),
-            (.paperNight, "Paper: Night"),
-            (.paperMatchSystem, "Paper: Match System"),
-        ] {
-            items.append(self.command(command, title, "Reading"))
+        for theme in ReaderTheme.allCases {
+            items.append(command(.paper(theme), "Paper: \(theme.name)", "Reading"))
         }
+        items.append(command(.paperMatchSystem, "Paper: Match System", "Reading"))
         items.append(command(.toggleJustify, "Justify Text", context.justify ? "On" : "Off"))
         items.append(
             command(.toggleOrnaments, "Chapter Ornaments", context.ornaments ? "On" : "Off"))
-        for (command, title) in [
-            (Command.indicatorPages, "Page Indicator: Pages"),
-            (.indicatorTimeLeft, "Page Indicator: Time Left"),
-            (.indicatorNone, "Page Indicator: None"),
-        ] {
-            items.append(self.command(command, title, "Reading"))
+        for mode in ReaderPageIndicator.allCases {
+            items.append(
+                command(.pageIndicator(mode), "Page Indicator: \(mode.name)", "Reading"))
         }
         return items
     }
 
     private static func command(_ command: Command, _ title: String, _ subtitle: String) -> Item {
         Item(
-            id: "command-\(command.rawValue)",
+            id: "command-\(command.id)",
             title: title,
             subtitle: subtitle,
             group: .commands,

@@ -23,8 +23,8 @@ struct TypographyPopover: View {
                         .controlSize(.small)
                 }
                 if preferences.followsSystem {
-                    paperRow("Day", themes: [.light, .sepia], selection: $preferences.dayTheme)
-                    paperRow("Night", themes: [.dark, .night], selection: $preferences.nightTheme)
+                    paperRow("Day", themes: ReaderTheme.dayPapers, selection: $preferences.dayTheme)
+                    paperRow("Night", themes: ReaderTheme.nightPapers, selection: $preferences.nightTheme)
                 } else {
                     HStack(spacing: 10) {
                         ForEach(ReaderTheme.allCases, id: \.self) { theme in

@@ -9,9 +9,9 @@ import SwiftUI
 /// and a center tap reveals back, hamburger, bookmark, and the new-note affordance
 /// as overlays that never reflow the page. Note capture lives here too:
 /// the edit menu offers Note/Highlight on selections, the chrome carries
-/// the note button, and a quiet end-of-chapter prompt offers the
-/// contemplative note. Saving positions flushes on backgrounding: iOS
-/// will suspend you.
+/// the note button, and a chapter-end page pauses once per finished
+/// chapter to offer the contemplative note. Saving positions flushes on
+/// backgrounding: iOS will suspend you.
 struct ReaderScene: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader

@@ -28,7 +28,7 @@ public enum CoverTint {
             kCIInputExtentKey: CIVector(cgRect: extent),
         ])?.outputImage else { return nil }
         var bitmap = [UInt8](repeating: 0, count: 4)
-        let context = CIContext()
+        // One context for all renders — safe for concurrent use.
         context.render(
             area,
             toBitmap: &bitmap,
@@ -71,6 +71,9 @@ public enum CoverTint {
         var modified: Date?
         var rgb: ReaderPalette.RGB
     }
+
+    /// CIContext is safe for concurrent rendering — share one.
+    private static let context = CIContext()
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cache: [String: Entry] = [:]

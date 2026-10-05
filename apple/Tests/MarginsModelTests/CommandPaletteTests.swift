@@ -189,7 +189,7 @@ struct CommandPaletteTests {
         #expect(items.contains { $0.title == "Justify Text" && $0.subtitle == "On" })
         #expect(items.contains { $0.title == "Chapter Ornaments" && $0.subtitle == "Off" })
         #expect(items.contains { $0.title == "Paper: Sepia" })
-        #expect(items.contains { $0.title == "Page Indicator: Time Left" })
+        #expect(items.contains { $0.title == "Page Indicator: Time left" })
     }
 
     @Test("fuzzy filtering puts matching books first")

@@ -78,8 +78,16 @@ struct ChapterEndView: View {
     /// Step back into the finished chapter and open the notes pane on it
     /// (the reader has already advanced into the successor).
     private func writeThought() {
-        guard let book = reader.book else { return }
+        Self.leave(chapter, writing: true, reader: reader)
+    }
+
+    /// Leave the chapter-end page. `writing` also steps the reader back
+    /// into the finished chapter and opens its notes pane; plain continue
+    /// leaves the reader on the successor's first page. Shared by the
+    /// button and the shell key monitor.
+    static func leave(_ chapter: ChapterMeta, writing: Bool, reader: ReaderModel) {
         reader.dismissChapterEnd()
+        guard writing, let book = reader.book else { return }
         reader.open(book: book, chapter: chapter)
         ReaderController.evaluateInReader(
             "readerDisplay(\(ReaderController.javaScriptLiteral(reader.displayTarget)))")
