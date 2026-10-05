@@ -1,31 +1,33 @@
 import MarginsModel
 import SwiftUI
 
-/// The reading surface's paper palette, mirroring the palettes in
+/// The reading surface's paper palette — a thin `Color` adapter over
+/// `ReaderPalette`, which owns the values and stays mirrored by
 /// `reader.html` / `reader.js`.
 ///
 /// The chrome (sidebars, toolbars, panes) always uses system materials and
 /// colors; the reading page is the single place with its own palette, which
-/// the reader can flip between light and dark.
+/// the reader can flip between the light and dark papers.
 enum Paper {
-    /// Page background, matching reader.html's `#f4f1ea`.
-    static let lightBackground = Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
-
-    /// Muted ink for secondary text on light paper (chapter title in the
-    /// footer).
-    static let lightSecondaryInk = Color(red: 110 / 255, green: 104 / 255, blue: 94 / 255)
-
-    /// Page background, matching reader.html's `#1b1a18`.
-    static let darkBackground = Color(red: 27 / 255, green: 26 / 255, blue: 24 / 255)
-
-    /// Muted ink for secondary text on dark paper.
-    static let darkSecondaryInk = Color(red: 168 / 255, green: 161 / 255, blue: 150 / 255)
-
     static func background(_ theme: ReaderTheme) -> Color {
-        theme == .dark ? darkBackground : lightBackground
+        Color(theme.palette.background)
+    }
+
+    static func ink(_ theme: ReaderTheme) -> Color {
+        Color(theme.palette.ink)
     }
 
     static func secondaryInk(_ theme: ReaderTheme) -> Color {
-        theme == .dark ? darkSecondaryInk : lightSecondaryInk
+        Color(theme.palette.secondaryInk)
+    }
+}
+
+extension Color {
+    /// A model-layer 0–255 RGB triple, straight through.
+    init(_ rgb: ReaderPalette.RGB) {
+        self.init(
+            red: Double(rgb.red) / 255,
+            green: Double(rgb.green) / 255,
+            blue: Double(rgb.blue) / 255)
     }
 }

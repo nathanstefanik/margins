@@ -5,7 +5,7 @@
 #
 # Writes apple/VERSION (the source make-app.sh reads and release.yml's tag
 # check verifies) and the iOS MARKETING_VERSION (both configs); then creates
-# the annotated tag vX.Y.Z on a dedicated "CHORE Bump version" commit.
+# the annotated tag vX.Y.Z on a dedicated "Bump version to X.Y.Z" commit.
 #
 # CURRENT_PROJECT_VERSION (the TestFlight build number) is deliberately
 # NOT touched here: TestFlight rejects reused build numbers, so it is a
@@ -38,7 +38,7 @@ grep -q "MARKETING_VERSION = $version;" "$ios_proj" || {
 }
 
 git add apple/VERSION "$ios_proj"
-git commit -m "CHORE Bump version to $version"
+git commit -m "Bump version to $version"
 git tag -a "v$version" -m "v$version"
 
 echo "bumped to $version; push with: git push && git push origin v$version"

@@ -30,6 +30,60 @@ public final class LibraryModel {
     /// selection that also loads the book's metadata.
     public var selectedBookID: String?
 
+    /// The book the library offers to resume: the most recently read one
+    /// still in progress. Finished books (≥ 99%) drop out so the card
+    /// always points somewhere worth returning to.
+    public var continueBook: BookSummary? {
+        books
+            .filter { $0.lastReadAt != nil && ($0.progressPercent ?? 0) < 99 }
+            .max { ($0.lastReadAt ?? .distantPast) < ($1.lastReadAt ?? .distantPast) }
+    }
+
+    /// The title of the chapter `continueBook`'s saved position sits in,
+    /// loaded with the book list so the card can name where it resumes.
+    /// `nil` when there is no continue book or the position's chapter is
+    /// gone (re-import, evicted metadata).
+    public private(set) var continueChapterTitle: String?
+
+    /// The library's three shelves. Every book lands in exactly one:
+    /// `reading` — started (a saved position or any progress) but under
+    /// 99%; `upNext` — never opened; `finished` — at 99% or beyond.
+    public struct Shelves: Equatable {
+        public var reading: [BookSummary] = []
+        public var upNext: [BookSummary] = []
+        public var finished: [BookSummary] = []
+    }
+
+    /// Books partitioned into shelves. Within a shelf: Reading and
+    /// Finished newest-read first, Up next newest-added first.
+    public var shelves: Shelves {
+        var shelves = Shelves()
+        for book in books {
+            let progress = book.progressPercent ?? 0
+            if progress >= 99 {
+                shelves.finished.append(book)
+            } else if book.lastReadAt != nil || progress > 0 {
+                shelves.reading.append(book)
+            } else {
+                shelves.upNext.append(book)
+            }
+        }
+        let newestRead = { (a: BookSummary, b: BookSummary) in
+            (a.lastReadAt ?? .distantPast) > (b.lastReadAt ?? .distantPast)
+        }
+        shelves.reading.sort(by: newestRead)
+        shelves.finished.sort(by: newestRead)
+        shelves.upNext.sort { $0.addedAt > $1.addedAt }
+        return shelves
+    }
+
+    /// The display order: what you're reading, what's queued, what's done.
+    /// Selection movement follows this, not the raw list order.
+    public var orderedBooks: [BookSummary] {
+        let shelves = shelves
+        return shelves.reading + shelves.upNext + shelves.finished
+    }
+
     private let dataDir: String?
     private var store: CoreStore?
 
@@ -67,6 +121,7 @@ public final class LibraryModel {
         do {
             libraryRoot = try await store.libraryRoot()
             books = try await store.listBooks()
+            await updateContinueChapterTitle()
             notDownloadedBookIDs = await store.notDownloadedBookIDs()
             for id in notDownloadedBookIDs {
                 LibraryLocation.requestDownload(bookFilePath(id, "meta.json"))
@@ -419,10 +474,28 @@ public final class LibraryModel {
         return try? await store.readingPosition(bookId: bookId)
     }
 
-    /// Moves the sidebar selection by `delta` books (shell keyboard j/k).
+    /// Resolves the chapter `continueBook`'s saved position points at.
+    /// Called from `refresh()`, the one place `books` changes.
+    private func updateContinueChapterTitle() async {
+        guard let store, let book = continueBook else {
+            continueChapterTitle = nil
+            return
+        }
+        guard let position = try? await store.readingPosition(bookId: book.id),
+            let meta = try? await store.getBook(id: book.id),
+            let chapter = meta.chapters.first(where: { $0.key == position.chapterKey })
+        else {
+            continueChapterTitle = nil
+            return
+        }
+        continueChapterTitle = chapter.title
+    }
+
+    /// Moves the sidebar selection by `delta` books (shell keyboard j/k),
+    /// following the displayed shelf order rather than the raw list.
     public func moveLibrarySelection(_ delta: Int) {
-        guard !books.isEmpty else { return }
-        let ids = books.map(\.id)
+        let ids = orderedBooks.map(\.id)
+        guard !ids.isEmpty else { return }
         let currentIndex = selectedBookID.flatMap { ids.firstIndex(of: $0) } ?? (delta > 0 ? -1 : 0)
         let next = min(max(currentIndex + delta, 0), ids.count - 1)
         guard ids[next] != selectedBookID else { return }
@@ -569,6 +642,7 @@ public final class LibraryModel {
             if searchOpen {
                 helpOpen = false
                 bookmarksOpen = false
+                paletteOpen = false
             }
         }
     }
@@ -580,6 +654,7 @@ public final class LibraryModel {
             if helpOpen {
                 searchOpen = false
                 bookmarksOpen = false
+                paletteOpen = false
             }
         }
     }
@@ -591,8 +666,32 @@ public final class LibraryModel {
             if bookmarksOpen {
                 searchOpen = false
                 helpOpen = false
+                paletteOpen = false
             }
         }
+    }
+
+    /// Whether the ⌘K Go To… palette is presented (macOS). Mutually
+    /// exclusive with the other overlays; the shell monitor closes it on
+    /// Esc because the field's editor consumes the key.
+    public var paletteOpen = false {
+        didSet {
+            if paletteOpen {
+                searchOpen = false
+                helpOpen = false
+                bookmarksOpen = false
+            }
+        }
+    }
+
+    /// Presents the ⌘K Go To… palette.
+    public func requestPalette() {
+        paletteOpen = true
+    }
+
+    /// Dismisses the Go To… palette (Esc, click outside, running an item).
+    public func requestPaletteDismissal() {
+        paletteOpen = false
     }
 
     /// Presents the note search overlay (`/`, ⌘F).
@@ -623,6 +722,19 @@ public final class LibraryModel {
     /// Dismisses the bookmarks overlay (Esc, click outside, opening a pin).
     public func requestBookmarksDismissal() {
         bookmarksOpen = false
+    }
+
+    /// Read-only look at a chapter's note for the chapter-end page —
+    /// unlike `loadChapterNote` this never touches reader state.
+    public func chapterEndContent(
+        for chapter: ChapterMeta, in book: BookMeta
+    ) async -> ChapterEndContent {
+        guard let store else {
+            return ChapterEndContent.make(for: chapter, in: book, body: "", marks: [])
+        }
+        let note = try? await store.getChapterNote(bookId: book.id, chapterKey: chapter.key)
+        return ChapterEndContent.make(
+            for: chapter, in: book, body: note?.body ?? "", marks: note?.marks ?? [])
     }
 
     /// Loads the note for the reader's current chapter into its state.

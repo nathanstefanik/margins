@@ -4,23 +4,45 @@ EPUB reader with two frontends over one Swift core: a native SwiftUI macOS app a
 
 ## Commit messages
 
-Prefix every commit with a type tag and a short imperative summary:
+Follow Google's CL description guidance
+(https://google.github.io/eng-practices/review/developer/cl-descriptions.html).
+Commits before this rule used `FEAT`/`BUG`/`CHORE`/`DOCS`/`REFACTOR` prefixes
+and AI `Co-Authored-By` trailers; leave that history alone, don't copy it.
 
-| Prefix | Use for |
-|--------|---------|
-| `FEAT` | New user-facing capability |
-| `BUG` | Bug fix |
-| `CHORE` | Tooling, deps, formatting, config |
-| `DOCS` | Documentation only |
-| `REFACTOR` | Behavior-preserving code change |
+- **Subject:** one imperative sentence that stands alone in `git log
+  --oneline`. Sentence case, no trailing period, aim for 60 characters
+  (72 at most). No type tags or Conventional Commit prefixes.
+- **Body** (after a blank line) for anything non-trivial: what changed and
+  why, the context and decisions the diff doesn't show, and known
+  shortcomings or follow-ups. Plain text wrapped at 72 columns, no
+  Markdown.
+- **Trailers** in the final paragraph, one `Key: value` per line:
+  `Test:` (how it was verified, when not obvious), `Fixes:` (issue refs),
+  and `Assisted-by: <tool>` (e.g. `Assisted-by: Devin`) when an AI tool
+  materially wrote or shaped the change.
+- Never add `Co-authored-by` for AI tools, "Generated with …" lines, emojis,
+  or AI-added `Signed-off-by`. The human committer is the author.
+- PR titles follow the subject rules; no "Generated with …" footers.
 
 Examples:
 
 ```
-FEAT Add chapter note autosave on :w
-BUG Fix OPF spine parsing for nested paths
-CHORE Reformatted Swift with swift-format
-DOCS Document library sync workflow
+Add chapter note autosave on :w
+Fix OPF spine parsing for nested paths
+Reformat Swift with swift-format
+Document the library sync workflow
+```
+
+```
+Keep the reflow anchor instead of ratcheting it backward
+
+After each settled reflow the transaction recaptured the new page start
+as the anchor. That start is never later than the old anchor, so
+successive resizes could land the reader a page early. Pin the anchor
+until the next navigation.
+
+Test: swift test --package-path apple --filter ReaderLayoutIntegration
+Assisted-by: Devin
 ```
 
 ## Project map
@@ -63,6 +85,33 @@ scripts/               # make-app.sh, make-mas-pkg.sh, bump-version.sh,
   `apple/ios/Margins/DesignTokens.swift`.
 - GPL-3.0-or-later — preserve license on distribution
 
+## Pitfalls
+
+Mistakes that have already cost time here:
+
+- **SwiftUI `App` structs aren't views.** Don't wire models together in
+  `App.init()`: the `@State` instances read there are discarded before the
+  scene installs its own. Wire them from a root view's `.task`, as
+  `MarginsApp.wireModels` does. For the same reason, read
+  `@Environment(\.colorScheme)` in a root view; in an `App` it doesn't
+  follow appearance changes.
+- **macOS keys:** Return arrives as `"\r"` (keypad Enter as ETX).
+  `ShellKeyboardController` maps both to the keymap's `"Enter"` by key code.
+  In overlays the field editor can take Return before `onSubmit`; the ⌘K
+  palette handles keys with its own monitor for that reason.
+- **Reader palettes live in four places:** `ReaderPalette.swift`,
+  `READER_THEMES` in `reader.js`, `reader.html`'s pre-paint rules, and the
+  highlight table. Change them together; `ReaderResourceTests` fails on
+  drift.
+- **epub.js quirks** (highlights render in the outer document,
+  `mapping.section()` is empty, no `orphans`/`widows`) are in the engine
+  contract in `docs/testing/macos-reader-layout.md`. Read it before
+  touching `reader.js` pagination or highlights.
+- **Runtime checks** of `build/Margins.app` share the user's preferences
+  domain, and an installed copy can shadow the build if launched by name.
+  Follow `docs/testing/macos-runtime.md` (seeded `/tmp` library, launch by
+  path, restore every key you write).
+
 ## Useful commands
 
 ```bash
@@ -84,7 +133,7 @@ Everything needs **full Xcode** (26.x): the iOS SDK for `ios-build` and the
 iOS targets. The iOS library root lives in the iCloud Documents container
 when available, falling back to local `Documents/Library` at runtime
 (`LibraryLocation`); DEBUG launch env vars
-(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,EVICT,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR}_FIXTURE`)
+(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,EVICT,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR,CHAPTER_END}_FIXTURE`)
 drive simulator verification flows. FileStore refuses evicted iCloud reads rather than
 waiting; see `docs/architecture.md` (iOS) and `docs/testing/ios-offline.md`.
 Device signing uses the team ID in

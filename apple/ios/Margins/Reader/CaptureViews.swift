@@ -42,6 +42,7 @@ struct CaptureSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 TextField("Quick thought…", text: $text, axis: .vertical)
+                    .font(.custom(reader.preferences.typeface.familyName, size: 17, relativeTo: .body))
                     .focused($focused)
                     .onSubmit { commit() }
                     .lineLimit(1...3)
@@ -377,6 +378,7 @@ struct ChapterNoteEditorSheet: View {
                             set: { reader.noteBody = $0 }
                         )
                     )
+                    .font(.custom(reader.preferences.typeface.familyName, size: 17, relativeTo: .body))
                     .focused($editorFocused)
                     .scrollContentBackground(.hidden)
                     .background(
@@ -386,7 +388,7 @@ struct ChapterNoteEditorSheet: View {
                     .padding(4)
                     if reader.noteBody.isEmpty {
                         Text("What did this chapter leave you with…")
-                            .font(.body)
+                            .font(.custom(reader.preferences.typeface.familyName, size: 17, relativeTo: .body))
                             .foregroundStyle(.tertiary)
                             .padding(.top, 12)
                             .padding(.leading, 12)

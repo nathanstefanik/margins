@@ -63,6 +63,7 @@ public final class Library {
             }
             var meta = loadedMeta
             backfillChapters(bookDir: path, meta: &meta)
+            let position = readPosition(bookID: meta.id)
             summaries.append(
                 BookSummary(
                     id: meta.id,
@@ -72,7 +73,8 @@ public final class Library {
                     chapterCount: meta.chapters.count,
                     notesCount: try Notes.countNotes(bookDir: path),
                     cover: meta.cover ?? backfillCover(bookDir: path, meta: meta),
-                    progressPercent: readPosition(bookID: meta.id)?.percent
+                    progressPercent: position?.percent,
+                    lastReadAt: position?.updatedAt
                 )
             )
         }

@@ -9,9 +9,9 @@ import SwiftUI
 /// and a center tap reveals back, hamburger, bookmark, and the new-note affordance
 /// as overlays that never reflow the page. Note capture lives here too:
 /// the edit menu offers Note/Highlight on selections, the chrome carries
-/// the note button, and a quiet end-of-chapter prompt offers the
-/// contemplative note. Saving positions flushes on backgrounding: iOS
-/// will suspend you.
+/// the note button, and a chapter-end page pauses once per finished
+/// chapter to offer the contemplative note. Saving positions flushes on
+/// backgrounding: iOS will suspend you.
 struct ReaderScene: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ReaderModel.self) private var reader
@@ -23,6 +23,11 @@ struct ReaderScene: View {
 
     /// Shared with the library grid so the reader grows out of the cover.
     let zoomNamespace: Namespace.ID
+    /// The `matchedTransitionSource` the reader zooms out of — a grid
+    /// cover is its book id, the continue card is `"continue-<id>"`. The
+    /// library picks it per open path because the card and the grid share
+    /// no id.
+    let zoomSourceID: String
 
     /// The page rests without chrome; a center tap reveals it.
     @State private var chromeVisible = false
@@ -40,14 +45,22 @@ struct ReaderScene: View {
     @State private var flashVisible = false
     /// The badge's current copy — "Mark saved", "Added to …".
     @State private var flashText = "Mark saved"
+    /// Bumped on every flash so a second badge cancels the first's
+    /// pending dismissal instead of being cut short by it.
+    @State private var flashGeneration = 0
+    /// Trigger counter for the mark-saved / passage-added haptic.
+    @State private var flashTick = 0
+    /// Trigger counter for the bookmark-toggle haptic.
+    @State private var bookmarkTick = 0
+    /// Footer scrubber state: the dragged page and whether a drag is live.
+    @State private var scrubValue: Double = 1
+    @State private var scrubbing = false
     /// A selection queued for the Add to Notebook sheet.
     @State private var notebookCandidate: NotebookAddCandidate?
     /// The "Search Library" sheet's own query state.
     @State private var searchLibraryPresented = false
     @State private var searchLibrarySearch = LibrarySearch()
-    /// The chapter just finished (last page turned past); drives the quiet
-    /// write-the-note prompt.
-    @State private var finishedChapter: ChapterMeta?
+
     /// The representable's coordinator, handed over on creation; the
     /// chrome drives the page through it.
     @State private var bridge: ReaderBridge?
@@ -84,9 +97,9 @@ struct ReaderScene: View {
             .accessibilityAction(named: Text(bookmarkActionName)) {
                 bookmarkPage()
             }
-            if let finished = finishedChapter {
-                notePrompt(for: finished)
-                    .transition(promptTransition)
+            if let finished = reader.chapterEnd {
+                chapterEndPage(for: finished)
+                    .transition(.opacity)
             }
             if flashVisible {
                 flashBadge
@@ -106,13 +119,17 @@ struct ReaderScene: View {
                 .safeAreaPadding(.bottom)
         }
         .animation(reduceMotion ? nil : DesignTokens.Motion.chrome, value: chromeVisible)
+        // A gentle pulse when a mark lands or a passage joins a notebook;
+        // a tick when a bookmark flips.
+        .sensoryFeedback(.success, trigger: flashTick)
+        .sensoryFeedback(.selection, trigger: bookmarkTick)
         // The reading surface owns its own palette (light by default, dark
         // on request), applied to the page and to the floating chrome ink.
         // The chrome itself follows the system appearance: sheets presented
         // from the reader are native views and must not inherit the paper.
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationTransition(.zoom(sourceID: reader.book?.id ?? "", in: zoomNamespace))
+        .navigationTransition(.zoom(sourceID: zoomSourceID, in: zoomNamespace))
         // The custom chrome carries the back affordance, the title, and
         // the actions and fades with `chromeVisible`; the system bar would
         // be a second, always-on header stacked on top of it (and push
@@ -199,6 +216,11 @@ struct ReaderScene: View {
                 reader.flushPositionSave()
                 reader.flushNoteSave()
             }
+            if scenePhase != .active {
+                // A break isn't a page turn — the next interval starts
+                // fresh after returning.
+                reader.pace.noteJump()
+            }
         }
         .task(id: "\(reader.chapter?.key ?? "")#\(app.downloadGeneration)") {
             // The chapter note (body + marks) feeds the sheets, the
@@ -213,7 +235,6 @@ struct ReaderScene: View {
         .onChange(
             of: reader.progress,
             { oldValue, newValue in
-                detectChapterFinish(to: newValue)
                 restoreHighlightsIfReady()
                 revealPendingPassageIfReady()
             }
@@ -221,6 +242,11 @@ struct ReaderScene: View {
         .onAppear {
             appliedJumpGeneration = library.passageJumpGeneration
             loadedBookId = reader.book?.id
+            #if DEBUG
+                if ProcessInfo.processInfo.environment["MARGINS_CHAPTER_END_FIXTURE"] != nil {
+                    reader.debugShowChapterEnd()
+                }
+            #endif
         }
         .onChange(of: library.passageJumpGeneration) {
             applyPassageJumpIfNeeded()
@@ -318,12 +344,19 @@ struct ReaderScene: View {
         }
     }
 
+    /// Quick confirmation badge: fade in, hold, fade out. Each call bumps
+    /// a generation so a second flash's countdown replaces the first's
+    /// rather than cutting it short, and the haptic trigger rides with it.
     private func flash(_ text: String = "Mark saved") {
         flashText = text
-        withAnimation(reduceMotion ? nil : DesignTokens.Motion.chrome) { flashVisible = true }
+        flashTick += 1
+        flashGeneration += 1
+        let generation = flashGeneration
+        withAnimation(reduceMotion ? nil : DesignTokens.Motion.flashIn) { flashVisible = true }
         Task {
-            try? await Task.sleep(for: .seconds(1.4))
-            withAnimation(reduceMotion ? nil : DesignTokens.Motion.chrome) { flashVisible = false }
+            try? await Task.sleep(for: .seconds(1.6))
+            guard generation == flashGeneration else { return }
+            withAnimation(reduceMotion ? nil : DesignTokens.Motion.flashOut) { flashVisible = false }
         }
     }
 
@@ -379,11 +412,7 @@ struct ReaderScene: View {
         .accessibilityLabel(label)
     }
 
-    /// Motion explains structure: the prompt rises from its control. Under
-    /// Reduce Motion only opacity changes.
-    private var promptTransition: AnyTransition {
-        reduceMotion ? .opacity : .scale(scale: 0.9, anchor: .bottom).combined(with: .opacity)
-    }
+
 
     /// The running head: chapter title centered at the top of the paper,
     /// with back / bookmark / new note / hamburger fading in around it. The title is
@@ -450,14 +479,100 @@ struct ReaderScene: View {
     /// home-indicator safe area because these overlays sit on the
     /// full-bleed ZStack, not the inset webview.
     private var footerOverlay: some View {
-        Text(pageText)
-            .font(pageNumberFont)
-            .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
-            .lineLimit(1)
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .allowsHitTesting(false)
-            .transition(.opacity)
+        Group {
+            if chromeVisible, let progress = reader.progress {
+                scrubberRail(progress)
+            } else {
+                Text(pageText)
+                    .font(pageNumberFont)
+                    .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(height: chromeVisible ? nil : 44)
+        .transition(.opacity)
+    }
+
+    /// The running foot with chrome up: one glass rail — Contents, the
+    /// chapter chevrons, and a page scrubber. A drag lifts "12 of 40"
+    /// above the rail in the reader typeface and jumps on release.
+    private func scrubberRail(_ progress: ReaderProgress) -> some View {
+        VStack(spacing: 6) {
+            if scrubbing {
+                Text("\(Int(scrubValue)) of \(progress.totalPages)")
+                    .font(pageNumberFont)
+                    .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
+            }
+            HStack(spacing: DesignTokens.Spacing.actions) {
+                railButton("list.bullet", "Contents") { tocPresented = true }
+                railButton("chevron.backward", "Previous chapter") { stepChapter(-1) }
+                    .disabled(!canStepChapter(-1))
+                Slider(
+                    value: $scrubValue,
+                    in: 1...Double(max(progress.totalPages, 1)),
+                    step: 1,
+                    onEditingChanged: { editing in
+                        scrubbing = editing
+                        if !editing {
+                            bridge?.goToPage(Int(scrubValue))
+                        }
+                    }
+                )
+                .disabled(progress.totalPages <= 1)
+                .accessibilityLabel("Page")
+                .accessibilityValue("\(Int(scrubValue)) of \(progress.totalPages)")
+                // A tick per integer crossed; gated on scrubbing so the
+                // resync after a page lands stays silent.
+                .sensoryFeedback(.selection, trigger: scrubbing ? Int(scrubValue) : 0)
+                railButton("chevron.forward", "Next chapter") { stepChapter(1) }
+                    .disabled(!canStepChapter(1))
+            }
+            .padding(.horizontal, DesignTokens.Spacing.controlInset)
+            .padding(.vertical, DesignTokens.Spacing.chrome)
+            .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .padding(.horizontal, DesignTokens.Spacing.grid)
+        .onAppear { scrubValue = Double(progress.page) }
+        .onChange(of: progress.page) { _, page in
+            if !scrubbing { scrubValue = Double(page) }
+        }
+    }
+
+    /// Plain icon button inside the rail's shared glass — the pill is the
+    /// control plane, so the buttons don't carry their own glass.
+    private func railButton(
+        _ systemName: String,
+        _ label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.body.weight(.medium))
+                .frame(
+                    width: DesignTokens.Control.readerTarget,
+                    height: DesignTokens.Control.readerTarget
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    /// Whether the spine has a chapter `delta` steps from the current one.
+    private func canStepChapter(_ delta: Int) -> Bool {
+        guard let book = reader.book, let chapter = reader.chapter,
+            let index = book.chapters.firstIndex(where: { $0.key == chapter.key })
+        else { return false }
+        return book.chapters.indices.contains(index + delta)
+    }
+
+    private func stepChapter(_ delta: Int) {
+        guard delta > 0 ? reader.nextChapter() != nil : reader.previousChapter() != nil
+        else { return }
+        chromeVisible = false
+        bridge?.jumpToChapter(reader.displayTarget)
     }
 
     /// Chapter title and page number follow the reader's Serif/Sans/Easy
@@ -472,12 +587,23 @@ struct ReaderScene: View {
     }
 
     /// Chapter-local page counts (what epub.js reports); the app has no
-    /// whole-book page total, only a percent.
+    /// whole-book page total, only a percent. Under Time left the resting
+    /// footer shows the pace estimate, falling back to the page number
+    /// until enough turns have been seen.
     private var pageText: String {
         guard let progress = reader.progress else { return "" }
-        return chromeVisible
+        let pageFallback =
+            chromeVisible
             ? "\(progress.page) of \(max(progress.totalPages, 1))"
             : "\(progress.page)"
+        switch reader.preferences.pageIndicator {
+        case .pages:
+            return pageFallback
+        case .timeLeft:
+            return reader.pace.shortTimeLeftText(for: progress) ?? pageFallback
+        case .none:
+            return ""
+        }
     }
 
     private func newNote() {
@@ -494,6 +620,7 @@ struct ReaderScene: View {
     }
 
     private func bookmarkPage() {
+        bookmarkTick += 1
         Task {
             let result = await library.toggleBookmark(reader: reader)
             if case .choose(let pins) = result {
@@ -515,99 +642,32 @@ struct ReaderScene: View {
         pendingDestination = nil
     }
 
-    // MARK: End-of-chapter prompt
+    // MARK: Chapter-end page
 
-    /// Quiet and dismissible: offered once when the reader pages past a
-    /// chapter's last page, silenced per finished chapter. The predicate
-    /// (shared with the tests) demands the new chapter be the finished
-    /// chapter's immediate successor, so TOC jumps don't trigger it.
-    private func detectChapterFinish(to newProgress: ReaderProgress?) {
-        defer {
-            previousTurn = (reader.chapter?.key ?? "", newProgress)
-        }
-        // `reader.chapter` has already followed the relocation; the
-        // previous snapshot holds the chapter that was just left.
-        guard let previous = previousTurn,
-            let finished = ReaderModel.finishedChapter(
-                previousKey: previous.key,
-                previousProgress: previous.progress,
-                newKey: reader.chapter?.key ?? "",
-                newProgress: newProgress,
-                chapters: reader.book?.chapters ?? []
-            )
-        else { return }
-        let silencedKey = "notePrompt.dismissed.\(reader.book?.id ?? "").\(finished.key)"
-        if !UserDefaults.standard.bool(forKey: silencedKey) {
-            withAnimation(reduceMotion ? nil : DesignTokens.Motion.prompt) {
-                finishedChapter = finished
-            }
-        }
-    }
-
-    @State private var previousTurn: (key: String, progress: ReaderProgress?)?
-
-    private func notePrompt(for chapter: ChapterMeta) -> some View {
-        VStack(spacing: 8) {
-            Text("Finished \"\(chapter.title)\"")
-                .font(.footnote.weight(.medium))
-            Text("Write the chapter note while it's fresh?")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ViewThatFits {
-                HStack(spacing: DesignTokens.Spacing.actions) {
-                    promptDismissButton(for: chapter)
-                    promptWriteButton(for: chapter)
-                }
-                VStack(spacing: DesignTokens.Spacing.actions) {
-                    promptDismissButton(for: chapter)
-                    promptWriteButton(for: chapter)
-                }
-            }
-            .controlSize(.large)
-        }
-        .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.Radius.card, style: .continuous))
-        .padding(.bottom, 16)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        .accessibilityElement(children: .contain)
-    }
-
-    private func promptDismissButton(for chapter: ChapterMeta) -> some View {
-        Button {
-            let bookID = reader.book?.id ?? ""
-            UserDefaults.standard.set(
-                true,
-                forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
-            )
-            withAnimation(reduceMotion ? nil : DesignTokens.Motion.prompt) {
-                finishedChapter = nil
-            }
-        } label: {
-            Text("Not now")
-        }
-        .buttonStyle(.bordered)
-    }
-
-    private func promptWriteButton(for chapter: ChapterMeta) -> some View {
-        Button {
-            let bookID = reader.book?.id ?? ""
-            UserDefaults.standard.set(
-                true,
-                forKey: "notePrompt.dismissed.\(bookID).\(chapter.key)"
-            )
-            finishedChapter = nil
+    /// The opaque end-of-chapter sheet: a pause once per finished chapter
+    /// showing a couple of its marked quotes and a taste of its note. Tap
+    /// or swipe anywhere (outside the buttons) continues; hardware page
+    /// keys are intercepted in `KeyHandlingWebView` so they dismiss
+    /// instead of turning under it.
+    private func chapterEndPage(for chapter: ChapterMeta) -> some View {
+        ChapterEndPage(
+            chapter: chapter,
+            theme: reader.preferences.theme,
+            face: reader.preferences.typeface.familyName
+        ) { writing in
+            reader.dismissChapterEnd()
+            guard writing, let book = reader.book else { return }
             // The reader has already followed the page turn into
             // the finished chapter's successor, and the editor
             // always edits `reader.chapter`: step back before
             // opening it, or the note lands on the next chapter.
-            guard let book = reader.book else { return }
             reader.open(book: book, chapter: chapter)
             bridge?.jumpToChapter(reader.displayTarget)
             editorPresented = true
-        } label: {
-            Text("Write note")
+        } loadContent: {
+            guard let book = reader.book else { return nil }
+            return await library.chapterEndContent(for: chapter, in: book)
         }
-        .buttonStyle(.borderedProminent)
     }
 
     // MARK: Input

@@ -15,6 +15,10 @@ const readerStartCfi = readerParams.get("cfi");
 // width-aware one/two-page policy below. iOS omits it and keeps the
 // original full-width single-column behavior.
 const readerIsDesktop = readerParams.get("platform") === "macos";
+// The book's declared language, read from the OPF by the shell — needed
+// for hyphenation when justify is on. Only fills section documents that
+// declare no language of their own; absent stays absent (never invented).
+const readerBookLanguage = readerParams.get("lang") || null;
 
 let readerBook = null;
 let readerRendition = null;
@@ -30,6 +34,12 @@ let readerTypography = null;
 // single source). Easy carries fixed extra spacing for low-vision
 // readers — a face property, not a user control.
 let readerFontFace = null;
+// Prose options from the shell: justified alignment (with hyphenation)
+// and the chapter-opening ornaments. Both stay off under the Easy face —
+// its deliberate spacing is the point — and Easy is also why the checks
+// below key on the face rather than a combined flag.
+let readerJustify = false;
+let readerOrnaments = true;
 
 const READER_FONT_FACES = {
   serif: { family: "Charter, 'Iowan Old Style', ui-serif, Georgia, serif" },
@@ -61,14 +71,43 @@ const READER_FONT_FACE_CSS = `
   }
 `;
 // Reading-surface palettes, mirrored by the native chrome (Paper.swift /
-// DesignTokens.swift) and reader.html's pre-paint styles. Keep in sync.
+// DesignTokens.swift, both driven by ReaderPalette.swift) and reader.html's
+// pre-paint styles. Keep in sync — ReaderResourceTests asserts it.
 const READER_THEMES = {
-  light: { background: "#f4f1ea", ink: "#111111", scheme: "light" },
-  dark: { background: "#1b1a18", ink: "#e6e2da", scheme: "dark" },
+  light: { background: "#f4f1ea", ink: "#111111", secondaryInk: "#6e685e", scheme: "light" },
+  sepia: { background: "#efe6d2", ink: "#2e2519", secondaryInk: "#7a6a55", scheme: "light" },
+  dark: { background: "#1b1a18", ink: "#e6e2da", secondaryInk: "#a8a196", scheme: "dark" },
+  night: { background: "#0f0e0d", ink: "#a9a398", secondaryInk: "#6f6a62", scheme: "dark" },
+};
+// Passage highlights and the reveal flash per paper: a warm wash on the
+// light papers (multiply darkens toward the ink) and a dimmer glow on the
+// dark papers (multiply would crush to nothing there). readerApplyTheme
+// pushes these onto --margins-hl-* on the outer document, so a theme
+// switch restyles marks already on the page.
+const READER_HIGHLIGHTS = {
+  light: { fill: "rgba(255, 213, 79, 0.45)", blend: "multiply" },
+  sepia: { fill: "rgba(226, 176, 74, 0.40)", blend: "multiply" },
+  dark: { fill: "rgba(214, 170, 90, 0.26)", blend: "normal" },
+  night: { fill: "rgba(190, 150, 80, 0.20)", blend: "normal" },
 };
 // The current surface theme; the URL carries the initial choice so the
 // class set in reader.html matches until Swift calls readerSetTheme.
-let readerTheme = readerParams.get("theme") === "dark" ? "dark" : "light";
+let readerTheme = Object.prototype.hasOwnProperty.call(
+  READER_THEMES,
+  readerParams.get("theme"),
+)
+  ? readerParams.get("theme")
+  : "light";
+// The highlight look rides CSS variables on the outer document: epub.js
+// renders its annotation <g> into the view's pane (the top page, not a
+// section doc), so a rule in reader.html reaches it and a theme switch
+// repaints marks already on the page — no attribute surgery.
+function readerApplyHighlightVars() {
+  const hl = READER_HIGHLIGHTS[readerTheme];
+  document.documentElement.style.setProperty("--margins-hl-fill", hl.fill);
+  document.documentElement.style.setProperty("--margins-hl-blend", hl.blend);
+}
+readerApplyHighlightVars();
 // True once the first display finished; relayouts are only queued after that.
 let readerOpened = false;
 let readerRelayoutTimer = null;
@@ -846,8 +885,15 @@ function readerTeardownViewportObserver() {
 function readerApplyTheme(theme) {
   readerTheme = Object.prototype.hasOwnProperty.call(READER_THEMES, theme) ? theme : "light";
   const palette = READER_THEMES[readerTheme];
-  document.documentElement.classList.toggle("reader-dark", readerTheme === "dark");
+  document.documentElement.classList.remove(
+    "reader-light",
+    "reader-sepia",
+    "reader-dark",
+    "reader-night",
+  );
+  document.documentElement.classList.add(`reader-${readerTheme}`);
   document.documentElement.style.colorScheme = palette.scheme;
+  readerApplyHighlightVars();
   if (readerRendition) {
     readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
   }
@@ -871,6 +917,16 @@ function readerStyleContents(contents) {
   if (!contents || !contents.document) {
     return;
   }
+  // Hyphenation needs a language: the section's own declaration wins;
+  // only when it has neither lang nor xml:lang do we lend it the book's.
+  const sectionHtml = contents.document.documentElement;
+  if (
+    readerBookLanguage &&
+    !sectionHtml.getAttribute("lang") &&
+    !sectionHtml.getAttribute("xml:lang")
+  ) {
+    sectionHtml.setAttribute("lang", readerBookLanguage);
+  }
   const palette = READER_THEMES[readerTheme];
   // Every text container follows the surface ink: publisher rules like
   // `p { color: #000 }` would otherwise paint near-invisible text on the
@@ -891,13 +947,14 @@ function readerStyleContents(contents) {
       "color": "inherit !important",
       "background-color": "transparent !important",
     },
-    // The jump-to-context reveal flash: epub.js passes the class through
-    // to its highlight SVG; inline styles are also set at add time, so
-    // this rule is a fallback for the same warm yellow.
-    ".margins-reveal": {
-      "fill": "rgba(255, 213, 79, 0.45) !important",
+    // Passage highlights and the jump-to-context reveal flash. The pane
+    // actually lives in the outer document where --margins-hl-* own the
+    // look (see reader.html); this per-section copy is belt-and-braces
+    // for any view that mounts its marks inside the section.
+    ".margins-highlight, .margins-reveal": {
+      "fill": `${READER_HIGHLIGHTS[readerTheme].fill} !important`,
       "fill-opacity": "1 !important",
-      "mix-blend-mode": "multiply",
+      "mix-blend-mode": `${READER_HIGHLIGHTS[readerTheme].blend} !important`,
     },
   };
   const face = readerFontFace ? READER_FONT_FACES[readerFontFace] : null;
@@ -918,11 +975,46 @@ function readerStyleContents(contents) {
     rules["body, p, li, div"] = {
       "font-size": "inherit !important",
     };
+    // Flow-text refinements: tidy line breaking, real kerning and
+    // ligatures, and hanging punctuation. Left unset by publisher sheets
+    // they just apply; a publisher that picks its own keeps it (no
+    // !important). orphans/widows are deliberately absent: as pagination
+    // constraints they push paragraphs across column boundaries, which
+    // broke the reflow anchor's keep-the-passage guarantee.
+    const proseAlign = "body, p, li, dd, dt, blockquote, td, th, figcaption";
+    rules[proseAlign] = {
+      "text-wrap": "pretty",
+      "hanging-punctuation": "first allow-end",
+      "font-kerning": "normal",
+      "font-variant-ligatures": "common-ligatures",
+    };
     // Publisher sheets commonly justify body text; ragged-right reads
     // better and avoids the uneven word spacing justification creates.
+    // Justify is the opt-in counterpoint, hyphenated via the section's
+    // language. Easy always stays ragged — its spacing is the point.
     // Headings and other display elements keep their own alignment.
-    rules["body, p, li, dd, dt, blockquote, td, th, figcaption"] = {
-      "text-align": "left !important",
+    if (readerJustify && readerFontFace !== "easy") {
+      rules[proseAlign]["text-align"] = "justify !important";
+      rules[proseAlign]["hyphens"] = "auto !important";
+      rules[proseAlign]["-webkit-hyphens"] = "auto !important";
+    } else {
+      rules[proseAlign]["text-align"] = "left !important";
+    }
+  }
+  // Chapter-opening ornaments: a three-line initial letter over a
+  // small-caps first line on the paragraph right after a chapter
+  // heading. Adjacency selectors only — books without that markup get
+  // nothing, and paragraphs leading with an image are skipped.
+  if (readerOrnaments && readerFontFace !== "easy") {
+    const opening = ":is(h1, h2) + p:not(:has(img, svg))";
+    rules[`${opening}::first-letter`] = {
+      "-webkit-initial-letter": "3",
+      "initial-letter": "3",
+      "margin-right": "0.08em",
+    };
+    rules[`${opening}::first-line`] = {
+      "font-variant-caps": "small-caps",
+      "letter-spacing": "0.03em",
     };
   }
   // With a face chosen, html carries the family and everything that
@@ -971,6 +1063,22 @@ function readerSetFontFace(face) {
   }
   readerTypographyRevision += 1;
   // Different glyphs re-break lines; the column count can change.
+  readerApplyPageLayout();
+  if (readerRendition) {
+    readerQueueRelayout();
+  }
+}
+
+// Prose options (called from Swift): justified alignment (with
+// hyphenation) and the chapter-opening ornaments. Both re-break lines
+// like a face change — restyle every section, then re-paginate.
+function readerSetProse(justify, ornaments) {
+  readerJustify = justify === true;
+  readerOrnaments = ornaments !== false;
+  if (readerRendition) {
+    readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
+  }
+  readerTypographyRevision += 1;
   readerApplyPageLayout();
   if (readerRendition) {
     readerQueueRelayout();
@@ -1293,18 +1401,59 @@ function readerScrollTop() {
   readerDisplayTarget(target).catch(readerShowError);
 }
 
+// `G`: the last page of the current section. The old `display()` on the
+// current view's end CFI stayed on the same spread — the bottom is a
+// page-numbered destination, so it rides the scrubber's machinery and
+// inherits its navigation bookkeeping (token bump, pending-layout
+// invalidation, settled-CFI pin, relocated emit).
 function readerScrollBottom() {
   if (!readerRendition) {
     return;
   }
   const location = readerRendition.currentLocation();
-  if (location && location.end && location.end.cfi) {
-    readerNavigationToken += 1;
-    readerInvalidatePendingLayout();
-    const displayed = readerRendition.display(location.end.cfi);
-    displayed.then(readerCaptureSettledCfi, () => {});
-    displayed.catch(readerShowError);
+  const total =
+    (location && location.start && location.start.displayed.total) || 0;
+  if (total > 0) {
+    readerGoToPage(total);
   }
+}
+
+// Page scrubber: a 1-based page inside the current section. The engine's
+// own mapping turns a column's pixel band into the CFI at its start — the
+// same machinery the relocated reporter uses to number pages — so
+// display() lands on the spread holding the page and emits the normal
+// relocated. readerDisplayTarget's navigation bookkeeping makes the jump
+// count as a user navigation for the reflow anchor, exactly like a turn.
+function readerGoToPage(page) {
+  const manager = readerRendition && readerRendition.manager;
+  const view = readerRendition && readerRendition.views
+    ? readerRendition.views().first()
+    : null;
+  if (!manager || !manager.mapping || !view || !view.section || !view.contents) {
+    return;
+  }
+  const location = readerRendition.currentLocation();
+  const total =
+    (location && location.start && location.start.displayed.total) || 0;
+  if (!total) {
+    return;
+  }
+  const n = Math.min(Math.max(Math.round(page) || 1, 1), total);
+  const layoutProps = manager.layout && (manager.layout.props || manager.layout);
+  const columnWidth = layoutProps && layoutProps.columnWidth;
+  const gap = (layoutProps && layoutProps.gap) || 0;
+  if (!columnWidth) {
+    return;
+  }
+  // Column n's pixel band — the same arithmetic findRanges uses when it
+  // numbers pages: columnWidth wide, gap between columns.
+  const start = (n - 1) * (columnWidth + gap);
+  const end = n * columnWidth + (n - 1) * gap;
+  const range = manager.mapping.page(view.contents, view.section.cfiBase, start, end);
+  if (!range || !range.start) {
+    return;
+  }
+  readerDisplayTarget(range.start).catch(readerShowError);
 }
 
 window.readerOpen = readerOpen;
@@ -1312,8 +1461,10 @@ window.readerDisplay = readerDisplay;
 window.readerScrollBy = readerScrollBy;
 window.readerScrollTop = readerScrollTop;
 window.readerScrollBottom = readerScrollBottom;
+window.readerGoToPage = readerGoToPage;
 window.readerApplyTypography = readerApplyTypography;
 window.readerSetFontFace = readerSetFontFace;
+window.readerSetProse = readerSetProse;
 window.readerSetTheme = readerApplyTheme;
 window.readerRelayout = readerQueueRelayout;
 // Desktop layout API: the shell selects the mode; the page resolves the
@@ -1348,7 +1499,13 @@ window.readerHighlight = function (cfiRange) {
     return;
   }
   try {
-    readerRendition.annotations.add("highlight", cfiRange, {}, () => {});
+    readerRendition.annotations.add(
+      "highlight",
+      cfiRange,
+      {},
+      () => {},
+      "margins-highlight",
+    );
   } catch (error) {
     console.error("readerHighlight failed:", error);
   }
@@ -1530,7 +1687,6 @@ window.readerRevealText = async function (needle) {
           {},
           () => {},
           "margins-reveal",
-          { fill: "rgba(255, 213, 79, 0.45)", "fill-opacity": "1" },
         );
         setTimeout(() => {
           try {

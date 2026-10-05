@@ -60,6 +60,116 @@ struct ReaderLayoutIntegrationTests {
         #expect(back["cfi"] as? String == firstCfi)
     }
 
+    @Test("the page scrubber jumps to a page and clamps at the ends")
+    func goToPageJumpsAndClamps() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        let first = try await harness.waitForRelocation(after: 0)
+        let total = try #require(first["totalPages"] as? Int)
+        #expect(total > 2)
+        #expect(first["page"] as? Int == 1)
+
+        // Middle of the chapter: the landed page brackets the target.
+        let target = min(3, total)
+        try await harness.evaluate("readerGoToPage(\(target))")
+        let jumped = try await harness.waitForRelocationChange(from: first)
+        let page = try #require(jumped["page"] as? Int)
+        let endPage = (jumped["endPage"] as? Int) ?? page
+        #expect(page <= target && endPage >= target)
+
+        // Out of range clamps: below 1 → first page, past the end → last.
+        try await harness.evaluate("readerGoToPage(0)")
+        let back = try await harness.waitForRelocationChange(from: jumped)
+        #expect(back["page"] as? Int == 1)
+
+        try await harness.evaluate("readerGoToPage(9999)")
+        let last = try await harness.waitForRelocationChange(from: back)
+        let lastPage = try #require(last["page"] as? Int)
+        let lastEnd = (last["endPage"] as? Int) ?? lastPage
+        #expect(lastEnd == total)
+    }
+
+    @Test("the page scrubber lands on the spread containing the page")
+    func goToPageLandsOnContainingSpread() async throws {
+        let harness = try makeHarness(width: 1500, height: 800)
+        defer { harness.dismantle() }
+        try await harness.load()
+        _ = try await harness.waitForRelocation(after: 0)
+        _ = try await harness.waitForDivisor(2)
+        // Big type stretches the chapter to three spreads so a mid-chapter
+        // even page can prove the landing spread brackets it.
+        try await harness.evaluate("readerApplyTypography(300,1.6,72,'%')")
+        try await harness.waitForLayoutSettled()
+        // The reflow re-anchors at the same CFI, so read the new total off
+        // the live location rather than waiting on a relocation change.
+        let total = try #require(
+            (try await harness.evaluate(
+                "readerRendition.currentLocation().start.displayed.total") as? NSNumber
+            )?.intValue)
+        #expect(total >= 6)
+        let settled = harness.lastRelocation
+
+        // Even page: the spread shows (3–4), not (4–5) — the spread that
+        // contains the requested page.
+        try await harness.evaluate("readerGoToPage(4)")
+        let even = try await harness.waitForRelocationChange(from: settled)
+        let evenPage = try #require(even["page"] as? Int)
+        let evenEnd = try #require(even["endPage"] as? Int)
+        #expect(evenPage <= 4 && evenEnd >= 4)
+
+        // Odd page: same bracketing for the other side of a spread.
+        try await harness.evaluate("readerGoToPage(6)")
+        let odd = try await harness.waitForRelocationChange(from: even)
+        let oddPage = try #require(odd["page"] as? Int)
+        let oddEnd = try #require(odd["endPage"] as? Int)
+        #expect(oddPage <= 6 && oddEnd >= 6)
+    }
+
+    @Test("gg and G jump to the chapter's first and last pages")
+    func scrollTopAndBottomJumpToChapterEnds() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        let first = try await harness.waitForRelocation(after: 0)
+        let total = try #require(first["totalPages"] as? Int)
+        #expect(total > 2)
+        #expect(first["page"] as? Int == 1)
+
+        // `G` lands on the spread containing the last page.
+        try await harness.evaluate("readerScrollBottom()")
+        let bottom = try await harness.waitForRelocationChange(from: first)
+        let bottomPage = try #require(bottom["page"] as? Int)
+        let bottomEnd = (bottom["endPage"] as? Int) ?? bottomPage
+        #expect(bottomPage <= total && bottomEnd >= total)
+
+        // `gg` returns to the chapter's first page.
+        try await harness.evaluate("readerScrollTop()")
+        let top = try await harness.waitForRelocationChange(from: bottom)
+        #expect(top["page"] as? Int == 1)
+    }
+
+    @Test("a text-size change keeps the passage after a page scrub")
+    func goToPageThenReflowKeepsPassage() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        let first = try await harness.waitForRelocation(after: 0)
+        let total = try #require(first["totalPages"] as? Int)
+        #expect(total > 2)
+
+        try await harness.evaluate("readerGoToPage(\(min(4, total)))")
+        _ = try await harness.waitForRelocationChange(from: first)
+        try await harness.waitForReaderIdle()
+        let anchor = try await anchorParagraph(harness)
+
+        try await harness.evaluate("readerApplyTypography(160,1.6,72,'%')")
+        try await harness.waitForLayoutSettled()
+
+        let after = try await harness.visibleParagraphIDs()
+        #expect(after.contains(anchor), "anchor \(anchor) left the screen after a text-size change")
+    }
+
     @Test("a saved CFI reopens the same passage")
     func cfiNavigationKeepsThePassageVisible() async throws {
         let harness = try makeHarness()
@@ -137,10 +247,10 @@ struct ReaderLayoutIntegrationTests {
         let narrow = try await harness.waitForDivisor(1)
         // One page: the measure spans the stage minus epub.js's gap/2 body
         // padding on each side.
-        let narrowRects = try await harness.visibleParagraphRects()
-        let narrowMeasure = try #require(narrowRects.first?.width)
-        // Text fragments run slightly inside the paragraph box; the page's
-        // measure must not overflow it, and text must fill most of it.
+        // The column measure is a wholly-visible paragraph's block width —
+        // text fragment boxes vary with wrapping and ornaments.
+        let narrowWidths = try await harness.visibleParagraphBlockWidths()
+        let narrowMeasure = try #require(narrowWidths.first?.width)
         #expect(narrowMeasure <= narrow.stageWidth - 40 + 4)
         #expect(narrowMeasure >= narrow.stageWidth - 40 - 60)
 
@@ -185,8 +295,9 @@ struct ReaderLayoutIntegrationTests {
             ) as? Double
         #expect(abs((margins ?? 0) - (left ?? 0)) < 1)
         #expect(geometry.viewerWidth < geometry.innerWidth)
-        let rects = try await harness.visibleParagraphRects()
-        let measure = try #require(rects.first?.width)
+        // Same measure source as `automaticRespondsToWidth`.
+        let widths = try await harness.visibleParagraphBlockWidths()
+        let measure = try #require(widths.first?.width)
         #expect(measure <= geometry.stageWidth - 40 + 4)
         #expect(measure >= geometry.stageWidth - 40 - 60)
     }
@@ -1038,6 +1149,154 @@ struct ReaderLayoutIntegrationTests {
 
     private func advertisedLineWidth(_ harness: ReaderLayoutHarness) async throws -> Double {
         try await harness.evaluate("readerTypography.lineWidthCh") as? Double ?? 72
+    }
+
+    // MARK: Prose options (justify, ornaments, book language)
+
+    /// `text-align|hyphens` computed on a body paragraph — the pair
+    /// `readerSetProse` switches. WebKit reports `-webkit-hyphens`.
+    private func proseAlignAndHyphens(
+        _ harness: ReaderLayoutHarness, paragraphID: String = "p-1-01"
+    ) async throws -> (align: String?, hyphens: String?) {
+        let css = try await harness.evaluate(
+            """
+            (function () {
+              var doc = readerRendition.getContents()[0].document;
+              var p = doc.querySelector("#\(paragraphID)");
+              var cs = doc.defaultView.getComputedStyle(p);
+              var h = cs.getPropertyValue("hyphens")
+                || cs.getPropertyValue("-webkit-hyphens");
+              return cs.textAlign + "|" + h;
+            })()
+            """
+        ) as? String
+        let parts = css?.split(separator: "|") ?? []
+        return (parts.first.map(String.init), parts.count > 1 ? String(parts[1]) : nil)
+    }
+
+    /// `-webkit-initial-letter|font-variant-caps` computed on the
+    /// chapter-opening paragraph — the ornament pair.
+    private func openingOrnaments(
+        _ harness: ReaderLayoutHarness, paragraphID: String = "p-1-01"
+    ) async throws -> (letter: String?, caps: String?) {
+        let css = try await harness.evaluate(
+            """
+            (function () {
+              var doc = readerRendition.getContents()[0].document;
+              var p = doc.querySelector("#\(paragraphID)");
+              var view = doc.defaultView;
+              var fl = view.getComputedStyle(p, "::first-letter");
+              var fn = view.getComputedStyle(p, "::first-line");
+              var il = fl.getPropertyValue("-webkit-initial-letter")
+                || fl.getPropertyValue("initial-letter");
+              return il + "|" + fn.getPropertyValue("font-variant-caps");
+            })()
+            """
+        ) as? String
+        let parts = css?.split(separator: "|") ?? []
+        return (parts.first.map(String.init), parts.count > 1 ? String(parts[1]) : nil)
+    }
+
+    /// The fixture's publisher sheet justifies `p`; the reader forces
+    /// left until justify is on — then alignment flips and hyphenation
+    /// turns on (the load carried a book language).
+    @Test("justify switches body text to justified with hyphenation")
+    func justifyTogglesAlignment() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load(language: "en")
+
+        var prose = try await proseAlignAndHyphens(harness)
+        #expect(prose.align == "left")
+        #expect(prose.hyphens != "auto")
+
+        _ = try await harness.evaluate("readerSetProse(true, true); \"sent\"")
+        prose = try await proseAlignAndHyphens(harness)
+        #expect(prose.align == "justify")
+        #expect(prose.hyphens == "auto")
+
+        _ = try await harness.evaluate("readerSetProse(false, true); \"sent\"")
+        prose = try await proseAlignAndHyphens(harness)
+        #expect(prose.align == "left")
+        #expect(prose.hyphens != "auto")
+    }
+
+    /// The Easy face ignores justify — its spacing is the point.
+    @Test("the Easy face keeps flush-left text even when justify is on")
+    func easyStaysFlushLeft() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load(language: "en")
+
+        _ = try await harness.evaluate(
+            "readerSetFontFace(\"easy\"); readerSetProse(true, true); \"sent\""
+        )
+        let prose = try await proseAlignAndHyphens(harness)
+        #expect(prose.align == "left")
+
+        _ = try await harness.evaluate("readerSetFontFace(\"serif\"); \"sent\"")
+        let after = try await proseAlignAndHyphens(harness)
+        #expect(after.align == "justify")
+        #expect(after.hyphens == "auto")
+    }
+
+    /// With ornaments on, the paragraph right after the chapter heading
+    /// gets a three-line initial letter and a small-caps first line;
+    /// off — or the Easy face — leaves it plain. A mid-chapter paragraph
+    /// is never ornamented.
+    @Test("chapter ornaments mark only the opening paragraph")
+    func ornamentsMarkOpeningParagraph() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+
+        var ornament = try await openingOrnaments(harness)
+        #expect(ornament.letter == "3")
+        #expect(ornament.caps == "small-caps")
+        let mid = try await openingOrnaments(harness, paragraphID: "p-1-02")
+        #expect(mid.letter == "normal" || mid.letter == nil || mid.letter == "")
+        #expect(mid.caps != "small-caps")
+
+        _ = try await harness.evaluate("readerSetProse(false, false); \"sent\"")
+        ornament = try await openingOrnaments(harness)
+        #expect(ornament.letter == "normal" || ornament.letter == "")
+
+        _ = try await harness.evaluate(
+            "readerSetFontFace(\"easy\"); readerSetProse(false, true); \"sent\""
+        )
+        ornament = try await openingOrnaments(harness)
+        #expect(ornament.letter == "normal" || ornament.letter == "")
+    }
+
+    /// The book language lands on a section only when the document
+    /// declares none of its own — the fixture's html carries lang="en",
+    /// so it wins; stripped, the book's fills the gap.
+    @Test("the book language fills unlang'd sections but never overrides")
+    func bookLanguageFillsOnlyWhenAbsent() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load(language: "de")
+
+        // The fixture's own declaration wins over the URL's book language.
+        var lang = try await harness.evaluate(
+            "readerRendition.getContents()[0].document.documentElement.getAttribute(\"lang\")"
+        ) as? String
+        #expect(lang == "en")
+
+        // A section with no language of its own takes the book's.
+        lang = try await harness.evaluate(
+            """
+            (function () {
+              var contents = readerRendition.getContents()[0];
+              var html = contents.document.documentElement;
+              html.removeAttribute("lang");
+              html.removeAttribute("xml:lang");
+              readerStyleContents(contents);
+              return html.getAttribute("lang");
+            })()
+            """
+        ) as? String
+        #expect(lang == "de")
     }
 }
 #endif

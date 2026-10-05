@@ -25,8 +25,13 @@ struct ContentView: View {
     @Environment(LibraryModel.self) private var model
     @Environment(ClubModel.self) private var clubs
     @Environment(ReaderModel.self) private var reader
+    @Environment(\.colorScheme) private var colorScheme
     @State private var keyboardController: ShellKeyboardController?
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
+    /// The split state before a reading-session collapse; nil while the
+    /// sidebar stands. Focus mode and the hide-sidebar-while-reading
+    /// preference share this one restore slot.
+    @State private var sidebarVisibilityBeforeReading: NavigationSplitViewVisibility?
 
     var body: some View {
         @Bindable var clubs = clubs
@@ -67,12 +72,32 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
+        .overlay {
+            if model.paletteOpen {
+                CommandPaletteOverlay()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
         .animation(.easeOut(duration: 0.15), value: model.searchOpen)
         .animation(.easeOut(duration: 0.15), value: model.helpOpen)
         .animation(.easeOut(duration: 0.15), value: model.bookmarksOpen)
+        .animation(.easeOut(duration: 0.15), value: model.paletteOpen)
+        // Reading-session sidebar collapse: focus mode and the Settings
+        // preference both want the sidebar gone; the sidebar restores only
+        // when neither applies (so leaving focus mode with the preference
+        // on keeps it tucked).
+        .onChange(of: wantsReadingSidebarCollapse) { updateSidebarForReading() }
+        .onAppear { updateSidebarForReading() }
         .onChange(of: reader.isOpen) {
             if !reader.isOpen {
                 model.requestBookmarksDismissal()
+                Task {
+                    // The session's position writes land first so the
+                    // library list (and the continue card) show where
+                    // the book actually stopped.
+                    await reader.flushPositionSaveAndWait()
+                    await model.refresh()
+                }
             }
         }
         .sheet(isPresented: $clubs.createSheetPresented) {
@@ -85,7 +110,23 @@ struct ContentView: View {
                 .environment(model)
                 .environment(clubs)
         }
+        // The reader's resolved paper follows the system appearance when
+        // the preference says so; the root view owns the push so the URL
+        // theme is right before the reader's first paint.
+        .onAppear { reader.preferences.systemIsDark = colorScheme == .dark }
+        .onChange(of: colorScheme) {
+            reader.preferences.systemIsDark = colorScheme == .dark
+        }
+        // Away-from-app time isn't reading time: a backgrounding resets
+        // the pace meter's running interval.
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSApplication.willResignActiveNotification)
+        ) { _ in
+            reader.pace.noteJump()
+        }
         .task {
+            MarginsApp.wireModels(model: model, reader: reader)
             await model.activate()
             if let store = model.coreStore {
                 await clubs.activate(store: store)
@@ -96,10 +137,31 @@ struct ContentView: View {
         }
         .onAppear {
             if keyboardController == nil {
-                let controller = ShellKeyboardController(model: model, reader: reader)
+                let controller = ShellKeyboardController(
+                    model: model, reader: reader, clubs: clubs)
                 controller.start()
                 keyboardController = controller
             }
+        }
+    }
+
+    /// A reading session collapses the sidebar when focus mode is on or
+    /// the Settings preference asks for it.
+    private var wantsReadingSidebarCollapse: Bool {
+        reader.isOpen && (reader.focusMode || reader.preferences.hideSidebarWhileReading)
+    }
+
+    private func updateSidebarForReading() {
+        if wantsReadingSidebarCollapse {
+            if sidebarVisibilityBeforeReading == nil {
+                sidebarVisibilityBeforeReading = sidebarVisibility
+            }
+            if sidebarVisibility != .detailOnly {
+                sidebarVisibility = .detailOnly
+            }
+        } else if let before = sidebarVisibilityBeforeReading {
+            sidebarVisibility = before
+            sidebarVisibilityBeforeReading = nil
         }
     }
 

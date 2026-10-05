@@ -1,12 +1,39 @@
 import Foundation
 import Observation
 
-/// The reading surface's palette. Independent of the system appearance:
-/// chrome and sheets follow the system while the page keeps this choice.
-/// Persisted as a chrome preference, like the typography below.
+/// The reading surface's palette. The resolved value every consumer reads
+/// — `Paper`, the webview bridge, and reader.js get a concrete paper out
+/// of it regardless of whether the user picked a fixed theme or follows
+/// the system appearance.
 public enum ReaderTheme: String, CaseIterable, Sendable {
     case light
+    case sepia
     case dark
+    case night
+
+    /// The name the pickers and accessibility labels show.
+    public var name: String {
+        switch self {
+        case .light: "Light"
+        case .sepia: "Sepia"
+        case .dark: "Dark"
+        case .night: "Night"
+        }
+    }
+
+    /// Light papers the day preference accepts; the night preference
+    /// accepts the dark pair.
+    public var isDayPaper: Bool { !palette.isDark }
+
+    /// The light pair, in swatch order.
+    public static var dayPapers: [ReaderTheme] {
+        allCases.filter(\.isDayPaper)
+    }
+
+    /// The dark pair, in swatch order.
+    public static var nightPapers: [ReaderTheme] {
+        allCases.filter { !$0.isDayPaper }
+    }
 }
 
 /// The reader's three faces on both platforms. Charter and Seravek ship
@@ -27,6 +54,23 @@ public enum ReaderTypeface: String, CaseIterable, Sendable {
         case .serif: "Charter"
         case .sans: "Seravek"
         case .easy: "Atkinson Hyperlegible Next"
+        }
+    }
+}
+
+/// What the page indicator shows while reading: the chapter-local page
+/// count, an estimate from the reader's own pace, or nothing.
+public enum ReaderPageIndicator: String, CaseIterable, Sendable {
+    case pages
+    case timeLeft
+    case none
+
+    /// The name the pickers and accessibility labels show.
+    public var name: String {
+        switch self {
+        case .pages: "Pages"
+        case .timeLeft: "Time left"
+        case .none: "None"
         }
     }
 }
@@ -62,24 +106,76 @@ public final class ReaderPreferences {
     /// Cream paper is the reader's native look; the app chrome follows the
     /// system appearance instead.
     public static let defaultTheme = ReaderTheme.light
+    /// The papers `followsSystem` falls back to per side of the system
+    /// appearance and the default for each stored key.
+    public static let defaultDayTheme = ReaderTheme.light
+    public static let defaultNightTheme = ReaderTheme.dark
     /// Serif by default: the printed-spread reading face.
     public static let defaultTypeface = ReaderTypeface.serif
 
+    /// Flush-left is the default read; justification is opt-in.
+    public static let defaultJustify = false
+    /// Drop cap and small caps at chapter openings; off means plain.
+    public static let defaultOrnaments = true
+
+    /// The default page indicator: the plain page count.
+    public static let defaultPageIndicator = ReaderPageIndicator.pages
+    public static let defaultPauseAtChapterEnds = true
+
     private static let themeKey = "reader.theme"
+    private static let followsSystemKey = "reader.theme.followsSystem"
+    private static let dayThemeKey = "reader.theme.day"
+    private static let nightThemeKey = "reader.theme.night"
     private static let typefaceKey = "reader.typeface"
+    private static let justifyKey = "reader.justify"
+    private static let ornamentsKey = "reader.ornaments"
+    private static let pageIndicatorKey = "reader.pageIndicator"
+    private static let hideSidebarKey = "reader.hideSidebarWhileReading"
+    private static let chapterEndPauseKey = "reader.chapterEndPause"
 
     private let defaults: UserDefaults
-    private var _theme: ReaderTheme
+    private var _fixedTheme: ReaderTheme
+    private var _followsSystem: Bool
+    private var _dayTheme: ReaderTheme
+    private var _nightTheme: ReaderTheme
     private var _typeface: ReaderTypeface
+    private var _justify: Bool
+    private var _ornaments: Bool
+    private var _pageIndicator: ReaderPageIndicator
+    private var _hideSidebarWhileReading: Bool
+    private var _pauseAtChapterEnds: Bool
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        _theme =
-            ReaderTheme(rawValue: defaults.string(forKey: Self.themeKey) ?? "")
-            ?? Self.defaultTheme
+        let storedTheme = defaults.string(forKey: Self.themeKey)
+        _fixedTheme =
+            storedTheme.flatMap(ReaderTheme.init(rawValue:)) ?? Self.defaultTheme
+        // Fresh installs follow the system; a stored `reader.theme` means
+        // the user already picked a paper, so they keep it.
+        _followsSystem =
+            defaults.object(forKey: Self.followsSystemKey) as? Bool
+            ?? (storedTheme == nil)
+        // The day/night slots only accept their side of the palette; a
+        // foreign or unknown stored value resets to that side's default.
+        _dayTheme =
+            ReaderTheme(rawValue: defaults.string(forKey: Self.dayThemeKey) ?? "")
+            .flatMap { $0.isDayPaper ? $0 : nil } ?? Self.defaultDayTheme
+        _nightTheme =
+            ReaderTheme(rawValue: defaults.string(forKey: Self.nightThemeKey) ?? "")
+            .flatMap { $0.isDayPaper ? nil : $0 } ?? Self.defaultNightTheme
         _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
+        _justify = defaults.bool(forKey: Self.justifyKey)
+        _ornaments =
+            defaults.object(forKey: Self.ornamentsKey) as? Bool ?? Self.defaultOrnaments
+        _pageIndicator =
+            ReaderPageIndicator(rawValue: defaults.string(forKey: Self.pageIndicatorKey) ?? "")
+            ?? Self.defaultPageIndicator
+        _hideSidebarWhileReading = defaults.bool(forKey: Self.hideSidebarKey)
+        _pauseAtChapterEnds =
+            defaults.object(forKey: Self.chapterEndPauseKey) as? Bool
+            ?? Self.defaultPauseAtChapterEnds
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)
@@ -117,13 +213,146 @@ public final class ReaderPreferences {
         #endif
     }
 
-    /// The reading surface's palette, light cream by default.
+    /// The resolved paper everyone reads. With `followsSystem` on it
+    /// answers the day/night choice for the current system appearance;
+    /// setting it picks a fixed paper and turns following off, so the old
+    /// direct-pick call sites behave as they always did.
     public var theme: ReaderTheme {
-        get { _theme }
+        get { _followsSystem ? (systemIsDark ? _nightTheme : _dayTheme) : _fixedTheme }
         set {
-            _theme = newValue
+            _fixedTheme = newValue
+            _followsSystem = false
             defaults.set(newValue.rawValue, forKey: Self.themeKey)
+            defaults.set(false, forKey: Self.followsSystemKey)
         }
+    }
+
+    /// Whether the paper follows the system appearance. Defaults to true
+    /// on a fresh install and to false when a stored `reader.theme` says
+    /// the user already chose one.
+    public var followsSystem: Bool {
+        get { _followsSystem }
+        set {
+            _followsSystem = newValue
+            defaults.set(newValue, forKey: Self.followsSystemKey)
+        }
+    }
+
+    /// The paper used while the system is light and `followsSystem` is
+    /// on. Only the light papers are accepted.
+    public var dayTheme: ReaderTheme {
+        get { _dayTheme }
+        set {
+            guard newValue.isDayPaper else { return }
+            _dayTheme = newValue
+            defaults.set(newValue.rawValue, forKey: Self.dayThemeKey)
+        }
+    }
+
+    /// The paper used while the system is dark and `followsSystem` is
+    /// on. Only the dark papers are accepted.
+    public var nightTheme: ReaderTheme {
+        get { _nightTheme }
+        set {
+            guard !newValue.isDayPaper else { return }
+            _nightTheme = newValue
+            defaults.set(newValue.rawValue, forKey: Self.nightThemeKey)
+        }
+    }
+
+    /// The current system appearance, pushed in by each app's root view
+    /// (`@Environment(\.colorScheme)`). Not persisted.
+    public var systemIsDark = false
+
+    /// Justified body text with hyphenation. The Easy face ignores it —
+    /// its spacing is the point.
+    public var justify: Bool {
+        get { _justify }
+        set {
+            _justify = newValue
+            defaults.set(newValue, forKey: Self.justifyKey)
+        }
+    }
+
+    /// Drop cap and small caps on the paragraph opening a chapter.
+    public var ornaments: Bool {
+        get { _ornaments }
+        set {
+            _ornaments = newValue
+            defaults.set(newValue, forKey: Self.ornamentsKey)
+        }
+    }
+
+    /// The page indicator mode the footers show. Not part of macOS's
+    /// Reset Typography — it is display chrome, not typography.
+    public var pageIndicator: ReaderPageIndicator {
+        get { _pageIndicator }
+        set {
+            _pageIndicator = newValue
+            defaults.set(newValue.rawValue, forKey: Self.pageIndicatorKey)
+        }
+    }
+
+    /// macOS: collapse the library sidebar for the duration of a reading
+    /// session, restoring the previous split state on close. Off by
+    /// default. The sidebar stays collapsed while either focus mode or
+    /// this setting applies and restores when neither does.
+    public var hideSidebarWhileReading: Bool {
+        get { _hideSidebarWhileReading }
+        set {
+            _hideSidebarWhileReading = newValue
+            defaults.set(newValue, forKey: Self.hideSidebarKey)
+        }
+    }
+
+    /// Pause on the chapter-end page when a forward turn runs past a
+    /// chapter's last page into its successor.
+    public var pauseAtChapterEnds: Bool {
+        get { _pauseAtChapterEnds }
+        set {
+            _pauseAtChapterEnds = newValue
+            defaults.set(newValue, forKey: Self.chapterEndPauseKey)
+        }
+    }
+
+    // MARK: Chapter-end page silences
+
+    /// `notePrompt.dismissed.<bookId>.<chapterKey>` — the original iOS
+    /// prompt's silence key, kept so already-dismissed chapters stay
+    /// silent. Marked when the page is *shown*: each chapter pauses once.
+    private static func chapterEndSilenceKey(bookId: String, chapterKey: String) -> String {
+        "notePrompt.dismissed.\(bookId).\(chapterKey)"
+    }
+
+    public func chapterEndPageSilenced(bookId: String, chapterKey: String) -> Bool {
+        defaults.bool(forKey: Self.chapterEndSilenceKey(bookId: bookId, chapterKey: chapterKey))
+    }
+
+    /// Marks the chapter's end page as shown (or dismissed) — it will not
+    /// pause again.
+    public func silenceChapterEndPage(bookId: String, chapterKey: String) {
+        defaults.set(
+            true, forKey: Self.chapterEndSilenceKey(bookId: bookId, chapterKey: chapterKey))
+    }
+
+    /// The fingerprint the pace meter keys on: anything that changes how
+    /// many words land on a page. Both platforms' knobs are included so
+    /// the key only differs when the effective layout differs.
+    public var typographyKey: String {
+        var parts = [
+            "face=\(_typeface.rawValue)",
+            "justify=\(_justify)",
+            "ornaments=\(_ornaments)",
+        ]
+        #if os(iOS)
+        parts.append("step=\(_fontStep)")
+        #else
+        parts.append("size=\(_fontSize)")
+        parts.append("lh=\(_lineHeight)")
+        parts.append("lw=\(_lineWidth)")
+        parts.append("layout=\(_pageLayout.rawValue)")
+        #endif
+        return parts.joined(separator: "|")
     }
 
     /// The chosen face. The whole book follows it (publisher families are
@@ -279,6 +508,8 @@ public final class ReaderPreferences {
         lineHeight = Self.defaultLineHeight
         lineWidth = Self.defaultLineWidth
         typeface = Self.defaultTypeface
+        justify = Self.defaultJustify
+        ornaments = Self.defaultOrnaments
     }
 
     private static func clamp(_ value: Double, _ lower: Double, _ upper: Double) -> Double {

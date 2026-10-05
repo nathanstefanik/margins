@@ -203,6 +203,12 @@ final class ReaderBridge: NSObject {
         let webView = KeyHandlingWebView(frame: .zero, configuration: configuration)
         webView.onKey = { [weak self] direction in
             self?.callbacks.userPageTurn()
+            // The chapter-end page owns page keys while it's up: they
+            // dismiss it instead of turning the page it covers.
+            if self?.reader.chapterEnd != nil {
+                self?.reader.dismissChapterEnd()
+                return
+            }
             switch direction {
             case .forward: self?.pageForward()
             case .back: self?.pageBack()
@@ -270,6 +276,12 @@ final class ReaderBridge: NSObject {
         evaluate("readerDisplay(\(Self.javaScriptLiteral(target)))")
     }
 
+    /// Jumps to a 1-based page inside the current chapter (the footer's
+    /// page scrubber).
+    func goToPage(_ page: Int) {
+        evaluate("readerGoToPage(\(page))")
+    }
+
     /// Re-measure paginated columns after the webview's layout changes
     /// (chrome show/hide resizes the page).
     func relayout() {
@@ -334,7 +346,7 @@ final class ReaderBridge: NSObject {
     /// the system appearance, not this.
     private func applyTheme() {
         let theme = reader.preferences.theme
-        webView?.overrideUserInterfaceStyle = theme == .dark ? .dark : .light
+        webView?.overrideUserInterfaceStyle = theme.palette.isDark ? .dark : .light
         webView?.underPageBackgroundColor = UIColor(DesignTokens.Paper.background(theme))
         evaluate("readerSetTheme(\(Self.javaScriptLiteral(theme.rawValue)))")
     }
@@ -348,6 +360,7 @@ final class ReaderBridge: NSObject {
             "readerApplyTypography(\(preferences.fontSizePx),\(ReaderPreferences.iosLineHeight),0,'px')"
         )
         evaluate("readerSetFontFace(\(Self.javaScriptLiteral(preferences.typeface.rawValue)))")
+        evaluate("readerSetProse(\(preferences.justify),\(preferences.ornaments))")
     }
 
     private func observePreferences() {
@@ -356,6 +369,8 @@ final class ReaderBridge: NSObject {
             _ = preferences.theme
             _ = preferences.fontStep
             _ = preferences.typeface
+            _ = preferences.justify
+            _ = preferences.ornaments
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -378,6 +393,11 @@ final class ReaderBridge: NSObject {
             // before readerSetTheme arrives (no cream flash in dark).
             URLQueryItem(name: "theme", value: reader.preferences.theme.rawValue),
         ]
+        // The book's declared language: justified hyphenation needs it,
+        // and section documents that omit lang inherit the book's.
+        if let language = reader.book?.language, !language.isEmpty {
+            queryItems.append(URLQueryItem(name: "lang", value: language))
+        }
         if let cfi = reader.resumeCfi {
             queryItems.append(URLQueryItem(name: "cfi", value: cfi))
         }

@@ -72,11 +72,11 @@ struct CreateClubSheet: View {
             if displayName.isEmpty, let saved = clubs.identity.displayName {
                 displayName = saved
             }
-            selectedBookID = library.selectedBookID ?? library.books.first?.id
+            selectedBookID = library.selectedBookID ?? library.orderedBooks.first?.id
         }
         .onChange(of: library.books.count) {
             if selectedBookID == nil {
-                selectedBookID = library.selectedBookID ?? library.books.first?.id
+                selectedBookID = library.selectedBookID ?? library.orderedBooks.first?.id
             }
         }
     }

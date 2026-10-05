@@ -8,7 +8,20 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 
 - Import and browse EPUBs from a local library
 - Progress feedback while importing EPUBs
+- Library shelves — Reading / Up next / Finished — plus a continue-reading
+  card (iOS) and resume (macOS)
 - Paginated reader with vim-style keybindings
+- Reading papers: Light, Sepia, Dark, Night, or follow the system —
+  matching the reading surface on both apps
+- Justified text and chapter ornaments (drop cap + small caps) on both apps
+- Chapter-scoped page scrubber: hover the footer on macOS, chrome rail on iOS
+- Page indicator modes — page count, learned "~N min left" reading pace,
+  or none
+- Chapter-end page: pausing past a chapter's last page shows its marked
+  quotes and note, with Write a thought / Continue
+- `f` focus mode on macOS: sidebar and toolbar hide, footer fades when idle
+- ⌘K command palette on macOS: fuzzy go-to for books, chapters, and commands
+- Typeset placeholder covers: paper + ink per title, drawn in both apps
 - Per-chapter markdown notes with YAML frontmatter
 - Compiled per-book **notes page** (`N`) with one-click markdown export,
   copy-all, and clear-all (with a confirmation prompt)
@@ -124,9 +137,10 @@ macOS keybindings:
 | `N` | Compiled notes page for the selected book (book view; also ⇧⌘N) |
 | `t` | Toggle outline / contents views on the notes page |
 | `i` / `Enter` | Open and focus the notes pane (reader) |
+| `f` | Focus mode — sidebar and toolbar hide, footer fades when idle (reader) |
 | `b` | Toggle bookmark (reader) |
 | `B` | Bookmarks list (reader) |
-| `Esc` | Notes editor → reader; reader → close notes pane; notes page → book detail; pane closed → library |
+| `Esc` | Notes editor → reader; reader → close notes pane; focus mode → reader; notes page → book detail; pane closed → library |
 | `l` | Library (from the reader); back to book detail (notes page) |
 | `o` | Import EPUB (also ⌘O) |
 | `Enter` | Open selected book (library) |
@@ -134,17 +148,20 @@ macOS keybindings:
 | `?` | Keyboard shortcuts cheat sheet (also ⌘/) |
 | ⌘S | Save note |
 | ⌘+ (or ⌘=) / ⌘− / ⌘0 | Bigger / smaller / reset text size |
+| ⌘K | Go To… command palette (books, chapters, commands) |
 | ⌘B | Toggle the library sidebar |
 | ⌘, | Settings (typography, library directory) |
 | Trackpad | Two-finger scroll turns pages |
 
 macOS reader layout: the typography popover (textformat button) offers
-**Automatic**, **One Page**, and **Two Pages**. Automatic uses a single
-centered column or a two-page spread based on the actual window width and
-text size; One Page always keeps one column; Two Pages falls back to one
-when the minimum readable measure cannot fit (the popover says so). The
-choice persists locally under `reader.pageLayout.macos` and is separate
-from Reset Typography. Footer page numbers are chapter-local and describe
+text size, the reader face, **Automatic** / **One Page** / **Two Pages**
+page layout, line width and height, justified text, chapter ornaments,
+and the page indicator. Automatic uses a single centered column or a
+two-page spread based on the actual window width and text size; One Page
+always keeps one column; Two Pages falls back to one when the minimum
+readable measure cannot fit (the popover says so). The layout choice
+persists locally under `reader.pageLayout.macos` and is separate from
+Reset Typography. Footer page numbers are chapter-local and describe
 what is visible — "Pages 4–5 of 20" for a spread, "Page 20 of 20" for a
 single page. The iOS reader keeps its full-width single column.
 
@@ -196,6 +213,11 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
   simulator-verified on iOS with a DEBUG club fixture
 - Commonplace **notebooks** and full-text **library search** (iOS), with
   mark quotes and thoughts searchable on both platforms
+- **Reader calm pass** on both apps: continue-reading cards, library
+  shelves (Reading / Up next / Finished), reading papers with
+  follow-system, justify + chapter ornaments, page scrubber and
+  page-indicator modes, the chapter-end page, a ⌘K command palette and
+  `f` focus mode (macOS), and typeset paper covers for books without one
 
 **In progress**
 

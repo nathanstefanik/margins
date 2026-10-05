@@ -390,17 +390,8 @@ private struct ClubDetailDialogs: ViewModifier {
                 }
                 Button("Cancel", role: .cancel) {}
             }
-            .alert(
-                "Book Clubs",
-                isPresented: Binding(
-                    get: { clubs.errorMessage != nil },
-                    set: { if !$0 { clubs.errorMessage = nil } }
-                )
-            ) {
-                Button("OK") {}
-            } message: {
-                Text(clubs.errorMessage ?? "")
-            }
+            // Club errors surface through ClubsScene's banner — this view
+            // only ever lives inside that navigation stack.
     }
 }
 

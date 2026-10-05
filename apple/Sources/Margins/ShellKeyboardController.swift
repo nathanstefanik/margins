@@ -1,4 +1,5 @@
 import AppKit
+import MarginsCore
 import MarginsModel
 import WebKit
 
@@ -18,6 +19,7 @@ import WebKit
 final class ShellKeyboardController {
     private let model: LibraryModel
     private let reader: ReaderModel
+    private let clubs: ClubModel
     private let keymap = ReaderKeymap(mode: .library)
     private static let pageScrollThreshold: CGFloat = 50
     // NSEvent monitor tokens are opaque and not Sendable-annotated; they are
@@ -26,9 +28,10 @@ final class ShellKeyboardController {
     nonisolated(unsafe) private var scrollMonitor: Any?
     private var scrollAccumulator: CGFloat = 0
 
-    init(model: LibraryModel, reader: ReaderModel) {
+    init(model: LibraryModel, reader: ReaderModel, clubs: ClubModel) {
         self.model = model
         self.reader = reader
+        self.clubs = clubs
     }
 
     func start() {
@@ -58,6 +61,12 @@ final class ShellKeyboardController {
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
+        // A ⌘-shortcut dismisses the chapter-end page but still takes its
+        // normal path (⌘= below, menus otherwise).
+        if reader.isOpen, reader.chapterEnd != nil, flags.contains(.command) {
+            reader.dismissChapterEnd()
+        }
+
         // ⌘= is unshifted "+": the menu's Bigger Text shortcut only fires
         // on ⌘⇧=, so handle the unshifted form here directly.
         if flags == [.command], event.charactersIgnoringModifiers == "=" {
@@ -85,6 +94,10 @@ final class ShellKeyboardController {
             model.requestBookmarksDismissal()
             return nil
         }
+        if model.paletteOpen, event.keyCode == 53 {
+            model.requestPaletteDismissal()
+            return nil
+        }
 
         // While a modal panel (e.g. the import open panel) runs, every key
         // belongs to it: typing must stay native and the keymap must not
@@ -101,11 +114,27 @@ final class ShellKeyboardController {
             return event
         }
 
+        // The chapter-end page owns every unmodified key while it's up:
+        // `i` opens the finished chapter's notes pane; anything else
+        // dismisses. Nothing may pass through to turn the page it covers.
+        if reader.isOpen, let finished = reader.chapterEnd, !modalPanelUp {
+            ChapterEndView.leave(
+                finished, writing: event.characters?.first == "i", reader: reader)
+            return nil
+        }
+
         // Reader Esc backs out one layer at a time: the editor case above
         // returns focus to the book, this one closes the notes pane, and
         // the keymap's .backToLibrary below exits to the library.
         if reader.isOpen, reader.notesVisible, event.keyCode == 53, !modalPanelUp {
             reader.closeNotes()
+            return nil
+        }
+
+        // Esc unwraps one layer at a time: after the notes pane, focus
+        // mode exits before the keymap's Esc → library.
+        if reader.isOpen, reader.focusMode, event.keyCode == 53, !modalPanelUp {
+            reader.focusMode = false
             return nil
         }
 
@@ -115,9 +144,11 @@ final class ShellKeyboardController {
 
         // Function keys report private-use glyphs in `characters`; map the
         // ones we care about by key code so arrows and page keys route like
-        // their keymap names.
+        // their keymap names. Return arrives as "\r", keypad Enter as ETX —
+        // the keymap knows the DOM name "Enter" for both.
         let key: String
         switch event.keyCode {
+        case 36, 76: key = "Enter"
         case 123: key = "ArrowLeft"
         case 124: key = "ArrowRight"
         case 125, 121: key = "PageDown"
@@ -126,7 +157,8 @@ final class ShellKeyboardController {
         }
 
         keymap.setMode(
-            model.searchOpen || model.helpOpen || model.bookmarksOpen || modalPanelUp
+            model.searchOpen || model.helpOpen || model.bookmarksOpen || model.paletteOpen
+                || modalPanelUp
                 ? .modal
                 : (reader.isOpen ? .reader : .library)
         )
@@ -190,8 +222,16 @@ final class ShellKeyboardController {
             model.moveLibrarySelection(delta)
             return true
         case .openSelectedBook:
-            guard model.selectedBookID != nil else { return false }
-            openSelectedBook()
+            if model.selectedBookID != nil {
+                openSelectedBook()
+                return true
+            }
+            // Nothing selected: Enter is the continue card's button, but
+            // only while the card is the view the detail area is showing.
+            guard clubs.selectedClub == nil, model.detailMode == .book,
+                let id = model.continueBook?.id
+            else { return false }
+            Task { await model.openBookResuming(id: id) }
             return true
         case .openBookNotes:
             guard let id = model.selectedBookID else { return false }
@@ -252,6 +292,10 @@ final class ShellKeyboardController {
         case .showBookmarks:
             guard reader.isOpen else { return false }
             model.requestBookmarks()
+            return true
+        case .toggleFocus:
+            guard reader.isOpen else { return false }
+            reader.focusMode.toggle()
             return true
         }
     }

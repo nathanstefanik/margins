@@ -72,6 +72,11 @@ struct MarginsCommands: Commands {
             .disabled(clubs.selectedClub == nil)
         }
         CommandMenu("Go") {
+            Button("Go To…") {
+                model.requestPalette()
+            }
+            .keyboardShortcut("k", modifiers: .command)
+            Divider()
             Button("Next Chapter") {
                 guard reader.isOpen, reader.nextChapter() != nil else { return }
                 ReaderController.evaluateInReader(
@@ -100,6 +105,10 @@ struct MarginsCommands: Commands {
             Divider()
             Button("Toggle Notes") {
                 reader.toggleNotes()
+            }
+            .disabled(!reader.isOpen)
+            Button(reader.focusMode ? "Exit Focus Mode" : "Focus Mode") {
+                reader.focusMode.toggle()
             }
             .disabled(!reader.isOpen)
             Divider()

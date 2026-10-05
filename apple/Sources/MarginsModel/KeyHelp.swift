@@ -56,6 +56,7 @@ extension ReaderKeymap {
                     KeyHelpEntry(keys: ["n"], description: "Next chapter"),
                     KeyHelpEntry(keys: ["p"], description: "Previous chapter"),
                     KeyHelpEntry(keys: ["i", "Enter"], description: "Open and focus notes"),
+                    KeyHelpEntry(keys: ["f"], description: "Focus mode"),
                     KeyHelpEntry(keys: ["b"], description: "Toggle bookmark"),
                     KeyHelpEntry(keys: ["B"], description: "Bookmarks list"),
                     KeyHelpEntry(keys: ["Escape"], description: "Close notes pane; again → library"),
@@ -73,6 +74,7 @@ extension ReaderKeymap {
             KeyHelpGroup(
                 name: "Global",
                 entries: [
+                    KeyHelpEntry(keys: ["⌘K"], description: "Go To… command palette"),
                     KeyHelpEntry(keys: ["⌘O"], description: "Import EPUB"),
                     KeyHelpEntry(keys: ["⌘F"], description: "Find"),
                     KeyHelpEntry(keys: ["⌘+", "⌘="], description: "Bigger text"),

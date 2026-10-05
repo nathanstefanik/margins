@@ -32,24 +32,35 @@ enum DesignTokens {
     enum Motion {
         static let chrome = Animation.easeOut(duration: 0.2)
         static let prompt = Animation.spring(response: 0.35, dampingFraction: 0.82)
+        static let flashIn = Animation.easeOut(duration: 0.25)
+        static let flashOut = Animation.easeInOut(duration: 0.6)
     }
 
-    /// The reader's paper, mirroring the palettes in `reader.html` /
-    /// `reader.js`. The reading surface is the single place with its own
-    /// palette; chrome and sheets follow the system appearance.
+    /// The reader's paper — a thin `Color` adapter over `ReaderPalette`,
+    /// which owns the values mirrored by `reader.html` / `reader.js`. The
+    /// reading surface is the single place with its own palette; chrome
+    /// and sheets follow the system appearance.
     enum Paper {
-        static let lightBackground = Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
-        static let lightSecondaryInk = Color(red: 110 / 255, green: 104 / 255, blue: 94 / 255)
-
-        static let darkBackground = Color(red: 27 / 255, green: 26 / 255, blue: 24 / 255)
-        static let darkSecondaryInk = Color(red: 168 / 255, green: 161 / 255, blue: 150 / 255)
-
         static func background(_ theme: ReaderTheme) -> Color {
-            theme == .dark ? darkBackground : lightBackground
+            Color(theme.palette.background)
+        }
+
+        static func ink(_ theme: ReaderTheme) -> Color {
+            Color(theme.palette.ink)
         }
 
         static func secondaryInk(_ theme: ReaderTheme) -> Color {
-            theme == .dark ? darkSecondaryInk : lightSecondaryInk
+            Color(theme.palette.secondaryInk)
         }
+    }
+}
+
+extension Color {
+    /// A model-layer 0–255 RGB triple, straight through.
+    init(_ rgb: ReaderPalette.RGB) {
+        self.init(
+            red: Double(rgb.red) / 255,
+            green: Double(rgb.green) / 255,
+            blue: Double(rgb.blue) / 255)
     }
 }

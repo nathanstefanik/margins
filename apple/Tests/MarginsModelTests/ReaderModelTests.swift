@@ -666,4 +666,101 @@ struct ReaderModelTests {
         reader.relocated(page: 1, totalPages: 10, href: "two.xhtml", cfi: "epubcfi(/6/4)")
         #expect(!reader.pageIsBookmarked)
     }
+
+    // MARK: Chapter-end page
+
+    /// A reader with isolated prefs (the chapter-end silence keys persist
+    /// in UserDefaults — a shared suite would leak between tests).
+    private func makeIsolatedReader() -> ReaderModel {
+        let defaults = UserDefaults(suiteName: "ReaderModelTests-\(UUID().uuidString)")!
+        return ReaderModel(preferences: ReaderPreferences(defaults: defaults))
+    }
+
+    /// Page through ch1 to its last page, then into ch2's first page.
+    private func finishChapterOne(on reader: ReaderModel, book: BookMeta) {
+        reader.relocated(page: 4, totalPages: 4, href: "one.xhtml", cfi: nil)
+        reader.relocated(page: 1, totalPages: 2, href: "two.xhtml", cfi: nil)
+    }
+
+    @Test("turning past the last page pauses on the finished chapter")
+    @MainActor
+    func finishPausesOnEndPage() {
+        let reader = makeIsolatedReader()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        finishChapterOne(on: reader, book: book)
+        #expect(reader.chapterEnd?.key == "ch1")
+    }
+
+    @Test("each chapter pauses once — the silence is written when shown")
+    @MainActor
+    func finishPausesOncePerChapter() {
+        let reader = makeIsolatedReader()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        finishChapterOne(on: reader, book: book)
+        #expect(reader.chapterEnd?.key == "ch1")
+
+        // Dismiss, jump back, finish the same chapter again: silent.
+        reader.dismissChapterEnd()
+        reader.open(book: book, chapter: book.chapters[0])
+        finishChapterOne(on: reader, book: book)
+        #expect(reader.chapterEnd == nil)
+    }
+
+    @Test("the preference gates the pause")
+    @MainActor
+    func finishHonorsPausePreference() {
+        let reader = makeIsolatedReader()
+        reader.preferences.pauseAtChapterEnds = false
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        finishChapterOne(on: reader, book: book)
+        #expect(reader.chapterEnd == nil)
+    }
+
+    @Test("a TOC-style jump to the successor is not a finish")
+    @MainActor
+    func jumpToSuccessorDoesNotPause() {
+        let reader = makeIsolatedReader()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        // Relocate mid-chapter, then land on the next chapter's page 1 —
+        // the previous page wasn't the last, so this is a jump.
+        reader.relocated(page: 2, totalPages: 4, href: "one.xhtml", cfi: nil)
+        reader.relocated(page: 1, totalPages: 2, href: "two.xhtml", cfi: nil)
+        #expect(reader.chapterEnd == nil)
+    }
+
+    @Test("dismiss and close clear the end page")
+    @MainActor
+    func dismissAndCloseClearEndPage() {
+        let reader = makeIsolatedReader()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        finishChapterOne(on: reader, book: book)
+        reader.dismissChapterEnd()
+        #expect(reader.chapterEnd == nil)
+
+        // `close()` clears it too — drive a fresh (unsilenced) chapter.
+        let reader2 = makeIsolatedReader()
+        reader2.open(book: book, chapter: book.chapters[0])
+        finishChapterOne(on: reader2, book: book)
+        reader2.close()
+        #expect(reader2.chapterEnd == nil)
+    }
+
+    @Test("any jump clears a shown end page")
+    @MainActor
+    func jumpClearsEndPage() {
+        let reader = makeIsolatedReader()
+        let book = makeBook()
+        reader.open(book: book, chapter: book.chapters[0])
+        finishChapterOne(on: reader, book: book)
+        #expect(reader.chapterEnd != nil)
+
+        // A relocation that isn't the finish (a backwards move) clears.
+        reader.relocated(page: 3, totalPages: 4, href: "one.xhtml", cfi: nil)
+        #expect(reader.chapterEnd == nil)
+    }
 }

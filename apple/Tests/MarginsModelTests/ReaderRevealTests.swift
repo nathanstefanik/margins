@@ -92,6 +92,46 @@ struct ReaderRevealTests {
         #expect(try await harness.visibleParagraphIDs().isEmpty == false)
     }
 
+    /// Marks and the reveal flash share the `margins-highlight` /
+    /// `margins-reveal` rules emitted per paper: the epub.js <g> gets the
+    /// theme's fill and blend, and a `readerSetTheme` restyles nodes that
+    /// are already on the page because the look lives in the keyed
+    /// stylesheet, not on the elements.
+    @Test("highlights take the paper's fill and restyle on theme change")
+    @MainActor
+    func highlightsFollowTheme() async throws {
+        let harness = try ReaderLayoutHarness(
+            fixture: .reveal, viewport: CGSize(width: 800, height: 900))
+        defer { harness.dismantle() }
+        try await harness.load(chapter: "ch1.xhtml")
+        try await harness.waitForLayoutSettled()
+
+        let cfi = try #require(
+            try await harness.evaluate("readerCurrentCfi()") as? String)
+        let cfiLiteral = String(
+            data: try JSONEncoder().encode(cfi), encoding: .utf8)!
+        _ = try await harness.evaluate("readerHighlight(\(cfiLiteral)); \"sent\"")
+
+        func fillAndBlend() async throws -> (String?, String?) {
+            let fill = try await harness.evaluate(
+                "getComputedStyle(document.querySelector('g.margins-highlight')).fill")
+                as? String
+            let blend = try await harness.evaluate(
+                "getComputedStyle(document.querySelector('g.margins-highlight')).mixBlendMode")
+                as? String
+            return (fill, blend)
+        }
+
+        var (fill, blend) = try await fillAndBlend()
+        #expect(fill?.contains("255, 213, 79") == true)
+        #expect(blend == "multiply")
+
+        _ = try await harness.evaluate("readerSetTheme(\"night\"); \"sent\"")
+        (fill, blend) = try await fillAndBlend()
+        #expect(fill?.contains("190, 150, 80") == true)
+        #expect(blend == "normal")
+    }
+
     @Test("a needle absent from the chapter reports found:false")
     @MainActor
     func revealMisses() async throws {

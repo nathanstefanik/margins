@@ -61,17 +61,11 @@ struct ClubsScene: View {
                     }
                     Button("Cancel", role: .cancel) {}
                 }
-                .alert(
-                    "Book Clubs",
-                    isPresented: Binding(
-                        get: { clubs.errorMessage != nil },
-                        set: { if !$0 { clubs.errorMessage = nil } }
-                    )
-                ) {
-                    Button("OK") {}
-                } message: {
-                    Text(clubs.errorMessage ?? "")
-                }
+                .errorBanner(
+                    Binding(
+                        get: { clubs.errorMessage },
+                        set: { clubs.errorMessage = $0 }
+                    ))
                 #if DEBUG
             .task { await runDebugSeams() }
                 #endif

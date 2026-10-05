@@ -298,6 +298,22 @@ struct LibraryTests {
         #expect(try harness.library.getBook(id: meta.id).progressPercent == nil)
     }
 
+    @Test("the catalog carries when each book was last read")
+    func catalogCarriesLastReadAt() throws {
+        let harness = try Harness()
+        let meta = try harness.library.importEpub(atPath: harness.epub())
+
+        // Never opened: no read date.
+        #expect(try harness.library.listBooks()[0].lastReadAt == nil)
+
+        try harness.library.writePosition(
+            bookID: meta.id,
+            position: ReadingPosition(chapterKey: "002", percent: 42.5)
+        )
+        let position = try #require(harness.library.readPosition(bookID: meta.id))
+        #expect(try harness.library.listBooks()[0].lastReadAt == position.updatedAt)
+    }
+
     // MARK: Bookmarks
 
     @Test("named bookmarks round-trip, clamp percent, and vanish with the last pin")

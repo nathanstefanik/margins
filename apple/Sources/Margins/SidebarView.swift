@@ -8,27 +8,94 @@ struct SidebarView: View {
     @State private var showingRemovalDialog = false
     @State private var bookPendingRemoval: BookSummary?
 
+    /// One List, one selection: books and clubs share the sidebar, so the
+    /// row identity carries which kind it is and the setter maps it back
+    /// onto `selectedBookID` / `selectedClubID`. The onChange handlers
+    /// below keep the two selections mutually exclusive and drive the
+    /// detail-area loads, exactly as the split lists did.
+    private enum SidebarSelection: Hashable {
+        case book(String)
+        case club(String)
+    }
+
+    private var selection: Binding<SidebarSelection?> {
+        Binding(
+            get: {
+                if let id = model.selectedBookID { return .book(id) }
+                if let id = clubs.selectedClubID { return .club(id) }
+                return nil
+            },
+            set: { newValue in
+                switch newValue {
+                case .book(let id):
+                    model.selectedBookID = id
+                case .club(let id):
+                    // The club list wrote selectedClubID directly;
+                    // selectClub on the way out loads the club's notes.
+                    clubs.selectedClubID = id
+                case nil:
+                    model.selectedBookID = nil
+                    clubs.selectedClubID = nil
+                }
+            }
+        )
+    }
+
     var body: some View {
-        @Bindable var model = model
-        @Bindable var clubs = clubs
         VStack(spacing: 0) {
-            List(selection: $model.selectedBookID) {
-                ForEach(model.books) { book in
-                    BookRowView(book: book)
-                        .tag(book.id)
-                        .simultaneousGesture(
-                            TapGesture().onEnded {
-                                Task { await clubs.selectClub(id: nil) }
+            List(selection: selection) {
+                Section("Library") {
+                    ForEach(model.orderedBooks) { book in
+                        BookRowView(book: book)
+                            .tag(SidebarSelection.book(book.id))
+                            .onTapGesture(count: 2) {
+                                Task { await model.openBookResuming(id: book.id) }
                             }
-                        )
-                        .onTapGesture(count: 2) {
-                            Task { await model.openBookResuming(id: book.id) }
-                        }
-                        .contextMenu {
-                            Button("Remove…", role: .destructive) {
-                                requestRemoval(of: book)
+                            .contextMenu {
+                                Button("Remove…", role: .destructive) {
+                                    requestRemoval(of: book)
+                                }
                             }
+                    }
+                }
+                Section {
+                    if clubs.clubs.isEmpty {
+                        Text("Create or join a club to read together.")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        ForEach(clubs.clubs) { club in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(club.name)
+                                    .lineLimit(1)
+                                Text(club.bookTitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .tag(SidebarSelection.club(club.id))
                         }
+                    }
+                } header: {
+                    HStack(spacing: 6) {
+                        Text("Book Clubs")
+                        Spacer()
+                        Menu {
+                            Button("New Book Club…") {
+                                clubs.createSheetPresented = true
+                            }
+                            Button("Join Book Club…") {
+                                clubs.joinSheetPresented = true
+                            }
+                            .disabled(!clubs.supportsSharing)
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .accessibilityLabel("Add Book Club")
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -46,9 +113,6 @@ struct SidebarView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
             }
-            clubSection(selection: $clubs.selectedClubID)
-            Divider()
-            libraryRootBar
         }
         .navigationTitle("Library")
         .confirmationDialog(
@@ -67,8 +131,7 @@ struct SidebarView: View {
         }
         .onChange(of: model.selectedBookID) {
             // Keyboard moves can pick a book while a club is selected;
-            // mouse taps clear the club via the row's tap gesture, keys go
-            // through here — the detail area must not keep showing the club.
+            // the detail area must not keep showing the club.
             if model.selectedBookID != nil, clubs.selectedClubID != nil {
                 Task { await clubs.selectClub(id: nil) }
             }
@@ -86,92 +149,6 @@ struct SidebarView: View {
                 Task { await clubs.selectClub(id: id) }
             }
         }
-    }
-
-    /// Book clubs live under the library list, with their own selection:
-    /// selecting a club clears the book selection and vice versa, so the
-    /// detail area always has one unambiguous subject.
-    @ViewBuilder
-    private func clubSection(selection: Binding<String?>) -> some View {
-        Divider()
-        HStack(spacing: 6) {
-            Text("Book Clubs")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Spacer()
-            Menu {
-                Button("New Book Club…") {
-                    clubs.createSheetPresented = true
-                }
-                Button("Join Book Club…") {
-                    clubs.joinSheetPresented = true
-                }
-                .disabled(!clubs.supportsSharing)
-            } label: {
-                Image(systemName: "plus")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .accessibilityLabel("Add Book Club")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-
-        if clubs.clubs.isEmpty {
-            Text("Create or join a club to read together.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 6)
-        } else {
-            List(selection: selection) {
-                ForEach(clubs.clubs) { club in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(club.name)
-                            .lineLimit(1)
-                        Text(club.bookTitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Text(club.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .tag(club.id)
-                }
-            }
-            .listStyle(.sidebar)
-            .frame(height: min(CGFloat(clubs.clubs.count) * 62 + 8, 220))
-        }
-    }
-
-    /// Pinned under the list, outside the scroll content: the library root
-    /// and the directory picker. Replaces the old floating overlay that sat
-    /// on top of the last row.
-    private var libraryRootBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "folder")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(model.libraryRoot)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help(model.libraryRoot)
-            Spacer(minLength: 0)
-            Button {
-                Task { await RootPanel.run(model: model) }
-            } label: {
-                Image(systemName: "folder.badge.ellipsis")
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Choose Library Directory…")
-            .help("Choose Library Directory…")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 
     private func requestRemoval(of book: BookSummary) {
