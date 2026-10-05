@@ -642,6 +642,7 @@ public final class LibraryModel {
             if searchOpen {
                 helpOpen = false
                 bookmarksOpen = false
+                paletteOpen = false
             }
         }
     }
@@ -653,6 +654,7 @@ public final class LibraryModel {
             if helpOpen {
                 searchOpen = false
                 bookmarksOpen = false
+                paletteOpen = false
             }
         }
     }
@@ -664,8 +666,32 @@ public final class LibraryModel {
             if bookmarksOpen {
                 searchOpen = false
                 helpOpen = false
+                paletteOpen = false
             }
         }
+    }
+
+    /// Whether the ⌘K Go To… palette is presented (macOS). Mutually
+    /// exclusive with the other overlays; the shell monitor closes it on
+    /// Esc because the field's editor consumes the key.
+    public var paletteOpen = false {
+        didSet {
+            if paletteOpen {
+                searchOpen = false
+                helpOpen = false
+                bookmarksOpen = false
+            }
+        }
+    }
+
+    /// Presents the ⌘K Go To… palette.
+    public func requestPalette() {
+        paletteOpen = true
+    }
+
+    /// Dismisses the Go To… palette (Esc, click outside, running an item).
+    public func requestPaletteDismissal() {
+        paletteOpen = false
     }
 
     /// Presents the note search overlay (`/`, ⌘F).

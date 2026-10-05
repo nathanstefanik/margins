@@ -54,6 +54,7 @@ struct KeyHelpTests {
     func sheetIncludesGlobalShortcuts() {
         let global = ReaderKeymap.helpGroups().first { $0.name == "Global" }
         let keys = Set(global?.allKeys ?? [])
+        #expect(keys.contains("⌘K"))
         #expect(keys.contains("⌘O"))
         #expect(keys.contains("⌘="))
         #expect(keys.contains("⌘0"))

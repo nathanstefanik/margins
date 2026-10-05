@@ -68,9 +68,16 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
+        .overlay {
+            if model.paletteOpen {
+                CommandPaletteOverlay()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
         .animation(.easeOut(duration: 0.15), value: model.searchOpen)
         .animation(.easeOut(duration: 0.15), value: model.helpOpen)
         .animation(.easeOut(duration: 0.15), value: model.bookmarksOpen)
+        .animation(.easeOut(duration: 0.15), value: model.paletteOpen)
         .onChange(of: reader.isOpen) {
             if !reader.isOpen {
                 model.requestBookmarksDismissal()

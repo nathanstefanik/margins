@@ -134,6 +134,7 @@ macOS keybindings:
 | `?` | Keyboard shortcuts cheat sheet (also ⌘/) |
 | ⌘S | Save note |
 | ⌘+ (or ⌘=) / ⌘− / ⌘0 | Bigger / smaller / reset text size |
+| ⌘K | Go To… command palette (books, chapters, commands) |
 | ⌘B | Toggle the library sidebar |
 | ⌘, | Settings (typography, library directory) |
 | Trackpad | Two-finger scroll turns pages |

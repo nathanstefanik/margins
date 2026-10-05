@@ -73,6 +73,7 @@ extension ReaderKeymap {
             KeyHelpGroup(
                 name: "Global",
                 entries: [
+                    KeyHelpEntry(keys: ["⌘K"], description: "Go To… command palette"),
                     KeyHelpEntry(keys: ["⌘O"], description: "Import EPUB"),
                     KeyHelpEntry(keys: ["⌘F"], description: "Find"),
                     KeyHelpEntry(keys: ["⌘+", "⌘="], description: "Bigger text"),

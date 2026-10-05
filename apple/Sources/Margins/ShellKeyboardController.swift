@@ -87,6 +87,10 @@ final class ShellKeyboardController {
             model.requestBookmarksDismissal()
             return nil
         }
+        if model.paletteOpen, event.keyCode == 53 {
+            model.requestPaletteDismissal()
+            return nil
+        }
 
         // While a modal panel (e.g. the import open panel) runs, every key
         // belongs to it: typing must stay native and the keymap must not
@@ -130,7 +134,8 @@ final class ShellKeyboardController {
         }
 
         keymap.setMode(
-            model.searchOpen || model.helpOpen || model.bookmarksOpen || modalPanelUp
+            model.searchOpen || model.helpOpen || model.bookmarksOpen || model.paletteOpen
+                || modalPanelUp
                 ? .modal
                 : (reader.isOpen ? .reader : .library)
         )

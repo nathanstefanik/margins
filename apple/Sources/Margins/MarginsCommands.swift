@@ -72,6 +72,11 @@ struct MarginsCommands: Commands {
             .disabled(clubs.selectedClub == nil)
         }
         CommandMenu("Go") {
+            Button("Go To…") {
+                model.requestPalette()
+            }
+            .keyboardShortcut("k", modifiers: .command)
+            Divider()
             Button("Next Chapter") {
                 guard reader.isOpen, reader.nextChapter() != nil else { return }
                 ReaderController.evaluateInReader(
