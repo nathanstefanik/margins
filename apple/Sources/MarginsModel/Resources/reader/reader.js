@@ -1401,17 +1401,20 @@ function readerScrollTop() {
   readerDisplayTarget(target).catch(readerShowError);
 }
 
+// `G`: the last page of the current section. The old `display()` on the
+// current view's end CFI stayed on the same spread — the bottom is a
+// page-numbered destination, so it rides the scrubber's machinery and
+// inherits its navigation bookkeeping (token bump, pending-layout
+// invalidation, settled-CFI pin, relocated emit).
 function readerScrollBottom() {
   if (!readerRendition) {
     return;
   }
   const location = readerRendition.currentLocation();
-  if (location && location.end && location.end.cfi) {
-    readerNavigationToken += 1;
-    readerInvalidatePendingLayout();
-    const displayed = readerRendition.display(location.end.cfi);
-    displayed.then(readerCaptureSettledCfi, () => {});
-    displayed.catch(readerShowError);
+  const total =
+    (location && location.start && location.start.displayed.total) || 0;
+  if (total > 0) {
+    readerGoToPage(total);
   }
 }
 

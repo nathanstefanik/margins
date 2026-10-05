@@ -126,6 +126,29 @@ struct ReaderLayoutIntegrationTests {
         #expect(oddPage <= 6 && oddEnd >= 6)
     }
 
+    @Test("gg and G jump to the chapter's first and last pages")
+    func scrollTopAndBottomJumpToChapterEnds() async throws {
+        let harness = try makeHarness()
+        defer { harness.dismantle() }
+        try await harness.load()
+        let first = try await harness.waitForRelocation(after: 0)
+        let total = try #require(first["totalPages"] as? Int)
+        #expect(total > 2)
+        #expect(first["page"] as? Int == 1)
+
+        // `G` lands on the spread containing the last page.
+        try await harness.evaluate("readerScrollBottom()")
+        let bottom = try await harness.waitForRelocationChange(from: first)
+        let bottomPage = try #require(bottom["page"] as? Int)
+        let bottomEnd = (bottom["endPage"] as? Int) ?? bottomPage
+        #expect(bottomPage <= total && bottomEnd >= total)
+
+        // `gg` returns to the chapter's first page.
+        try await harness.evaluate("readerScrollTop()")
+        let top = try await harness.waitForRelocationChange(from: bottom)
+        #expect(top["page"] as? Int == 1)
+    }
+
     @Test("a text-size change keeps the passage after a page scrub")
     func goToPageThenReflowKeepsPassage() async throws {
         let harness = try makeHarness()
