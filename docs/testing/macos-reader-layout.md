@@ -75,6 +75,21 @@ Audited in the vendored `epub.min.js` before Phase 2 relied on it:
 - **Events**: `rendered` fires per rendered view; `relocated` fires after
   displays, page turns, and completed re-layouts. The page reports both
   through the `reader` message handler.
+- **Annotations**: `annotations.add("highlight", …)` draws its `<g>` into
+  the view's marks pane in the **outer** `reader.html` document, not in the
+  section iframe. Section stylesheets never reach highlights; style them in
+  `reader.html` (the `--margins-hl-*` variables `readerApplyTheme` sets).
+  epub.js writes the default fill as SVG presentation attributes, which any
+  CSS rule overrides.
+- **Page mapping**: `manager.mapping.section(view)` returns an empty list in
+  this build. To find page *n* of a section, map that column's pixel band
+  with `mapping.page(contents, cfiBase, start, end)`, where the band is
+  `(n - 1) * (columnWidth + gap)` to `n * columnWidth + (n - 1) * gap`.
+  This is what `readerGoToPage` does, and `G` (`readerScrollBottom`) uses it.
+- **Fragmentation**: do not add CSS `orphans`/`widows` to reader styles. As
+  column constraints they push paragraphs across page boundaries, so the
+  anchored paragraph can leave the screen when the text size changes. The
+  "text-size change keeps the visible passage" integration test catches it.
 
 ## Desktop policy (Phase 2)
 

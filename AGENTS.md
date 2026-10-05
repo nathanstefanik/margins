@@ -85,6 +85,37 @@ scripts/               # make-app.sh, make-mas-pkg.sh, bump-version.sh,
   `apple/ios/Margins/DesignTokens.swift`.
 - GPL-3.0-or-later — preserve license on distribution
 
+## Pitfalls
+
+Mistakes that have already cost time here:
+
+- **SwiftUI `App` structs aren't views.** Don't wire models together in
+  `App.init()`: the `@State` instances read there are discarded before the
+  scene installs its own. Wire them from a root view's `.task`, as
+  `MarginsApp.wireModels` does. For the same reason, read
+  `@Environment(\.colorScheme)` in a root view; in an `App` it doesn't
+  follow appearance changes.
+- **macOS keys:** Return arrives as `"\r"` (keypad Enter as ETX).
+  `ShellKeyboardController` maps both to the keymap's `"Enter"` by key code.
+  In overlays the field editor can take Return before `onSubmit`; the ⌘K
+  palette handles keys with its own monitor for that reason.
+- **Reader palettes live in four places:** `ReaderPalette.swift`,
+  `READER_THEMES` in `reader.js`, `reader.html`'s pre-paint rules, and the
+  highlight table. Change them together; `ReaderResourceTests` fails on
+  drift.
+- **epub.js quirks** (highlights render in the outer document,
+  `mapping.section()` is empty, no `orphans`/`widows`) are in the engine
+  contract in `docs/testing/macos-reader-layout.md`. Read it before
+  touching `reader.js` pagination or highlights.
+- **Runtime checks** of `build/Margins.app` share the user's preferences
+  domain, and an installed copy can shadow the build if launched by name.
+  Follow `docs/testing/macos-runtime.md` (seeded `/tmp` library, launch by
+  path, restore every key you write).
+- **Environment blockers need the user:** an unaccepted Xcode license
+  breaks even `git` (exit 69, `sudo xcodebuild -license accept`). An
+  out-of-date CoreSimulator hangs `simctl` (`sudo xcodebuild
+  -runFirstLaunch`). Ask; don't loop on retries.
+
 ## Useful commands
 
 ```bash
