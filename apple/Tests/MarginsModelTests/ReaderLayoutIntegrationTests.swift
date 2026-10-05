@@ -247,10 +247,10 @@ struct ReaderLayoutIntegrationTests {
         let narrow = try await harness.waitForDivisor(1)
         // One page: the measure spans the stage minus epub.js's gap/2 body
         // padding on each side.
-        let narrowRects = try await harness.visibleParagraphRects()
-        let narrowMeasure = try #require(narrowRects.first?.width)
-        // Text fragments run slightly inside the paragraph box; the page's
-        // measure must not overflow it, and text must fill most of it.
+        // The column measure is a wholly-visible paragraph's block width —
+        // text fragment boxes vary with wrapping and ornaments.
+        let narrowWidths = try await harness.visibleParagraphBlockWidths()
+        let narrowMeasure = try #require(narrowWidths.first?.width)
         #expect(narrowMeasure <= narrow.stageWidth - 40 + 4)
         #expect(narrowMeasure >= narrow.stageWidth - 40 - 60)
 
@@ -295,8 +295,9 @@ struct ReaderLayoutIntegrationTests {
             ) as? Double
         #expect(abs((margins ?? 0) - (left ?? 0)) < 1)
         #expect(geometry.viewerWidth < geometry.innerWidth)
-        let rects = try await harness.visibleParagraphRects()
-        let measure = try #require(rects.first?.width)
+        // Same measure source as `automaticRespondsToWidth`.
+        let widths = try await harness.visibleParagraphBlockWidths()
+        let measure = try #require(widths.first?.width)
         #expect(measure <= geometry.stageWidth - 40 + 4)
         #expect(measure >= geometry.stageWidth - 40 - 60)
     }

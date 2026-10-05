@@ -451,6 +451,25 @@ final class ReaderLayoutHarness {
         return try JSONDecoder().decode([ParagraphRect].self, from: data)
     }
 
+    /// A wholly-visible, unsplit paragraph's block width.
+    struct ParagraphBlockWidth: Decodable, Equatable {
+        var id: String
+        var width: Double
+    }
+
+    /// The element block box of every paragraph fully inside the clip —
+    /// the column's content width regardless of how its text wraps.
+    func visibleParagraphBlockWidths() async throws -> [ParagraphBlockWidth] {
+        guard
+            let json = try await evaluateJSON(
+                "window.__marginsTest.visibleParagraphBlockWidths()") as? [[String: Any]]
+        else {
+            throw ReaderLayoutHarnessError.javaScript("visibleParagraphBlockWidths")
+        }
+        let data = try JSONSerialization.data(withJSONObject: json)
+        return try JSONDecoder().decode([ParagraphBlockWidth].self, from: data)
+    }
+
     /// Waits for the visible paragraph set to differ from `previous`.
     /// Geometry — not a relocation message — is the settle signal, because
     /// the page reports relocation from the `rendered` hook before the view
@@ -757,6 +776,47 @@ final class ReaderLayoutHarness {
                 }
               }
               return rects;
+            },
+            // The element block box of paragraphs wholly inside the clip.
+            // Block boxes equal the column's content width independent of
+            // text wrapping; a paragraph split across columns fails the
+            // clip test (its element box is a union spanning both columns)
+            // or reports multiple fragment boxes.
+            visibleParagraphBlockWidths: function() {
+              var widths = [];
+              var viewer = document.getElementById('viewer');
+              var view = viewer ? viewer.getBoundingClientRect() : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+              var viewerStyle = viewer ? window.getComputedStyle(viewer) : null;
+              var clipLeft = view.left + (viewerStyle ? parseFloat(viewerStyle.paddingLeft) : 0);
+              var clipRight = view.right - (viewerStyle ? parseFloat(viewerStyle.paddingRight) : 0);
+              var clipTop = view.top + (viewerStyle ? parseFloat(viewerStyle.paddingTop) : 0);
+              var clipBottom = view.bottom - (viewerStyle ? parseFloat(viewerStyle.paddingBottom) : 0);
+              var frames = document.querySelectorAll('iframe');
+              for (var f = 0; f < frames.length; f++) {
+                var frame = frames[f];
+                var frameRect = frame.getBoundingClientRect();
+                if (frameRect.width <= 0 || frameRect.height <= 0) { continue; }
+                if (window.getComputedStyle(frame).visibility === 'hidden') { continue; }
+                var doc = null;
+                try { doc = frame.contentDocument; } catch (e) { continue; }
+                if (!doc) { continue; }
+                var paragraphs = doc.querySelectorAll('p[id]');
+                for (var p = 0; p < paragraphs.length; p++) {
+                  var el = paragraphs[p].getBoundingClientRect();
+                  var left = frameRect.left + el.left;
+                  var right = left + el.width;
+                  var top = frameRect.top + el.top;
+                  var bottom = top + el.height;
+                  if (el.width <= 0) { continue; }
+                  if (paragraphs[p].getClientRects().length !== 1) { continue; }
+                  if (left < clipLeft - 1 || right > clipRight + 1
+                      || top < clipTop - 1 || bottom > clipBottom + 1) {
+                    continue;
+                  }
+                  widths.push({ id: paragraphs[p].id, width: el.width });
+                }
+              }
+              return widths;
             },
             visibleParagraphIDs: function() {
               return window.__marginsTest.visibleParagraphRects().map(function(r) { return r.id; });
