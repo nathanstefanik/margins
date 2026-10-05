@@ -86,6 +86,7 @@ struct ContentView: View {
                 .environment(clubs)
         }
         .task {
+            MarginsApp.wireModels(model: model, reader: reader)
             await model.activate()
             if let store = model.coreStore {
                 await clubs.activate(store: store)

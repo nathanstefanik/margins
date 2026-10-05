@@ -9,6 +9,14 @@ struct MarginsApp: App {
 
     init() {
         LibraryRootBookmark.restore()
+    }
+
+    /// Cross-wires the installed models: the reader's savers land in the
+    /// library, the library drives the reader, and search gets its
+    /// executor. Called from `ContentView`'s `.task`, which sees the live
+    /// `@State` instances — `init()` reads pre-install preview objects that
+    /// the scene discards, so wiring done there binds to dead models.
+    static func wireModels(model: LibraryModel, reader: ReaderModel) {
         model.reader = reader
         reader.positionSaver = { [weak model] bookId, position in
             await model?.saveReadingPosition(bookId: bookId, position: position)

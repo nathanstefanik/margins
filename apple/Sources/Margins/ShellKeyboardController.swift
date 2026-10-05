@@ -115,9 +115,11 @@ final class ShellKeyboardController {
 
         // Function keys report private-use glyphs in `characters`; map the
         // ones we care about by key code so arrows and page keys route like
-        // their keymap names.
+        // their keymap names. Return arrives as "\r", keypad Enter as ETX —
+        // the keymap knows the DOM name "Enter" for both.
         let key: String
         switch event.keyCode {
+        case 36, 76: key = "Enter"
         case 123: key = "ArrowLeft"
         case 124: key = "ArrowRight"
         case 125, 121: key = "PageDown"
