@@ -115,6 +115,13 @@ final class ShellKeyboardController {
             return nil
         }
 
+        // Esc unwraps one layer at a time: after the notes pane, focus
+        // mode exits before the keymap's Esc → library.
+        if reader.isOpen, reader.focusMode, event.keyCode == 53, !modalPanelUp {
+            reader.focusMode = false
+            return nil
+        }
+
         guard let characters = event.characters, let character = characters.first else {
             return event
         }
@@ -269,6 +276,10 @@ final class ShellKeyboardController {
         case .showBookmarks:
             guard reader.isOpen else { return false }
             model.requestBookmarks()
+            return true
+        case .toggleFocus:
+            guard reader.isOpen else { return false }
+            reader.focusMode.toggle()
             return true
         }
     }

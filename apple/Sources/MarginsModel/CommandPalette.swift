@@ -40,6 +40,7 @@ public enum CommandPalette {
         case indicatorPages
         case indicatorTimeLeft
         case indicatorNone
+        case toggleFocus
     }
 
     public struct Item: Identifiable, Equatable, Sendable {
@@ -66,6 +67,7 @@ public enum CommandPalette {
         public var chaptersBook: BookMeta?
         public var hasSelectedBook: Bool
         public var readerOpen: Bool
+        public var readerFocused: Bool
         public var justify: Bool
         public var ornaments: Bool
 
@@ -74,6 +76,7 @@ public enum CommandPalette {
             chaptersBook: BookMeta?,
             hasSelectedBook: Bool,
             readerOpen: Bool,
+            readerFocused: Bool = false,
             justify: Bool,
             ornaments: Bool
         ) {
@@ -81,6 +84,7 @@ public enum CommandPalette {
             self.chaptersBook = chaptersBook
             self.hasSelectedBook = hasSelectedBook
             self.readerOpen = readerOpen
+            self.readerFocused = readerFocused
             self.justify = justify
             self.ornaments = ornaments
         }
@@ -144,6 +148,8 @@ public enum CommandPalette {
         }
         if context.readerOpen {
             items.append(command(.bookmarks, "Bookmarks", "Reader"))
+            items.append(
+                command(.toggleFocus, "Focus Mode", context.readerFocused ? "On" : "Off"))
         }
         for (command, title) in [
             (Command.paperLight, "Paper: Light"),

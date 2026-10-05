@@ -28,6 +28,10 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var keyboardController: ShellKeyboardController?
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
+    /// The split state before a reading-session collapse; nil while the
+    /// sidebar stands. Focus mode and the hide-sidebar-while-reading
+    /// preference share this one restore slot.
+    @State private var sidebarVisibilityBeforeReading: NavigationSplitViewVisibility?
 
     var body: some View {
         @Bindable var clubs = clubs
@@ -78,6 +82,12 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.15), value: model.helpOpen)
         .animation(.easeOut(duration: 0.15), value: model.bookmarksOpen)
         .animation(.easeOut(duration: 0.15), value: model.paletteOpen)
+        // Reading-session sidebar collapse: focus mode and the Settings
+        // preference both want the sidebar gone; the sidebar restores only
+        // when neither applies (so leaving focus mode with the preference
+        // on keeps it tucked).
+        .onChange(of: wantsReadingSidebarCollapse) { updateSidebarForReading() }
+        .onAppear { updateSidebarForReading() }
         .onChange(of: reader.isOpen) {
             if !reader.isOpen {
                 model.requestBookmarksDismissal()
@@ -132,6 +142,26 @@ struct ContentView: View {
                 controller.start()
                 keyboardController = controller
             }
+        }
+    }
+
+    /// A reading session collapses the sidebar when focus mode is on or
+    /// the Settings preference asks for it.
+    private var wantsReadingSidebarCollapse: Bool {
+        reader.isOpen && (reader.focusMode || reader.preferences.hideSidebarWhileReading)
+    }
+
+    private func updateSidebarForReading() {
+        if wantsReadingSidebarCollapse {
+            if sidebarVisibilityBeforeReading == nil {
+                sidebarVisibilityBeforeReading = sidebarVisibility
+            }
+            if sidebarVisibility != .detailOnly {
+                sidebarVisibility = .detailOnly
+            }
+        } else if let before = sidebarVisibilityBeforeReading {
+            sidebarVisibility = before
+            sidebarVisibilityBeforeReading = nil
         }
     }
 

@@ -44,6 +44,7 @@ public enum ReaderAction: Equatable, Sendable {
     case backToBook
     case dropBookmark
     case showBookmarks
+    case toggleFocus
 }
 
 /// A small vim-style state machine mirroring `src/keymaps.ts`: `j`/`k`
@@ -123,6 +124,8 @@ public final class ReaderKeymap {
             return mode == .reader ? [.previousChapter] : []
         case "i":
             return mode == .reader ? [.focusNotes] : []
+        case "f":
+            return mode == .reader ? [.toggleFocus] : []
         case "/":
             return [.search]
         case "?":

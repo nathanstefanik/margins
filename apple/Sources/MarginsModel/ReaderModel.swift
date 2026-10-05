@@ -165,10 +165,16 @@ public final class ReaderModel {
         return pendingReveal
     }
 
+    /// macOS focus mode (`f`): the sidebar and window toolbar hide and the
+    /// footer fades when idle. Session state only — never persisted —
+    /// and leaving the reader always exits it.
+    public var focusMode = false
+
     public func close() {
         flushNoteSave()
         flushPositionSave()
         pace.noteJump()
+        focusMode = false
         book = nil
         chapter = nil
         resumeCfi = nil

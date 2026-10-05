@@ -130,6 +130,15 @@ struct SettingsView: View {
                     Button("Reset Typography", action: reader.preferences.resetTypography)
                 }
             }
+            Section("Reading") {
+                Toggle(
+                    "Hide sidebar while reading",
+                    isOn: Binding(
+                        get: { reader.preferences.hideSidebarWhileReading },
+                        set: { reader.preferences.hideSidebarWhileReading = $0 }
+                    )
+                )
+            }
         }
         .formStyle(.grouped)
     }

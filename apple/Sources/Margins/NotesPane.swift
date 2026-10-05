@@ -8,6 +8,17 @@ struct NotesPane: View {
     @FocusState private var editorFocused: Bool
     @State private var markDraft: MarkDraft?
 
+    /// The resolved reading paper — the pane is part of the page, not
+    /// system chrome.
+    private var theme: ReaderTheme { reader.preferences.theme }
+
+    /// The reader face at the size that matches the page's body text at the
+    /// default text size (110% of a 15pt base ≈ 16.5pt at 110% — the note
+    /// should read like the prose it annotates).
+    private var editorFont: Font {
+        .custom(reader.preferences.typeface.familyName, size: 15, relativeTo: .body)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
@@ -20,6 +31,12 @@ struct NotesPane: View {
             }
         }
         .padding()
+        .background(Paper.background(theme))
+        .foregroundStyle(Paper.ink(theme))
+        // The paper decides legibility: caret, selection, scroll
+        // indicators, and buttons all follow the pane's scheme, not the
+        // system's — dark paper needs a dark pane's controls either way.
+        .environment(\.colorScheme, theme.palette.isDark ? .dark : .light)
         .task(id: reader.chapter?.key) {
             await model.loadChapterNote(reader: reader)
         }
@@ -57,7 +74,7 @@ struct NotesPane: View {
             Divider()
             Text(MarkDisplay.countText(reader.noteMarks.count))
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Paper.secondaryInk(theme))
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(MarkDisplay.sortedForDisplay(reader.noteMarks), id: \.id) { mark in
@@ -74,21 +91,20 @@ struct NotesPane: View {
             VStack(alignment: .leading, spacing: 2) {
                 if !mark.quote.isEmpty {
                     Text(mark.quote)
-                        .font(.callout)
-                        .italic()
-                        .foregroundStyle(.secondary)
+                        .font(.custom(reader.preferences.typeface.familyName, size: 13, relativeTo: .callout).italic())
+                        .foregroundStyle(Paper.secondaryInk(theme))
                         .textSelection(.enabled)
                 }
                 if !mark.body.isEmpty {
                     Text(mark.body)
-                        .font(.callout)
+                        .font(.custom(reader.preferences.typeface.familyName, size: 13, relativeTo: .callout))
                         .textSelection(.enabled)
                 }
                 let attribution = MarkDisplay.attribution(percent: mark.percent, at: mark.at)
                 if !attribution.isEmpty {
                     Text(attribution)
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Paper.secondaryInk(theme).opacity(0.7))
                 }
             }
             Spacer(minLength: 8)
@@ -109,7 +125,7 @@ struct NotesPane: View {
                 .help("Delete this mark")
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Paper.secondaryInk(theme))
         }
         .padding(.vertical, 2)
     }
@@ -169,7 +185,7 @@ struct NotesPane: View {
             Text("\(reader.liveNoteWordCount) words")
                 .font(.caption)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Paper.secondaryInk(theme))
             saveStatus
         }
     }
@@ -179,7 +195,7 @@ struct NotesPane: View {
     private var saveStatus: some View {
         Text(reader.noteStatusText)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Paper.secondaryInk(theme))
             .monospacedDigit()
             .frame(minWidth: 48, alignment: .trailing)
             .opacity(reader.noteSaveStatus == .idle ? 0 : 1)
@@ -206,18 +222,18 @@ struct NotesPane: View {
     private var editor: some View {
         @Bindable var reader = reader
         return ZStack(alignment: .topLeading) {
+            // No box: the note sits on the paper itself, like a margin note
+            // on the same sheet as the page.
             TextEditor(text: $reader.noteBody)
                 .focused($editorFocused)
-                .font(.body)
+                .font(editorFont)
                 .scrollContentBackground(.hidden)
-                .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 6))
-                .padding(4)
             if reader.noteBody.isEmpty {
                 Text("What stood out? Questions, reactions, and ideas worth returning to…")
-                    .font(.body)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 12)
-                    .padding(.leading, 12)
+                    .font(editorFont)
+                    .foregroundStyle(Paper.secondaryInk(theme))
+                    .padding(.top, 8)
+                    .padding(.leading, 5)
                     .allowsHitTesting(false)
             }
         }

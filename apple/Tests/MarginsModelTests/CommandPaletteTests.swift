@@ -156,6 +156,7 @@ struct CommandPaletteTests {
         }
         #expect(!closedCommands.contains(.notesPage))
         #expect(!closedCommands.contains(.bookmarks))
+        #expect(!closedCommands.contains(.toggleFocus))
         #expect(closedCommands.contains(.importBook))
         #expect(closedCommands.contains(.toggleSidebar))
 
@@ -168,6 +169,15 @@ struct CommandPaletteTests {
         }
         #expect(openCommands.contains(.notesPage))
         #expect(openCommands.contains(.bookmarks))
+        #expect(openCommands.contains(.toggleFocus))
+    }
+
+    @Test("focus mode command reflects the current state")
+    func focusCommandState() {
+        var ctx = context(readerOpen: true)
+        ctx.readerFocused = true
+        let items = CommandPalette.items(for: ctx)
+        #expect(items.contains { $0.title == "Focus Mode" && $0.subtitle == "On" })
     }
 
     @Test("preference commands reflect current state")

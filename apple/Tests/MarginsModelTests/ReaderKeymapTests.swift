@@ -127,6 +127,16 @@ struct ReaderKeymapTests {
         #expect(keymap.handle(ReaderKeyEvent(key: "G"), now: 0).isEmpty)
     }
 
+    @Test("f toggles focus mode only in the reader")
+    func fTogglesFocusInReader() {
+        let reader = ReaderKeymap(mode: .reader)
+        #expect(reader.handle(ReaderKeyEvent(key: "f"), now: 0) == [.toggleFocus])
+        let library = ReaderKeymap(mode: .library)
+        #expect(library.handle(ReaderKeyEvent(key: "f"), now: 0).isEmpty)
+        let modal = ReaderKeymap(mode: .modal)
+        #expect(modal.handle(ReaderKeyEvent(key: "f"), now: 0).isEmpty)
+    }
+
     @Test("ctrl and meta combos are ignored so menus keep working")
     func modifierCombosAreIgnored() {
         let keymap = ReaderKeymap(mode: .reader)

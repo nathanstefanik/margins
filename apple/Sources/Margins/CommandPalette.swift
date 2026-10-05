@@ -105,6 +105,7 @@ struct CommandPaletteOverlay: View {
             chaptersBook: chaptersBook,
             hasSelectedBook: model.selectedBookID != nil,
             readerOpen: reader.isOpen,
+            readerFocused: reader.focusMode,
             justify: reader.preferences.justify,
             ornaments: reader.preferences.ornaments)
     }
@@ -305,6 +306,8 @@ struct CommandPaletteOverlay: View {
             reader.preferences.pageIndicator = .timeLeft
         case .indicatorNone:
             reader.preferences.pageIndicator = .none
+        case .toggleFocus:
+            reader.focusMode.toggle()
         }
     }
 }

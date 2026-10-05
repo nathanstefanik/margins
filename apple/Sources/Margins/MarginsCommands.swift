@@ -107,6 +107,10 @@ struct MarginsCommands: Commands {
                 reader.toggleNotes()
             }
             .disabled(!reader.isOpen)
+            Button(reader.focusMode ? "Exit Focus Mode" : "Focus Mode") {
+                reader.focusMode.toggle()
+            }
+            .disabled(!reader.isOpen)
             Divider()
             Button(BookmarkDisplay.toggleTitle(onPageCount: reader.bookmarksOnPage.count)) {
                 Task {

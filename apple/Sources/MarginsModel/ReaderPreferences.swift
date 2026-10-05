@@ -119,6 +119,7 @@ public final class ReaderPreferences {
     private static let justifyKey = "reader.justify"
     private static let ornamentsKey = "reader.ornaments"
     private static let pageIndicatorKey = "reader.pageIndicator"
+    private static let hideSidebarKey = "reader.hideSidebarWhileReading"
 
     private let defaults: UserDefaults
     private var _fixedTheme: ReaderTheme
@@ -129,6 +130,7 @@ public final class ReaderPreferences {
     private var _justify: Bool
     private var _ornaments: Bool
     private var _pageIndicator: ReaderPageIndicator
+    private var _hideSidebarWhileReading: Bool
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
@@ -157,6 +159,7 @@ public final class ReaderPreferences {
         _pageIndicator =
             ReaderPageIndicator(rawValue: defaults.string(forKey: Self.pageIndicatorKey) ?? "")
             ?? Self.defaultPageIndicator
+        _hideSidebarWhileReading = defaults.bool(forKey: Self.hideSidebarKey)
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)
@@ -271,6 +274,18 @@ public final class ReaderPreferences {
         set {
             _pageIndicator = newValue
             defaults.set(newValue.rawValue, forKey: Self.pageIndicatorKey)
+        }
+    }
+
+    /// macOS: collapse the library sidebar for the duration of a reading
+    /// session, restoring the previous split state on close. Off by
+    /// default; composes with `f` focus mode (whichever entered last wins
+    /// the collapse; the last one standing keeps it collapsed).
+    public var hideSidebarWhileReading: Bool {
+        get { _hideSidebarWhileReading }
+        set {
+            _hideSidebarWhileReading = newValue
+            defaults.set(newValue, forKey: Self.hideSidebarKey)
         }
     }
 
