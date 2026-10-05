@@ -61,14 +61,43 @@ const READER_FONT_FACE_CSS = `
   }
 `;
 // Reading-surface palettes, mirrored by the native chrome (Paper.swift /
-// DesignTokens.swift) and reader.html's pre-paint styles. Keep in sync.
+// DesignTokens.swift, both driven by ReaderPalette.swift) and reader.html's
+// pre-paint styles. Keep in sync — ReaderResourceTests asserts it.
 const READER_THEMES = {
-  light: { background: "#f4f1ea", ink: "#111111", scheme: "light" },
-  dark: { background: "#1b1a18", ink: "#e6e2da", scheme: "dark" },
+  light: { background: "#f4f1ea", ink: "#111111", secondaryInk: "#6e685e", scheme: "light" },
+  sepia: { background: "#efe6d2", ink: "#2e2519", secondaryInk: "#7a6a55", scheme: "light" },
+  dark: { background: "#1b1a18", ink: "#e6e2da", secondaryInk: "#a8a196", scheme: "dark" },
+  night: { background: "#0f0e0d", ink: "#a9a398", secondaryInk: "#6f6a62", scheme: "dark" },
+};
+// Passage highlights and the reveal flash per paper: a warm wash on the
+// light papers (multiply darkens toward the ink) and a dimmer glow on the
+// dark papers (multiply would crush to nothing there). readerApplyTheme
+// pushes these onto --margins-hl-* on the outer document, so a theme
+// switch restyles marks already on the page.
+const READER_HIGHLIGHTS = {
+  light: { fill: "rgba(255, 213, 79, 0.45)", blend: "multiply" },
+  sepia: { fill: "rgba(226, 176, 74, 0.40)", blend: "multiply" },
+  dark: { fill: "rgba(214, 170, 90, 0.26)", blend: "normal" },
+  night: { fill: "rgba(190, 150, 80, 0.20)", blend: "normal" },
 };
 // The current surface theme; the URL carries the initial choice so the
 // class set in reader.html matches until Swift calls readerSetTheme.
-let readerTheme = readerParams.get("theme") === "dark" ? "dark" : "light";
+let readerTheme = Object.prototype.hasOwnProperty.call(
+  READER_THEMES,
+  readerParams.get("theme"),
+)
+  ? readerParams.get("theme")
+  : "light";
+// The highlight look rides CSS variables on the outer document: epub.js
+// renders its annotation <g> into the view's pane (the top page, not a
+// section doc), so a rule in reader.html reaches it and a theme switch
+// repaints marks already on the page — no attribute surgery.
+function readerApplyHighlightVars() {
+  const hl = READER_HIGHLIGHTS[readerTheme];
+  document.documentElement.style.setProperty("--margins-hl-fill", hl.fill);
+  document.documentElement.style.setProperty("--margins-hl-blend", hl.blend);
+}
+readerApplyHighlightVars();
 // True once the first display finished; relayouts are only queued after that.
 let readerOpened = false;
 let readerRelayoutTimer = null;
@@ -846,8 +875,15 @@ function readerTeardownViewportObserver() {
 function readerApplyTheme(theme) {
   readerTheme = Object.prototype.hasOwnProperty.call(READER_THEMES, theme) ? theme : "light";
   const palette = READER_THEMES[readerTheme];
-  document.documentElement.classList.toggle("reader-dark", readerTheme === "dark");
+  document.documentElement.classList.remove(
+    "reader-light",
+    "reader-sepia",
+    "reader-dark",
+    "reader-night",
+  );
+  document.documentElement.classList.add(`reader-${readerTheme}`);
   document.documentElement.style.colorScheme = palette.scheme;
+  readerApplyHighlightVars();
   if (readerRendition) {
     readerRendition.getContents().forEach((contents) => readerStyleContents(contents));
   }
@@ -891,13 +927,14 @@ function readerStyleContents(contents) {
       "color": "inherit !important",
       "background-color": "transparent !important",
     },
-    // The jump-to-context reveal flash: epub.js passes the class through
-    // to its highlight SVG; inline styles are also set at add time, so
-    // this rule is a fallback for the same warm yellow.
-    ".margins-reveal": {
-      "fill": "rgba(255, 213, 79, 0.45) !important",
+    // Passage highlights and the jump-to-context reveal flash. The pane
+    // actually lives in the outer document where --margins-hl-* own the
+    // look (see reader.html); this per-section copy is belt-and-braces
+    // for any view that mounts its marks inside the section.
+    ".margins-highlight, .margins-reveal": {
+      "fill": `${READER_HIGHLIGHTS[readerTheme].fill} !important`,
       "fill-opacity": "1 !important",
-      "mix-blend-mode": "multiply",
+      "mix-blend-mode": `${READER_HIGHLIGHTS[readerTheme].blend} !important`,
     },
   };
   const face = readerFontFace ? READER_FONT_FACES[readerFontFace] : null;
@@ -1348,7 +1385,13 @@ window.readerHighlight = function (cfiRange) {
     return;
   }
   try {
-    readerRendition.annotations.add("highlight", cfiRange, {}, () => {});
+    readerRendition.annotations.add(
+      "highlight",
+      cfiRange,
+      {},
+      () => {},
+      "margins-highlight",
+    );
   } catch (error) {
     console.error("readerHighlight failed:", error);
   }
@@ -1530,7 +1573,6 @@ window.readerRevealText = async function (needle) {
           {},
           () => {},
           "margins-reveal",
-          { fill: "rgba(255, 213, 79, 0.45)", "fill-opacity": "1" },
         );
         setTimeout(() => {
           try {

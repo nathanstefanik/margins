@@ -1,12 +1,29 @@
 import Foundation
 import Observation
 
-/// The reading surface's palette. Independent of the system appearance:
-/// chrome and sheets follow the system while the page keeps this choice.
-/// Persisted as a chrome preference, like the typography below.
+/// The reading surface's palette. The resolved value every consumer reads
+/// — `Paper`, the webview bridge, and reader.js get a concrete paper out
+/// of it regardless of whether the user picked a fixed theme or follows
+/// the system appearance.
 public enum ReaderTheme: String, CaseIterable, Sendable {
     case light
+    case sepia
     case dark
+    case night
+
+    /// The name the pickers and accessibility labels show.
+    public var name: String {
+        switch self {
+        case .light: "Light"
+        case .sepia: "Sepia"
+        case .dark: "Dark"
+        case .night: "Night"
+        }
+    }
+
+    /// Light papers the day preference accepts; the night preference
+    /// accepts the dark pair.
+    public var isDayPaper: Bool { !palette.isDark }
 }
 
 /// The reader's three faces on both platforms. Charter and Seravek ship
@@ -62,23 +79,46 @@ public final class ReaderPreferences {
     /// Cream paper is the reader's native look; the app chrome follows the
     /// system appearance instead.
     public static let defaultTheme = ReaderTheme.light
+    /// The papers `followsSystem` falls back to per side of the system
+    /// appearance and the default for each stored key.
+    public static let defaultDayTheme = ReaderTheme.light
+    public static let defaultNightTheme = ReaderTheme.dark
     /// Serif by default: the printed-spread reading face.
     public static let defaultTypeface = ReaderTypeface.serif
 
     private static let themeKey = "reader.theme"
+    private static let followsSystemKey = "reader.theme.followsSystem"
+    private static let dayThemeKey = "reader.theme.day"
+    private static let nightThemeKey = "reader.theme.night"
     private static let typefaceKey = "reader.typeface"
 
     private let defaults: UserDefaults
-    private var _theme: ReaderTheme
+    private var _fixedTheme: ReaderTheme
+    private var _followsSystem: Bool
+    private var _dayTheme: ReaderTheme
+    private var _nightTheme: ReaderTheme
     private var _typeface: ReaderTypeface
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        _theme =
-            ReaderTheme(rawValue: defaults.string(forKey: Self.themeKey) ?? "")
-            ?? Self.defaultTheme
+        let storedTheme = defaults.string(forKey: Self.themeKey)
+        _fixedTheme =
+            storedTheme.flatMap(ReaderTheme.init(rawValue:)) ?? Self.defaultTheme
+        // Fresh installs follow the system; a stored `reader.theme` means
+        // the user already picked a paper, so they keep it.
+        _followsSystem =
+            defaults.object(forKey: Self.followsSystemKey) as? Bool
+            ?? (storedTheme == nil)
+        // The day/night slots only accept their side of the palette; a
+        // foreign or unknown stored value resets to that side's default.
+        _dayTheme =
+            ReaderTheme(rawValue: defaults.string(forKey: Self.dayThemeKey) ?? "")
+            .flatMap { $0.isDayPaper ? $0 : nil } ?? Self.defaultDayTheme
+        _nightTheme =
+            ReaderTheme(rawValue: defaults.string(forKey: Self.nightThemeKey) ?? "")
+            .flatMap { $0.isDayPaper ? nil : $0 } ?? Self.defaultNightTheme
         _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
 
         #if os(iOS)
@@ -117,14 +157,56 @@ public final class ReaderPreferences {
         #endif
     }
 
-    /// The reading surface's palette, light cream by default.
+    /// The resolved paper everyone reads. With `followsSystem` on it
+    /// answers the day/night choice for the current system appearance;
+    /// setting it picks a fixed paper and turns following off, so the old
+    /// direct-pick call sites behave as they always did.
     public var theme: ReaderTheme {
-        get { _theme }
+        get { _followsSystem ? (systemIsDark ? _nightTheme : _dayTheme) : _fixedTheme }
         set {
-            _theme = newValue
+            _fixedTheme = newValue
+            _followsSystem = false
             defaults.set(newValue.rawValue, forKey: Self.themeKey)
+            defaults.set(false, forKey: Self.followsSystemKey)
         }
     }
+
+    /// Whether the paper follows the system appearance. Defaults to true
+    /// on a fresh install and to false when a stored `reader.theme` says
+    /// the user already chose one.
+    public var followsSystem: Bool {
+        get { _followsSystem }
+        set {
+            _followsSystem = newValue
+            defaults.set(newValue, forKey: Self.followsSystemKey)
+        }
+    }
+
+    /// The paper used while the system is light and `followsSystem` is
+    /// on. Only the light papers are accepted.
+    public var dayTheme: ReaderTheme {
+        get { _dayTheme }
+        set {
+            guard newValue.isDayPaper else { return }
+            _dayTheme = newValue
+            defaults.set(newValue.rawValue, forKey: Self.dayThemeKey)
+        }
+    }
+
+    /// The paper used while the system is dark and `followsSystem` is
+    /// on. Only the dark papers are accepted.
+    public var nightTheme: ReaderTheme {
+        get { _nightTheme }
+        set {
+            guard !newValue.isDayPaper else { return }
+            _nightTheme = newValue
+            defaults.set(newValue.rawValue, forKey: Self.nightThemeKey)
+        }
+    }
+
+    /// The current system appearance, pushed in by each app's root view
+    /// (`@Environment(\.colorScheme)`). Not persisted.
+    public var systemIsDark = false
 
     /// The chosen face. The whole book follows it (publisher families are
     /// forced to inherit; code/pre keep their monospace).

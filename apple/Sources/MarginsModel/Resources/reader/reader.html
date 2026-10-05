@@ -14,11 +14,38 @@
     background: #f4f1ea;
     color: #111;
   }
-  /* Dark reading theme. The class is set before first paint by the inline
-     script below and toggled at runtime by readerSetTheme in reader.js. */
+  /* One class per paper, set before first paint by the inline script
+     below and toggled at runtime by readerSetTheme in reader.js. These
+     hexes mirror ReaderPalette.swift — ReaderResourceTests keeps them
+     equal. */
+  html.reader-light, html.reader-light body {
+    background: #f4f1ea;
+    color: #111111;
+  }
+  html.reader-sepia, html.reader-sepia body {
+    background: #efe6d2;
+    color: #2e2519;
+  }
   html.reader-dark, html.reader-dark body {
     background: #1b1a18;
     color: #e6e2da;
+  }
+  html.reader-night, html.reader-night body {
+    background: #0f0e0d;
+    color: #a9a398;
+  }
+  /* Passage highlights live in the view's annotation pane — this outer
+     document, not a section — so their look is a rule here driven by the
+     --margins-hl-* variables reader.js sets per paper. The :root values
+     are the light-paper fallback until reader.js lands. */
+  :root {
+    --margins-hl-fill: rgba(255, 213, 79, 0.45);
+    --margins-hl-blend: multiply;
+  }
+  g.margins-highlight, g.margins-reveal {
+    fill: var(--margins-hl-fill);
+    fill-opacity: 1;
+    mix-blend-mode: var(--margins-hl-blend);
   }
   /* Uncapped reading container: the desktop layout resolves the viewer's
      width from this element, never from the capped viewer itself, so the
@@ -51,9 +78,11 @@
 <script>
   (function () {
     var params = new URLSearchParams(window.location.search);
-    if (params.get("theme") === "dark") {
-      document.documentElement.classList.add("reader-dark");
-      document.documentElement.style.colorScheme = "dark";
+    var theme = params.get("theme");
+    if (/^(light|sepia|dark|night)$/.test(theme)) {
+      document.documentElement.classList.add("reader-" + theme);
+      document.documentElement.style.colorScheme =
+        theme === "dark" || theme === "night" ? "dark" : "light";
     }
     // Desktop spacing is a URL opt-in so iOS keeps its own padding.
     if (params.get("platform") === "macos") {

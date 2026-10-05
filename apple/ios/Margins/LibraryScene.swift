@@ -25,6 +25,8 @@ struct LibraryScene: View {
     @Environment(LibraryModel.self) private var library
     @Environment(ClubModel.self) private var clubs
     @Environment(AppModel.self) private var app
+    @Environment(ReaderModel.self) private var reader
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var selectedTab: AppTab = .library
     @State private var libraryPath: [LibraryRoute] = []
@@ -70,6 +72,14 @@ struct LibraryScene: View {
             }
         )
         .tabViewStyle(.sidebarAdaptable)
+        // The reader's resolved paper follows the system appearance when
+        // the preference says so. The root view owns the push (an App's
+        // environment does not track appearance) so the URL theme is right
+        // before the reader's first paint.
+        .onAppear { reader.preferences.systemIsDark = colorScheme == .dark }
+        .onChange(of: colorScheme) { _, scheme in
+            reader.preferences.systemIsDark = scheme == .dark
+        }
         .tabBarMinimizeBehavior(.onScrollDown)
         .overlay { materializingOverlay }
         #if DEBUG

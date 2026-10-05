@@ -34,22 +34,29 @@ enum DesignTokens {
         static let prompt = Animation.spring(response: 0.35, dampingFraction: 0.82)
     }
 
-    /// The reader's paper, mirroring the palettes in `reader.html` /
-    /// `reader.js`. The reading surface is the single place with its own
-    /// palette; chrome and sheets follow the system appearance.
+    /// The reader's paper — a thin `Color` adapter over `ReaderPalette`,
+    /// which owns the values mirrored by `reader.html` / `reader.js`. The
+    /// reading surface is the single place with its own palette; chrome
+    /// and sheets follow the system appearance.
     enum Paper {
-        static let lightBackground = Color(red: 244 / 255, green: 241 / 255, blue: 234 / 255)
-        static let lightSecondaryInk = Color(red: 110 / 255, green: 104 / 255, blue: 94 / 255)
-
-        static let darkBackground = Color(red: 27 / 255, green: 26 / 255, blue: 24 / 255)
-        static let darkSecondaryInk = Color(red: 168 / 255, green: 161 / 255, blue: 150 / 255)
-
         static func background(_ theme: ReaderTheme) -> Color {
-            theme == .dark ? darkBackground : lightBackground
+            color(theme.palette.background)
+        }
+
+        static func ink(_ theme: ReaderTheme) -> Color {
+            color(theme.palette.ink)
         }
 
         static func secondaryInk(_ theme: ReaderTheme) -> Color {
-            theme == .dark ? darkSecondaryInk : lightSecondaryInk
+            color(theme.palette.secondaryInk)
+        }
+
+        private static func color(_ rgb: ReaderPalette.RGB) -> Color {
+            Color(
+                red: Double(rgb.red) / 255,
+                green: Double(rgb.green) / 255,
+                blue: Double(rgb.blue) / 255
+            )
         }
     }
 }

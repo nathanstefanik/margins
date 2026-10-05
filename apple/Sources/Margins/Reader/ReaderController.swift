@@ -104,7 +104,7 @@ final class ReaderController: NSObject {
     /// system appearance, not this.
     private func applyTheme() {
         let theme = reader.preferences.theme
-        webView?.appearance = NSAppearance(named: theme == .dark ? .darkAqua : .aqua)
+        webView?.appearance = NSAppearance(named: theme.palette.isDark ? .darkAqua : .aqua)
         webView?.underPageBackgroundColor = NSColor(Paper.background(theme))
         evaluate("readerSetTheme(\(Self.javaScriptLiteral(theme.rawValue)))")
     }

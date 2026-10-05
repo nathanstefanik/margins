@@ -25,6 +25,7 @@ struct ContentView: View {
     @Environment(LibraryModel.self) private var model
     @Environment(ClubModel.self) private var clubs
     @Environment(ReaderModel.self) private var reader
+    @Environment(\.colorScheme) private var colorScheme
     @State private var keyboardController: ShellKeyboardController?
     @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
 
@@ -91,6 +92,13 @@ struct ContentView: View {
             JoinClubSheet()
                 .environment(model)
                 .environment(clubs)
+        }
+        // The reader's resolved paper follows the system appearance when
+        // the preference says so; the root view owns the push so the URL
+        // theme is right before the reader's first paint.
+        .onAppear { reader.preferences.systemIsDark = colorScheme == .dark }
+        .onChange(of: colorScheme) {
+            reader.preferences.systemIsDark = colorScheme == .dark
         }
         .task {
             MarginsApp.wireModels(model: model, reader: reader)

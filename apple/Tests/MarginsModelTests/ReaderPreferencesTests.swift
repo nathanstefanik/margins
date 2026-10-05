@@ -32,9 +32,115 @@ struct ReaderPreferencesTests {
     func unknownPersistedThemeFallsBack() {
         let defaults = makeDefaults()
         defer { UserDefaults().removePersistentDomain(forName: suiteName) }
-        defaults.set("sepia", forKey: "reader.theme")
+        defaults.set("beige", forKey: "reader.theme")
 
         #expect(ReaderPreferences(defaults: defaults).theme == ReaderTheme.light)
+    }
+
+    @Test("a fresh install follows the system appearance")
+    func freshInstallFollowsSystem() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.followsSystem)
+        #expect(preferences.dayTheme == .light)
+        #expect(preferences.nightTheme == .dark)
+        #expect(preferences.theme == .light)
+
+        preferences.systemIsDark = true
+        #expect(preferences.theme == .dark)
+    }
+
+    @Test("a stored theme keeps the fixed paper and stops following")
+    func storedThemeStaysFixed() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        defaults.set("dark", forKey: "reader.theme")
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(!preferences.followsSystem)
+        #expect(preferences.theme == .dark)
+
+        preferences.systemIsDark = false
+        #expect(preferences.theme == .dark)
+    }
+
+    @Test("following resolves the day or night paper per system appearance")
+    func followResolutionMatrix() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        preferences.dayTheme = .sepia
+        preferences.nightTheme = .night
+
+        preferences.followsSystem = true
+        preferences.systemIsDark = false
+        #expect(preferences.theme == .sepia)
+        preferences.systemIsDark = true
+        #expect(preferences.theme == .night)
+
+        preferences.followsSystem = false
+        preferences.theme = .light
+        preferences.systemIsDark = true
+        #expect(preferences.theme == .light)
+        preferences.systemIsDark = false
+        #expect(preferences.theme == .light)
+    }
+
+    @Test("the follow-system keys round-trip through the injected store")
+    func followKeysRoundTrip() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        preferences.followsSystem = false
+        preferences.dayTheme = .sepia
+        preferences.nightTheme = .night
+
+        let second = ReaderPreferences(defaults: defaults)
+        #expect(!second.followsSystem)
+        #expect(second.dayTheme == .sepia)
+        #expect(second.nightTheme == .night)
+    }
+
+    @Test("foreign papers stored in the day/night keys fall back per side")
+    func foreignDayNightValuesFallBack() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        defaults.set("night", forKey: "reader.theme.day")
+        defaults.set("light", forKey: "reader.theme.night")
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.dayTheme == .light)
+        #expect(preferences.nightTheme == .dark)
+    }
+
+    @Test("the day and night setters refuse papers from the other side")
+    func dayNightSettersGuard() {
+        let preferences = ReaderPreferences(defaults: makeDefaults())
+        preferences.dayTheme = .night
+        preferences.nightTheme = .light
+        #expect(preferences.dayTheme == .light)
+        #expect(preferences.nightTheme == .dark)
+    }
+
+    @Test("setting the resolved theme picks a fixed paper and unfollows")
+    func themeSetterUnfollows() {
+        let defaults = makeDefaults()
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.followsSystem)
+
+        preferences.theme = .sepia
+        #expect(!preferences.followsSystem)
+        #expect(preferences.theme == .sepia)
+        #expect(defaults.string(forKey: "reader.theme") == "sepia")
+        #expect(defaults.object(forKey: "reader.theme.followsSystem") as? Bool == false)
+
+        #expect(ReaderPreferences(defaults: defaults).theme == .sepia)
     }
 
     @Test("typeface defaults to serif and round-trips every face through the store")

@@ -334,7 +334,7 @@ final class ReaderBridge: NSObject {
     /// the system appearance, not this.
     private func applyTheme() {
         let theme = reader.preferences.theme
-        webView?.overrideUserInterfaceStyle = theme == .dark ? .dark : .light
+        webView?.overrideUserInterfaceStyle = theme.palette.isDark ? .dark : .light
         webView?.underPageBackgroundColor = UIColor(DesignTokens.Paper.background(theme))
         evaluate("readerSetTheme(\(Self.javaScriptLiteral(theme.rawValue)))")
     }
