@@ -45,6 +45,45 @@ public final class LibraryModel {
     /// gone (re-import, evicted metadata).
     public private(set) var continueChapterTitle: String?
 
+    /// The library's three shelves. Every book lands in exactly one:
+    /// `reading` — started (a saved position or any progress) but under
+    /// 99%; `upNext` — never opened; `finished` — at 99% or beyond.
+    public struct Shelves: Equatable {
+        public var reading: [BookSummary] = []
+        public var upNext: [BookSummary] = []
+        public var finished: [BookSummary] = []
+    }
+
+    /// Books partitioned into shelves. Within a shelf: Reading and
+    /// Finished newest-read first, Up next newest-added first.
+    public var shelves: Shelves {
+        var shelves = Shelves()
+        for book in books {
+            let progress = book.progressPercent ?? 0
+            if progress >= 99 {
+                shelves.finished.append(book)
+            } else if book.lastReadAt != nil || progress > 0 {
+                shelves.reading.append(book)
+            } else {
+                shelves.upNext.append(book)
+            }
+        }
+        let newestRead = { (a: BookSummary, b: BookSummary) in
+            (a.lastReadAt ?? .distantPast) > (b.lastReadAt ?? .distantPast)
+        }
+        shelves.reading.sort(by: newestRead)
+        shelves.finished.sort(by: newestRead)
+        shelves.upNext.sort { $0.addedAt > $1.addedAt }
+        return shelves
+    }
+
+    /// The display order: what you're reading, what's queued, what's done.
+    /// Selection movement follows this, not the raw list order.
+    public var orderedBooks: [BookSummary] {
+        let shelves = shelves
+        return shelves.reading + shelves.upNext + shelves.finished
+    }
+
     private let dataDir: String?
     private var store: CoreStore?
 
@@ -452,10 +491,11 @@ public final class LibraryModel {
         continueChapterTitle = chapter.title
     }
 
-    /// Moves the sidebar selection by `delta` books (shell keyboard j/k).
+    /// Moves the sidebar selection by `delta` books (shell keyboard j/k),
+    /// following the displayed shelf order rather than the raw list.
     public func moveLibrarySelection(_ delta: Int) {
-        guard !books.isEmpty else { return }
-        let ids = books.map(\.id)
+        let ids = orderedBooks.map(\.id)
+        guard !ids.isEmpty else { return }
         let currentIndex = selectedBookID.flatMap { ids.firstIndex(of: $0) } ?? (delta > 0 ? -1 : 0)
         let next = min(max(currentIndex + delta, 0), ids.count - 1)
         guard ids[next] != selectedBookID else { return }

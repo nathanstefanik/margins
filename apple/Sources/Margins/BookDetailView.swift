@@ -265,6 +265,6 @@ struct BookDetailView: View {
     }
 
     private var addedText: String {
-        book.addedAt.formatted(date: .abbreviated, time: .shortened)
+        book.addedAt.formatted(date: .abbreviated, time: .omitted)
     }
 }

@@ -448,6 +448,73 @@ struct LibraryModelTests {
         #expect(model.continueChapterTitle == model.selectedBook?.chapters.first?.title)
     }
 
+    @Test("shelves partition every book into exactly one shelf, sorted")
+    @MainActor
+    func shelvesPartitionAndOrder() async throws {
+        let fixtures = try fixtureEpubs()
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+
+        #expect(await model.importEpub(atPath: try #require(fixtures.first)))
+        let firstId = try #require(model.books.first?.id)
+        #expect(await model.importEpub(atPath: try #require(fixtures.dropFirst().first)))
+        let secondId = try #require(model.books.first { $0.id != firstId }?.id)
+
+        // Both unread: Up next, newest-added first.
+        #expect(model.shelves.reading.isEmpty)
+        #expect(model.shelves.finished.isEmpty)
+        #expect(model.shelves.upNext.map(\.id) == [secondId, firstId])
+
+        // firstId in progress → Reading; secondId untouched → Up next.
+        try writePositionFile(
+            root: model.libraryRoot, bookId: firstId,
+            updatedAt: "2026-09-01T10:00:00Z", percent: 40)
+        await model.refresh()
+        #expect(model.shelves.reading.map(\.id) == [firstId])
+        #expect(model.shelves.upNext.map(\.id) == [secondId])
+        #expect(model.orderedBooks.map(\.id) == [firstId, secondId])
+
+        // secondId finished (99) → Finished; Reading newest-read first.
+        try writePositionFile(
+            root: model.libraryRoot, bookId: secondId,
+            updatedAt: "2026-09-03T10:00:00Z", percent: 99)
+        await model.refresh()
+        #expect(model.shelves.finished.map(\.id) == [secondId])
+        #expect(model.orderedBooks.map(\.id) == [firstId, secondId])
+
+        // firstId read more recently → still Reading, ahead in order.
+        try writePositionFile(
+            root: model.libraryRoot, bookId: secondId,
+            updatedAt: "2026-09-04T10:00:00Z", percent: 10)
+        await model.refresh()
+        #expect(model.shelves.reading.map(\.id) == [secondId, firstId])
+        #expect(model.shelves.finished.isEmpty)
+        #expect(model.orderedBooks.map(\.id) == [secondId, firstId])
+    }
+
+    @Test("j/k selection follows the shelf order and clamps at the ends")
+    @MainActor
+    func moveSelectionFollowsOrderedBooks() async throws {
+        let fixtures = try fixtureEpubs()
+        let model = LibraryModel(dataDir: try makeTempDataDir())
+        await model.activate()
+        #expect(await model.importEpub(atPath: try #require(fixtures.first)))
+        #expect(await model.importEpub(atPath: try #require(fixtures.dropFirst().first)))
+        let ordered = model.orderedBooks.map(\.id)
+        #expect(ordered.count == 2)
+
+        // Import selects the newest book; clear it so j starts at the top.
+        model.selectedBookID = nil
+        model.moveLibrarySelection(1)
+        #expect(model.selectedBookID == ordered[0])
+        model.moveLibrarySelection(-1)
+        #expect(model.selectedBookID == ordered[0])  // clamps at the top
+        model.moveLibrarySelection(1)
+        #expect(model.selectedBookID == ordered[1])
+        model.moveLibrarySelection(1)
+        #expect(model.selectedBookID == ordered[1])  // clamps at the bottom
+    }
+
     @Test("chapter → note word count join from the notes index")
     @MainActor
     func chapterNoteWordCountJoin() async throws {
