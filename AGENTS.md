@@ -111,10 +111,6 @@ Mistakes that have already cost time here:
   domain, and an installed copy can shadow the build if launched by name.
   Follow `docs/testing/macos-runtime.md` (seeded `/tmp` library, launch by
   path, restore every key you write).
-- **Environment blockers need the user:** an unaccepted Xcode license
-  breaks even `git` (exit 69, `sudo xcodebuild -license accept`). An
-  out-of-date CoreSimulator hangs `simctl` (`sudo xcodebuild
-  -runFirstLaunch`). Ask; don't loop on retries.
 
 ## Useful commands
 

@@ -51,18 +51,5 @@ the per-chapter `notePrompt.dismissed.<book>.<chapter>` silences.
   hover and tracking areas, such as the footer scrubber and the focus-mode
   footer fade. `CGWarpMouseCursorPosition` alone moves the cursor without
   firing them.
-- If no synthetic click or key reaches the app, a system dialog may be
-  holding input; for example, a SecurityAgent "Developer Tools Access"
-  prompt left over from an Xcode first-launch step. Ask the user to clear it
-  rather than assuming the feature is broken.
 - Screenshots: `screencapture -l <windowid>` or `-R x,y,w,h`; keep them
   under `/tmp` and report the paths.
-
-## iOS simulator prerequisites
-
-`make ios-build` only needs the SDK. Booting a simulator needs a matching
-CoreSimulator. If `xcodebuild` warns "CoreSimulator is out of date",
-`simctl` will hang. The fix is `sudo xcodebuild -runFirstLaunch` (or an
-Xcode update), which needs the user's password. Ask the user before
-starting any simulator work instead of retrying, and record iOS checks as
-build-only until it's fixed.
