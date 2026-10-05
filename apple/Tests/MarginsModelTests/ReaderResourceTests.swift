@@ -51,12 +51,14 @@ struct ReaderResourceTests {
     @Test("the reader resources carry ReaderPalette's hexes verbatim")
     func paletteStaysInSyncWithResources() throws {
         let js = try #require(
-            readerSource("reader", "js"),
-            "Margins_MarginsModel.bundle not found next to the test bundle"
+            ReaderResource.readerJS.bundledURL
+                .flatMap { try? String(contentsOf: $0, encoding: .utf8) },
+            "bundled reader.js could not be read"
         )
         let html = try #require(
-            readerSource("reader", "html"),
-            "Margins_MarginsModel.bundle not found next to the test bundle"
+            ReaderResource.readerHTML.bundledURL
+                .flatMap { try? String(contentsOf: $0, encoding: .utf8) },
+            "bundled reader.html could not be read"
         )
 
         for theme in ReaderTheme.allCases {
@@ -111,24 +113,4 @@ struct ReaderResourceTests {
         }
     }
 
-    /// Reads a vendored reader file out of the MarginsModel resource
-    /// bundle — the same copy the scheme handler serves.
-    private func readerSource(_ name: String, _ ext: String) -> String? {
-        let bundleName = "Margins_MarginsModel.bundle"
-        for base in [
-            Bundle.main.resourceURL,
-            Bundle.main.bundleURL,
-            Bundle(for: ReaderPreferences.self).resourceURL,
-            Bundle(for: ReaderPreferences.self).bundleURL,
-        ].compactMap({ $0 }) {
-            if let bundle = Bundle(url: base.appendingPathComponent(bundleName)),
-                let url = bundle.url(
-                    forResource: name, withExtension: ext, subdirectory: "reader"),
-                let text = try? String(contentsOf: url, encoding: .utf8)
-            {
-                return text
-            }
-        }
-        return nil
-    }
 }

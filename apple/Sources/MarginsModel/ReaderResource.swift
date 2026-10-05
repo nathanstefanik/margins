@@ -49,6 +49,18 @@ public enum ReaderResource: String, CaseIterable, Sendable {
         return String(raw[raw.index(after: dot)...])
     }
 
+    /// The vendored copy inside the MarginsModel resource bundle — the
+    /// same URL the scheme handler serves. `.bookEpub` has no bundled
+    /// file: its bytes come from the library.
+    public var bundledURL: URL? {
+        guard self != .bookEpub else { return nil }
+        return Bundle.module.url(
+            forResource: fileName,
+            withExtension: fileExtension,
+            subdirectory: "reader"
+        )
+    }
+
     public var mimeType: String {
         switch self {
         case .readerHTML: "text/html"

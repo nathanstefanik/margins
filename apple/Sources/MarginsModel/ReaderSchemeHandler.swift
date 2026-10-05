@@ -34,13 +34,7 @@ public final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
                     .value ?? ""
                 data = try bytesProvider(bookID)
             default:
-                guard
-                    let fileURL = Bundle.module.url(
-                        forResource: resource.fileName,
-                        withExtension: resource.fileExtension,
-                        subdirectory: "reader"
-                    )
-                else {
+                guard let fileURL = resource.bundledURL else {
                     throw ReaderError.missingBundledResource(resource.rawValue)
                 }
                 data = try Data(contentsOf: fileURL)
