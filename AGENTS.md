@@ -4,23 +4,45 @@ EPUB reader with two frontends over one Swift core: a native SwiftUI macOS app a
 
 ## Commit messages
 
-Prefix every commit with a type tag and a short imperative summary:
+Follow Google's CL description guidance
+(https://google.github.io/eng-practices/review/developer/cl-descriptions.html).
+Commits before this rule used `FEAT`/`BUG`/`CHORE`/`DOCS`/`REFACTOR` prefixes
+and AI `Co-Authored-By` trailers; leave that history alone, don't copy it.
 
-| Prefix | Use for |
-|--------|---------|
-| `FEAT` | New user-facing capability |
-| `BUG` | Bug fix |
-| `CHORE` | Tooling, deps, formatting, config |
-| `DOCS` | Documentation only |
-| `REFACTOR` | Behavior-preserving code change |
+- **Subject:** one imperative sentence that stands alone in `git log
+  --oneline`. Sentence case, no trailing period, aim for 60 characters
+  (72 at most). No type tags or Conventional Commit prefixes.
+- **Body** (after a blank line) for anything non-trivial: what changed and
+  why, the context and decisions the diff doesn't show, and known
+  shortcomings or follow-ups. Plain text wrapped at 72 columns, no
+  Markdown.
+- **Trailers** in the final paragraph, one `Key: value` per line:
+  `Test:` (how it was verified, when not obvious), `Fixes:` (issue refs),
+  and `Assisted-by: <tool>` (e.g. `Assisted-by: Devin`) when an AI tool
+  materially wrote or shaped the change.
+- Never add `Co-authored-by` for AI tools, "Generated with …" lines, emojis,
+  or AI-added `Signed-off-by`. The human committer is the author.
+- PR titles follow the subject rules; no "Generated with …" footers.
 
 Examples:
 
 ```
-FEAT Add chapter note autosave on :w
-BUG Fix OPF spine parsing for nested paths
-CHORE Reformatted Swift with swift-format
-DOCS Document library sync workflow
+Add chapter note autosave on :w
+Fix OPF spine parsing for nested paths
+Reformat Swift with swift-format
+Document the library sync workflow
+```
+
+```
+Keep the reflow anchor instead of ratcheting it backward
+
+After each settled reflow the transaction recaptured the new page start
+as the anchor. That start is never later than the old anchor, so
+successive resizes could land the reader a page early. Pin the anchor
+until the next navigation.
+
+Test: swift test --package-path apple --filter ReaderLayoutIntegration
+Assisted-by: Devin
 ```
 
 ## Project map
