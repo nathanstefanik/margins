@@ -28,7 +28,9 @@ public struct RemoteEntry: Equatable, Sendable {
 /// A file-by-file remote tree sync can list, read, write, and delete.
 /// Paths are "/"-separated, relative to the remote root.
 public protocol SyncRemote: Sendable {
-    /// Account identity; a change discards the sync base. nil = unknown.
+    /// Account identity; a change discards the sync base. nil means no
+    /// account is available — a pass must then do nothing (an absent
+    /// account also empties the listing).
     func identity() async -> String?
     /// Every regular file under the remote root, keyed by "/"-separated
     /// path relative to the root. Any path component starting with "."

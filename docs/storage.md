@@ -488,7 +488,9 @@ the phone doesn't store the EPUB twice — the library's own copy stays.
 After a pass pulls note or
 notebook files, `Notes.reconcileIndex`/`Notebooks.reconcileIndex` rebuild
 the derived `_index.json` files. The old Application Support EPUB mirror
-is folded into the library once at first launch.
+is folded into the library once, on the first launch with iCloud
+available; EPUBs of books that no longer exist are dropped rather than
+resurrected.
 
 Notebooks sync with the library like every other file under the root. The
 per-device text index never does: each device builds its own under its own

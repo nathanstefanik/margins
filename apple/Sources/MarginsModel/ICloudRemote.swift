@@ -33,10 +33,10 @@ public final class ICloudRemote: SyncRemote, @unchecked Sendable {
 
     // MARK: Identity and listing
 
-    public func identity() async -> String? {
-        guard let token = FileManager.default.ubiquityIdentityToken else { return nil }
-        // The token need not adopt NSSecureCoding; fall back to the
-        // plain archiver rather than reporting no account.
+    /// The token archived to a base64 string for the manifest. The token
+    /// need not adopt NSSecureCoding; fall back to the plain archiver
+    /// rather than reporting no account.
+    static func archive(_ token: NSObject) -> String? {
         let data =
             (try? NSKeyedArchiver.archivedData(
                 withRootObject: token, requiringSecureCoding: true))
@@ -45,20 +45,33 @@ public final class ICloudRemote: SyncRemote, @unchecked Sendable {
         return data?.base64EncodedString()
     }
 
-    /// Serialized token bytes can differ launch to launch even for the
-    /// same account, so equality is decided on the unarchived token.
-    public func identityMatches(_ stored: String) async -> Bool {
+    /// Whether `stored` — a base64 string `archive(_:)` produced — names
+    /// the same account as `current`. Serialized token bytes can differ
+    /// launch to launch, so equality is decided on the unarchived token;
+    /// the root object lives under `NSKeyedArchiveRootObjectKey`.
+    static func token(_ stored: String, matches current: NSObject) -> Bool {
         guard let data = Data(base64Encoded: stored),
-            let token = FileManager.default.ubiquityIdentityToken
-        else { return false }
-        guard let unarchiver = try? NSKeyedUnarchiver(forReadingFrom: data)
+            let unarchiver = try? NSKeyedUnarchiver(forReadingFrom: data)
         else { return false }
         unarchiver.requiresSecureCoding = false
         defer { unarchiver.finishDecoding() }
-        guard let storedToken = unarchiver.decodeObject() as? NSObject else {
-            return false
-        }
-        return storedToken.isEqual(token)
+        guard
+            let storedToken = unarchiver.decodeObject(
+                forKey: NSKeyedArchiveRootObjectKey) as? NSObject
+        else { return false }
+        return storedToken.isEqual(current)
+    }
+
+    public func identity() async -> String? {
+        guard let token = FileManager.default.ubiquityIdentityToken as? NSObject
+        else { return nil }
+        return Self.archive(token)
+    }
+
+    public func identityMatches(_ stored: String) async -> Bool {
+        guard let token = FileManager.default.ubiquityIdentityToken as? NSObject
+        else { return false }
+        return Self.token(stored, matches: token)
     }
 
     public func snapshot() async throws -> [String: RemoteEntry] {

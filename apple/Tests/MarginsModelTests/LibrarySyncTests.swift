@@ -587,36 +587,41 @@ struct LibrarySyncTests {
 
         let report = try await Self.report(harness.sync)
         #expect(report.pulled == 4)
-        #expect(report.changedBookIds == ["b1", "b2"])
         #expect(report.notesChangedBookIds == ["b1"])
         #expect(report.notebooksChanged)
     }
 
     // MARK: Mirror seeding
 
-    @Test("seedFromMirror moves missing EPUBs and never overwrites")
+    @Test("seedFromMirror moves books that exist and drops the rest")
     func seedFromMirror() async throws {
         let harness = try Harness()
         let fixture = try #require(try fixtureEpubs().first)
         let bookId = try Library.contentID(ofFile: fixture)
         let mirror = harness.root.appendingPathComponent("mirror", isDirectory: true)
-        try FileManager.default.createDirectory(at: mirror, withIntermediateDirectories: true)
-        try FileManager.default.copyItem(
+        let manager = FileManager.default
+        try manager.createDirectory(at: mirror, withIntermediateDirectories: true)
+        // Book survives remotely: move its EPUB in.
+        try harness.writeRemote("meta", at: "books/\(bookId)/meta.json")
+        try manager.copyItem(
             atPath: fixture, toPath: mirror.appendingPathComponent("\(bookId).epub").path)
-        // One the local library already has: must not be overwritten.
-        try FileManager.default.copyItem(
+        // Book already downloaded: drop the mirror copy, never overwrite.
+        try manager.copyItem(
             atPath: fixture, toPath: mirror.appendingPathComponent("present.epub").path)
         try harness.writeLocal("existing", at: "books/present/source.epub")
+        // Orphan — deleted everywhere: drop it, don't resurrect.
+        try manager.copyItem(
+            atPath: fixture, toPath: mirror.appendingPathComponent("orphan.epub").path)
 
-        let moved = try LibrarySync.seedFromMirror(
-            mirrorDirectory: mirror, localRoot: harness.localRoot)
+        let moved = await harness.sync.seedFromMirror(mirror)
         #expect(moved == 1)
         #expect(
             try Data(
                 contentsOf: harness.localRoot.appendingPathComponent(
                     "books/\(bookId)/source.epub")) == Data(contentsOf: URL(fileURLWithPath: fixture)))
         #expect(try harness.localText("books/present/source.epub") == "existing")
-        #expect(!FileManager.default.fileExists(atPath: mirror.path))
+        #expect(!harness.localExists("books/orphan/source.epub"))
+        #expect(!manager.fileExists(atPath: mirror.path))
     }
 
     // MARK: Coalescing
@@ -632,14 +637,37 @@ struct LibrarySyncTests {
         async let first = harness.sync.sync()
         await gate.waitUntilEntered()
 
-        // The running pass holds the actor; this call only asks for more.
-        let second = await harness.sync.sync()
-        #expect(second == nil)
-
+        // The running pass holds the actor; this call asks for a
+        // follow-up and returns only once that follow-up has run.
+        async let second = harness.sync.sync()
         gate.open()
-        let merged = try #require(await first)
-        // The follow-up pass ran: two snapshots, one file pushed once.
+
+        #expect(await second == nil)
+        // When it returned, the follow-up pass had already run.
         #expect(harness.remote.with { $0.snapshotCalls } == 2)
+        let merged = try #require(await first)
         #expect(merged.pushed == 1)
+    }
+
+    // MARK: Account loss
+
+    @Test("a nil remote identity stops the pass before anything deletes")
+    func nilIdentityFreezes() async throws {
+        let harness = try Harness()
+        try harness.writeBook("b1")
+        try harness.writeBook("b2")
+        _ = try await Self.report(harness.sync)
+
+        // Signed out: the listing would be empty — but nothing may move.
+        harness.remote.with { $0.identity = nil }
+        try FileManager.default.removeItem(at: harness.remoteRoot)
+
+        let report = try await Self.report(harness.sync)
+        #expect(report.deletedLocal == 0)
+        #expect(report.deletedRemote == 0)
+        #expect(report.pushed == 0 && report.pulled == 0)
+        #expect(report.failures.contains { $0.hasPrefix("snapshot:") })
+        #expect(harness.localExists("books/b1/meta.json"))
+        #expect(harness.localExists("books/b2/meta.json"))
     }
 }

@@ -108,14 +108,6 @@ final class AppModel {
             await library.setLibraryRoot(localRoot.path)
         }
 
-        // One-time fold of the old EPUB mirror into the local library.
-        try? await Task.detached(priority: .utility) {
-            try LibrarySync.seedFromMirror(
-                mirrorDirectory: self.support.appendingPathComponent(
-                    "epubs", isDirectory: true),
-                localRoot: self.localRoot)
-        }.value
-
         // Notes can save before club transport finishes; publish is a
         // no-op while `sync` is still nil. CloudKit must not gate the
         // library grid.
@@ -129,7 +121,6 @@ final class AppModel {
             search.attach(store: store)
         }
 
-        await library.refresh()
         // Indexing is derived data — don't hold the first sync behind it.
         Task { await self.indexPass() }
         await startSync()
@@ -160,6 +151,10 @@ final class AppModel {
             stateDirectory: support.appendingPathComponent("sync", isDirectory: true))
         librarySync = engine
         syncAvailable = true
+        // One-time fold of the old EPUB mirror — only now that a remote
+        // exists, so orphaned copies aren't resurrected as books.
+        _ = await engine.seedFromMirror(
+            support.appendingPathComponent("epubs", isDirectory: true))
         await remote.startMonitoring { [weak self] in
             Task { @MainActor in self?.scheduleSync() }
         }
@@ -273,11 +268,16 @@ final class AppModel {
     func syncInBackground() async {
         var taskID = UIBackgroundTaskIdentifier.invalid
         taskID = UIApplication.shared.beginBackgroundTask {
-            UIApplication.shared.endBackgroundTask(taskID)
+            let expired = taskID
+            taskID = .invalid
+            UIApplication.shared.endBackgroundTask(expired)
         }
         await reader.flushPendingSaves()
         await syncNow()
-        UIApplication.shared.endBackgroundTask(taskID)
+        guard taskID != .invalid else { return }
+        let completed = taskID
+        taskID = .invalid
+        UIApplication.shared.endBackgroundTask(completed)
     }
 
     /// One pass over the pending text index: every book with a local

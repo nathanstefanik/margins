@@ -27,8 +27,6 @@ public struct SyncReport: Equatable, Sendable {
     /// "relative/path: message", at most 20; "snapshot: …" when the
     /// listing itself failed.
     public var failures: [String] = []
-    /// Books with any local file pulled or deleted this run.
-    public var changedBookIds: Set<String> = []
     /// Books whose `notes/**` changed locally — the app reconciles their
     /// index.
     public var notesChangedBookIds: Set<String> = []
@@ -46,7 +44,6 @@ public struct SyncReport: Equatable, Sendable {
         waitingForDownload += other.waitingForDownload
         failures.append(contentsOf: other.failures)
         if failures.count > 20 { failures = Array(failures.prefix(20)) }
-        changedBookIds.formUnion(other.changedBookIds)
         notesChangedBookIds.formUnion(other.notesChangedBookIds)
         notebooksChanged = notebooksChanged || other.notebooksChanged
         brakeEngaged = brakeEngaged || other.brakeEngaged
@@ -81,6 +78,9 @@ public actor LibrarySync {
     private let stateDirectory: URL
     private var running = false
     private var followUp = false
+    /// Callers parked in `sync()` while a pass runs, resumed once the
+    /// loop — including their requested follow-up — finishes.
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     public init(localRoot: URL, remote: any SyncRemote, stateDirectory: URL) {
         self.localRoot = localRoot
@@ -90,11 +90,13 @@ public actor LibrarySync {
     }
 
     /// Runs a pass. If one is already running, requests a follow-up pass
-    /// from it and returns nil; the running call loops until no follow-up
-    /// is pending and returns the merged report.
+    /// from it, waits for the running call's loop — including that
+    /// follow-up — to finish, and returns nil. The running call loops
+    /// until no follow-up is pending and returns the merged report.
     public func sync() async -> SyncReport? {
         if running {
             followUp = true
+            await withCheckedContinuation { waiters.append($0) }
             return nil
         }
         running = true
@@ -104,28 +106,44 @@ public actor LibrarySync {
             merged.merge(await runPass())
         } while followUp
         running = false
+        let done = waiters
+        waiters = []
+        for waiter in done { waiter.resume() }
         return merged
     }
 
-    /// One-time migration: moves `<mirror>/<id>.epub` into
-    /// `<localRoot>/books/<id>/source.epub` where that file is missing
-    /// (never overwrites), then removes the mirror directory. Returns the
-    /// moved count.
+    /// One-time migration, run once sync is reachable: moves
+    /// `<mirror>/<id>.epub` into `<localRoot>/books/<id>/source.epub` for
+    /// books still present on either side, deletes mirror copies of
+    /// books already downloaded locally *and* of books that no longer
+    /// exist anywhere (deleted elsewhere — moving them would resurrect
+    /// them), then removes the mirror directory. Returns the moved count.
     @discardableResult
-    public static func seedFromMirror(mirrorDirectory: URL, localRoot: URL) throws -> Int {
+    public func seedFromMirror(_ mirrorDirectory: URL) async -> Int {
         let manager = FileManager.default
-        guard manager.fileExists(atPath: mirrorDirectory.path) else { return 0 }
+        guard let names = try? manager.contentsOfDirectory(atPath: mirrorDirectory.path)
+        else { return 0 }
         var moved = 0
-        for name in try manager.contentsOfDirectory(atPath: mirrorDirectory.path)
-        where name.hasSuffix(".epub") {
-            let destination =
-                localRoot
-                .appendingPathComponent("books/\(name.dropLast(5))/source.epub")
-            guard !manager.fileExists(atPath: destination.path) else { continue }
-            try manager.createDirectory(
-                at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try manager.moveItem(at: mirrorDirectory.appendingPathComponent(name), to: destination)
-            moved += 1
+        for name in names where name.hasSuffix(".epub") {
+            let id = String(name.dropLast(5))
+            let mirrorFile = mirrorDirectory.appendingPathComponent(name)
+            let destination = localRoot.appendingPathComponent("books/\(id)/source.epub")
+            let onRemote = await remote.exists("books/\(id)/meta.json")
+            if manager.fileExists(atPath: destination.path) {
+                try? manager.removeItem(at: mirrorFile)
+            } else if manager.fileExists(
+                atPath: localRoot.appendingPathComponent("books/\(id)/meta.json").path)
+                || onRemote
+            {
+                try? manager.createDirectory(
+                    at: destination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true)
+                try? manager.moveItem(at: mirrorFile, to: destination)
+                if manager.fileExists(atPath: destination.path) { moved += 1 }
+            } else {
+                // Orphaned mirror copy: the book is gone on both sides.
+                try? manager.removeItem(at: mirrorFile)
+            }
         }
         try? manager.removeItem(at: mirrorDirectory)
         return moved
@@ -193,6 +211,13 @@ public actor LibrarySync {
 
         var manifest = loadManifest()
         let currentIdentity = await remote.identity()
+        guard currentIdentity != nil else {
+            // No account: the listing would be empty and the container
+            // unreadable, so every synced file looks remotely deleted.
+            // Do nothing — touch neither the base nor the trees.
+            report.failures.append("snapshot: iCloud account unavailable")
+            return report
+        }
         if let stored = manifest.identity, currentIdentity != nil,
             await !remote.identityMatches(stored)
         {
@@ -557,12 +582,10 @@ public actor LibrarySync {
         if components.first == "notebooks" {
             report.notebooksChanged = true
         }
-        guard components.count >= 3, components[0] == "books" else { return }
-        let bookId = String(components[1])
-        report.changedBookIds.insert(bookId)
-        if components[2] == "notes" {
-            report.notesChangedBookIds.insert(bookId)
-        }
+        guard components.count >= 3, components[0] == "books",
+            components[2] == "notes"
+        else { return }
+        report.notesChangedBookIds.insert(String(components[1]))
     }
 
     private func record(_ report: inout SyncReport, _ failure: String) {
