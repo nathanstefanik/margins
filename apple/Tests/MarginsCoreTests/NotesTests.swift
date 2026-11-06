@@ -594,4 +594,136 @@ struct NotesTests {
             )
         }
     }
+
+    // MARK: Reconcile the index
+
+    /// A chapter note file written by hand, with the caller choosing the
+    /// file name and `updated_at` — for trees the save path would never
+    /// produce (duplicates, stale indexes).
+    private func writeNote(
+        bookDir dir: String, file: String, updatedAt: String? = nil, body: String = "a note"
+    ) throws {
+        var content = """
+            ---
+            book_id: abc123
+            chapter_key: '001'
+            chapter_index: 0
+            chapter_title: Introduction
+            chapter_href: OEBPS/chapter1.xhtml
+            kind: summary
+            word_count: 2
+
+            """
+        if let updatedAt {
+            content += "updated_at: \(updatedAt)\n"
+        }
+        content += "---\n\n\(body)"
+        try Files.write(content, to: dir.appendingPathComponent("notes/chapters/\(file)"))
+    }
+
+    @Test("reconcile rebuilds a missing entry with counts from the file")
+    func reconcileRebuildsMissingEntry() throws {
+        let book = try Book()
+        try Notes.saveChapterNote(
+            bookDir: book.dir, chapter: book.chapter,
+            frontmatter: book.frontmatter(), body: "one two three"
+        )
+        try Notes.appendMark(
+            bookDir: book.dir, chapter: book.chapter,
+            cfi: nil, percent: nil, quote: "q", body: "b"
+        )
+        try Files.remove(book.dir.appendingPathComponent("notes/_index.json"))
+
+        #expect(try Notes.reconcileIndex(bookDir: book.dir))
+
+        let index = try Notes.readIndex(bookDir: book.dir)
+        let entry = try #require(index.chapters.first)
+        #expect(index.chapters.count == 1)
+        #expect(entry.chapterKey == "001")
+        #expect(entry.file == "chapters/001-introduction.md")
+        // Title and position come from meta.json's chapter, not the file.
+        #expect(entry.chapterIndex == 0)
+        #expect(entry.chapterTitle == "Introduction")
+        #expect(entry.wordCount == 3)
+        #expect(entry.markCount == 1)
+        #expect(entry.updatedAt != nil)
+    }
+
+    @Test("reconcile drops an index entry whose file is gone")
+    func reconcileDropsOrphanedEntry() throws {
+        let book = try Book()
+        let saved = try Notes.saveChapterNote(
+            bookDir: book.dir, chapter: book.chapter,
+            frontmatter: book.frontmatter(), body: "a note"
+        )
+        try Files.remove(saved.path)
+
+        #expect(try Notes.reconcileIndex(bookDir: book.dir))
+        #expect(try Notes.readIndex(bookDir: book.dir).chapters.isEmpty)
+        // Nothing left to fix.
+        #expect(try Notes.reconcileIndex(bookDir: book.dir) == false)
+    }
+
+    @Test("reconcile keeps the entry for a note it cannot parse")
+    func reconcileKeepsUnreadableEntry() throws {
+        let book = try Book()
+        let saved = try Notes.saveChapterNote(
+            bookDir: book.dir, chapter: book.chapter,
+            frontmatter: book.frontmatter(), body: "a note"
+        )
+        try Files.write("no frontmatter here", to: saved.path)
+
+        // The index entry survives — the file may be evicted, not corrupt.
+        #expect(try Notes.reconcileIndex(bookDir: book.dir) == false)
+        #expect(try Notes.readIndex(bookDir: book.dir).chapters.count == 1)
+    }
+
+    @Test("reconcile keeps the newest file when two claim one chapter")
+    func reconcileResolvesDuplicateChapterKeys() throws {
+        let book = try Book()
+        try writeNote(
+            bookDir: book.dir, file: "001-introduction.md",
+            updatedAt: "2026-09-01T10:00:00Z")
+        try writeNote(
+            bookDir: book.dir, file: "001-copy.md",
+            updatedAt: "2026-10-01T10:00:00Z")
+
+        #expect(try Notes.reconcileIndex(bookDir: book.dir))
+        let index = try Notes.readIndex(bookDir: book.dir)
+        #expect(index.chapters.count == 1)
+        #expect(index.chapters[0].file == "chapters/001-copy.md")
+    }
+
+    @Test("reconcile prefers the canonical file name on an updated_at tie")
+    func reconcilePrefersCanonicalNameOnTie() throws {
+        let book = try Book()
+        // Lexically first but not the canonical name — it must lose anyway.
+        try writeNote(
+            bookDir: book.dir, file: "001-aaa.md",
+            updatedAt: "2026-09-01T10:00:00Z")
+        try writeNote(
+            bookDir: book.dir, file: "001-introduction.md",
+            updatedAt: "2026-09-01T10:00:00Z")
+
+        #expect(try Notes.reconcileIndex(bookDir: book.dir))
+        let index = try Notes.readIndex(bookDir: book.dir)
+        #expect(index.chapters.count == 1)
+        #expect(index.chapters[0].file == "chapters/001-introduction.md")
+    }
+
+    @Test("reconcile leaves a consistent index untouched")
+    func reconcileIsSteadyState() throws {
+        let book = try Book()
+        try Notes.saveChapterNote(
+            bookDir: book.dir, chapter: book.chapter,
+            frontmatter: book.frontmatter(), body: "a note"
+        )
+        let indexPath = book.dir.appendingPathComponent("notes/_index.json")
+        let before = try Files.readData(indexPath)
+        let mtime = try #require(Files.modificationDate(indexPath))
+
+        #expect(try Notes.reconcileIndex(bookDir: book.dir) == false)
+        #expect(try Files.readData(indexPath) == before)
+        #expect(Files.modificationDate(indexPath) == mtime)
+    }
 }

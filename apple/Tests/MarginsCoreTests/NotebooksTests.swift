@@ -785,4 +785,26 @@ struct NotebooksTests {
         // A book nobody cites is simply absent.
         #expect(citing["zzzzzzzzzz"] == nil)
     }
+
+    // MARK: Reconcile the index
+
+    @Test("reconcile corrects a stale index entry the listing never rebuilds")
+    func reconcileCorrectsStaleEntry() throws {
+        let harness = try Harness()
+        let summary = try harness.library.createNotebook(title: "Original Title")
+        let path = harness.notebooksDir.appendingPathComponent(summary.file)
+        try Files.write(
+            try Files.read(path)
+                .replacingOccurrences(of: "title: 'Original Title'", with: "title: 'Renamed Title'"),
+            to: path
+        )
+
+        // The file set still matches the index, so the listing stays stale.
+        #expect(try harness.library.listNotebooks()[0].title == "Original Title")
+
+        #expect(try Notebooks.reconcileIndex(dir: harness.notebooksDir))
+        #expect(try harness.library.listNotebooks()[0].title == "Renamed Title")
+        // Already consistent: no second write.
+        #expect(try Notebooks.reconcileIndex(dir: harness.notebooksDir) == false)
+    }
 }
