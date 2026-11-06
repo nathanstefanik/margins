@@ -111,11 +111,12 @@ A single SwiftPM package serving macOS and iOS (platforms `.macOS(.v14)`,
   selection, import/remove), `ReaderModel` (open book/chapter, notes pane
   state), `ContentsOutline` (classified chapters → front/body/back rows
   shared by both apps), `ReaderResource` (scheme-handler routing),
-  `ReaderKeymap` (vim-style key state machine), `LibraryLocation` (iOS
-  library root: iCloud container resolution with runtime fallback,
-  placeholder materialization, download pass over the library tree,
-  coordinated staging of picked files, conflict detection), `EpubMirror`
-  (eviction-proof copy of opened EPUBs under Application Support),
+  `ReaderKeymap` (vim-style key state machine), `LibrarySync` (the iOS
+  local↔iCloud sync engine — newest-wins passes over a `SyncManifest`
+  base), `SyncRemote`/`ICloudRemote`/`DirectoryRemote` (the remote
+  abstraction, its `NSMetadataQuery`-and-coordination adapter, and a
+  plain-directory adapter for tests and fixtures), `LibraryLocation`
+  (security-scoped import staging and iCloud download nudges),
   `NotebookModel` (notebook list, the open notebook's debounced autosave
   and segment edits), `LibrarySearch` (debounced captured + full-text
   query model behind the Search tab), `ReaderPalette` (the shared paper
@@ -151,11 +152,11 @@ through the `MarginsCore`/`MarginsModel` products. The app's SwiftUI scenes
 live in the Xcode target (`apple/ios/Margins/`) rather than the package:
 iOS-only SwiftUI/UIKit code cannot live in a multiplatform SwiftPM package
 without `#if canImport(UIKit)` guards everywhere. The entry point wires the
-shared `LibraryModel`; the library root is resolved per launch by
-`LibraryLocation` (ubiquity container paths change between installs),
-falling back to local `Documents/Library` with the reason surfaced in the
-UI. DEBUG launch env vars
-(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,EVICT,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR}_FIXTURE`)
+shared `LibraryModel`; the library lives on the phone in
+`Documents/Library` (Files → On My iPhone → Margins) and `LibrarySync`
+keeps the iCloud container's `Documents/Library` in step as a replica.
+DEBUG launch env vars
+(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,SYNC,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR}_FIXTURE`)
 drive deterministic simulator verification flows. EPUBs handed over by
 Files/Mail arrive through `onOpenURL` as
 security-scoped URLs and are staged (`NSFileCoordinator`) before the core
@@ -183,18 +184,25 @@ has to live with:
 3. **A coordinated read of a placeholder blocks** until the download
    finishes or fails — and offline, "fails" is not prompt.
 
-`FileStore` therefore refuses an evicted item instantly
-(`CoreError.notDownloaded`) rather than waiting; an 8 s watchdog cancels
-any coordinated access that still has not been granted. Callers skip,
-return nil, or surface the error. `LibraryLocation` owns every
-`startDownloadingUbiquitousItem` call; the core makes none. Online,
-`AppModel.downloadPass` walks the library for placeholders at launch, on
-foreground, and when connectivity returns. `NWPathMonitor` is advisory:
-it picks copy and triggers passes, never gates an action. A book opened
-or imported on this device is also copied to an eviction-proof EPUB
-mirror under Application Support (excluded from backup, keyed by the
-content-hash id). Club activation is off the library launch path, so
-CloudKit never gates the grid.
+The library is therefore local-first: it lives on the phone in
+`Documents/Library`, fully readable offline, and the core never opens an
+iCloud path. `LibrarySync` keeps the iCloud container's
+`Documents/Library` in step as a replica — newest-wins per file on a
+`SyncManifest` base, a brake against bogus empty listings, losing local
+edits stashed privately, and a book's `meta.json` landing only after its
+EPUB. `ICloudRemote` is the adapter: an `NSMetadataQuery` snapshot (run
+on the main actor via a continuation) for the listing and download state,
+`NSFileCoordinator` access inside detached tasks with a cancellation
+watchdog, and a long-lived query feeding change notifications. Passes
+are triggered by local edits (position/note savers, imports, deletes),
+the remote-change monitor, foregrounding, connectivity returning, and a
+retry while `waitingForDownload` is positive; a backgrounding pass runs
+inside a `beginBackgroundTask`. `NWPathMonitor` is advisory: it picks
+copy and triggers passes, never gates an action. Once the replica's
+`source.epub` has finished uploading, the engine evicts the container's
+downloaded copy (`evictUbiquitousItem`) so the phone doesn't store the
+EPUB twice — the library's own copy stays put. Club activation is off the
+library launch path, so CloudKit never gates the grid.
 
 Device pass: `docs/testing/ios-offline.md`.
 

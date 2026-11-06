@@ -102,7 +102,8 @@ More prose. Passages can appear anywhere, in any order.
   created_at, updated_at}` per notebook. It is derived: every write
   upserts the entry, and a listing that finds files missing from the
   index (or entries whose file is gone) rebuilds it from the files.
-  `word_count` counts prose only.
+  `word_count` counts prose only. iOS also reconciles it after a sync
+  pass pulls notebook files (`Notebooks.reconcileIndex`).
 - **Reverse lookup** ("this mark appears in *Self-deception*") is computed
   by scanning notebooks (cached by file mtime), never stored.
 - All reads and writes go through `FileStore`, so iCloud coordination and

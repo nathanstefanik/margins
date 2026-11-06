@@ -59,8 +59,8 @@ apple/                 # shared Apple SwiftPM package (macOS + iOS)
                        # TextAnalysis, TextExtract, TextIndex, FileStore,
                        # Files, AppConfig, Text, CoreStore (actor facade)
   Sources/MarginsModel/# LibraryModel, ReaderModel, ReaderResource, ReaderKeymap,
-                       # LibraryLocation (iCloud root, materialization, conflicts),
-                       # EpubMirror (eviction-proof local EPUB copies),
+                       # LibrarySync + SyncRemote/ICloudRemote/DirectoryRemote
+                       # (local↔iCloud sync), LibraryLocation (import staging),
                        # NotebookModel, LibrarySearch
   Sources/Margins/     # macOS SwiftUI views, reader webview glue, key routing
   Tests/               # MarginsModelTests + MarginsCoreTests (Swift Testing);
@@ -130,12 +130,13 @@ make bump VERSION=x.y.z  # bump version everywhere, commit, tag vx.y.z
 ```
 
 Everything needs **full Xcode** (26.x): the iOS SDK for `ios-build` and the
-iOS targets. The iOS library root lives in the iCloud Documents container
-when available, falling back to local `Documents/Library` at runtime
-(`LibraryLocation`); DEBUG launch env vars
-(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,EVICT,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR,CHAPTER_END}_FIXTURE`)
-drive simulator verification flows. FileStore refuses evicted iCloud reads rather than
-waiting; see `docs/architecture.md` (iOS) and `docs/testing/ios-offline.md`.
+iOS targets. The iOS library is local-first: it lives on the phone in
+`Documents/Library`, and `LibrarySync` keeps the iCloud container's
+`Documents/Library` in step as a replica (see `docs/architecture.md`).
+DEBUG launch env vars
+(`MARGINS_{IMPORT,SEARCH,DELETE,OPEN,CLUB,NOTEBOOK,SYNC,OFFLINE,CHROME,CAPTURE,HIGHLIGHT,EDITOR,CHAPTER_END}_FIXTURE`)
+drive simulator verification flows — `MARGINS_SYNC_FIXTURE=<dir>` swaps
+iCloud for a plain-directory remote; see `docs/testing/ios-offline.md`.
 Device signing uses the team ID in
 `apple/ios/Signing.local.xcconfig` (gitignored — created from
 `Signing.local.xcconfig.example`; never commit it).

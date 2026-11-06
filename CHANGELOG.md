@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- iOS keeps the whole library on the iPhone (Files → On My iPhone →
+  Margins) and syncs it with iCloud Drive, so imported books stay
+  readable offline, after a restart, and after iOS clears iCloud
+  downloads; edits sync newest-wins per file
+
+### Fixed
+
+- iOS no longer shows an empty library offline when iCloud has removed
+  downloaded files
+- one unreadable book no longer hides the whole library
+
 ## [0.7.1] - 2026-10-01
 
 ### Fixed

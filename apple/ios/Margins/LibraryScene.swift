@@ -81,7 +81,6 @@ struct LibraryScene: View {
             reader.preferences.systemIsDark = scheme == .dark
         }
         .tabBarMinimizeBehavior(.onScrollDown)
-        .overlay { materializingOverlay }
         #if DEBUG
         .task { await runDebugSeams() }
         #endif
@@ -150,19 +149,32 @@ struct LibraryScene: View {
 
     @ViewBuilder
     private var libraryContent: some View {
-        if library.books.isEmpty && library.notDownloadedBookIDs.isEmpty {
-            ContentUnavailableView {
-                Label("No books yet", systemImage: "book")
-            } description: {
-                Text("Import an EPUB to start reading and taking notes.")
-            } actions: {
-                Button {
-                    importPresented = true
-                } label: {
-                    Text("Import EPUB")
+        if library.books.isEmpty {
+            libraryStatusHeader
+            // Sync may still be resolving or pulling the library down;
+            // an empty grid isn't "no books" while that could change.
+            if app.syncAvailable != false,
+                app.syncAvailable == nil || app.isSyncing || app.waitingDownloads > 0
+            {
+                ContentUnavailableView {
+                    Label("Getting your library from iCloud", systemImage: "icloud.and.arrow.down")
+                } description: {
+                    Text("Your books will appear as they download.")
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            } else {
+                ContentUnavailableView {
+                    Label("No books yet", systemImage: "book")
+                } description: {
+                    Text("Import an EPUB to start reading and taking notes.")
+                } actions: {
+                    Button {
+                        importPresented = true
+                    } label: {
+                        Text("Import EPUB")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
             }
         } else {
             ScrollView {
@@ -361,63 +373,38 @@ struct LibraryScene: View {
             }
             .padding(.top, 8)
         }
-        if let notice = app.locationNotice {
-            Label(notice, systemImage: "icloud.slash")
+        if app.syncAvailable == false {
+            Label("iCloud is off — this library is only on this iPhone.", systemImage: "icloud.slash")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
                 .padding(.top, 8)
-        }
-        if app.pendingDownloads > 0, app.connectivity.isOnline {
-            let n = app.pendingDownloads
-            HStack(spacing: 8) {
-                ProgressView()
-                Text("Downloading \(n) \(n == 1 ? "file" : "files") from iCloud…")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal)
-            .padding(.top, 8)
-        } else if !library.notDownloadedBookIDs.isEmpty {
-            let n = library.notDownloadedBookIDs.count
-            let noun = n == 1 ? "book" : "books"
-            let suffix = app.connectivity.isOnline ? "" : " — offline"
-            Label(
-                "\(n) \(noun) waiting for iCloud\(suffix)",
-                systemImage: "icloud.and.arrow.down"
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal)
-            .padding(.top, 8)
-        }
-    }
-
-    // MARK: Overlays
-
-    @ViewBuilder
-    private var materializingOverlay: some View {
-        if app.isMaterializing {
-            ZStack {
-                Color.black.opacity(0.2).ignoresSafeArea()
-                VStack(spacing: 12) {
-                    ProgressView("Downloading book…")
-                    Button {
-                        app.cancelMaterialization()
-                    } label: {
-                        Text("Cancel")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+        } else if let problem = app.syncProblem {
+            Label(problem, systemImage: "exclamationmark.icloud")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.top, 8)
+        } else if app.waitingDownloads > 0 {
+            let n = app.waitingDownloads
+            if app.connectivity.isOnline {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Downloading \(n) \(n == 1 ? "file" : "files") from iCloud…")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
-                .glassEffect(.regular, in: .rect(cornerRadius: DesignTokens.Radius.card))
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Downloading book from iCloud")
-            .accessibilityAction(named: "Cancel") {
-                app.cancelMaterialization()
+                .padding(.horizontal)
+                .padding(.top, 8)
+            } else {
+                Label(
+                    "\(n) \(n == 1 ? "file" : "files") waiting for iCloud — offline",
+                    systemImage: "icloud.and.arrow.down"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.top, 8)
             }
         }
     }
@@ -441,7 +428,6 @@ struct LibraryScene: View {
     private func runDebugSeams() async {
         await app.activate()
         await importFixtureIfRequested()
-        await evictFixtureIfRequested()
         if let search = ProcessInfo.processInfo.environment["MARGINS_SEARCH_FIXTURE"] {
             for _ in 0..<50 where library.books.isEmpty {
                 try? await Task.sleep(for: .milliseconds(200))
@@ -568,37 +554,8 @@ struct LibraryScene: View {
             FileManager.default.fileExists(atPath: fixture)
         else { return }
         await library.importEpubs(atPaths: [fixture])
+        app.scheduleSync()
         await app.indexPass()
-    }
-
-    /// Launch with `MARGINS_EVICT_FIXTURE=source|position|meta` after an
-    /// import to replace that file with a `.name.icloud` placeholder, so
-    /// the simulator can exercise the offline/evicted paths.
-    private func evictFixtureIfRequested() async {
-        guard let kind = ProcessInfo.processInfo.environment["MARGINS_EVICT_FIXTURE"] else {
-            return
-        }
-        for _ in 0..<50 where library.books.isEmpty {
-            try? await Task.sleep(for: .milliseconds(200))
-        }
-        guard let book = library.books.first else { return }
-        let fileName: String
-        switch kind {
-        case "source": fileName = "source.epub"
-        case "position": fileName = "position.json"
-        case "meta": fileName = "meta.json"
-        default: return
-        }
-        let logical = URL(fileURLWithPath: library.libraryRoot)
-            .appendingPathComponent("books", isDirectory: true)
-            .appendingPathComponent(book.id, isDirectory: true)
-            .appendingPathComponent(fileName)
-        let placeholder = logical.deletingLastPathComponent()
-            .appendingPathComponent("." + fileName + ".icloud")
-        try? Data().write(to: placeholder)
-        try? FileManager.default.removeItem(at: logical)
-        await library.refresh()
-        await app.downloadPass()
     }
     #endif
 }
@@ -607,8 +564,6 @@ struct LibraryScene: View {
 /// reading-progress bar from `progress_percent`. Wrapped in a `Button` by
 /// the grid so VoiceOver sees an action, not a tap gesture.
 struct BookGridCell: View {
-    @Environment(AppModel.self) private var app
-
     let book: BookSummary
     var zoomNamespace: Namespace.ID
 
@@ -618,15 +573,6 @@ struct BookGridCell: View {
                 .frame(height: 150)
                 .clipShape(.rect(cornerRadius: DesignTokens.Radius.cover, style: .continuous))
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
-                .overlay(alignment: .topTrailing) {
-                    if !app.isReadableOffline(bookId: book.id) {
-                        Image(systemName: "icloud.and.arrow.down")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .padding(6)
-                            .accessibilityHidden(true)
-                    }
-                }
                 .matchedTransitionSource(id: book.id, in: zoomNamespace)
             Text(book.title)
                 .font(.footnote.weight(.medium))
@@ -654,9 +600,6 @@ struct BookGridCell: View {
             "\(book.title) by \(book.author), \(book.notesCount) notes"
         if let progress = book.progressPercent {
             label += String(format: ", %.0f%% read", progress)
-        }
-        if !app.isReadableOffline(bookId: book.id) {
-            label += ", not downloaded"
         }
         return label
     }

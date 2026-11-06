@@ -85,7 +85,7 @@ struct ReaderScene: View {
             DesignTokens.Paper.background(reader.preferences.theme)
                 .ignoresSafeArea()
             IOSReaderWebView(
-                model: library, reader: reader, mirror: app.mirror,
+                model: library, reader: reader,
                 bridge: $bridge, callbacks: callbacks
             )
             .accessibilityAction(named: Text("Show controls")) {
@@ -222,7 +222,7 @@ struct ReaderScene: View {
                 reader.pace.noteJump()
             }
         }
-        .task(id: "\(reader.chapter?.key ?? "")#\(app.downloadGeneration)") {
+        .task(id: "\(reader.chapter?.key ?? "")#\(app.noteSyncGeneration)") {
             // The chapter note (body + marks) feeds the sheets, the
             // highlight overlays, and the chrome; reloaded per chapter.
             await library.loadChapterNote(reader: reader)
@@ -243,9 +243,9 @@ struct ReaderScene: View {
             appliedJumpGeneration = library.passageJumpGeneration
             loadedBookId = reader.book?.id
             #if DEBUG
-                if ProcessInfo.processInfo.environment["MARGINS_CHAPTER_END_FIXTURE"] != nil {
-                    reader.debugShowChapterEnd()
-                }
+            if ProcessInfo.processInfo.environment["MARGINS_CHAPTER_END_FIXTURE"] != nil {
+                reader.debugShowChapterEnd()
+            }
             #endif
         }
         .onChange(of: library.passageJumpGeneration) {
@@ -411,8 +411,6 @@ struct ReaderScene: View {
         .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(label)
     }
-
-
 
     /// The running head: chapter title centered at the top of the paper,
     /// with back / bookmark / new note / hamburger fading in around it. The title is

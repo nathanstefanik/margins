@@ -2,9 +2,9 @@ import MarginsCore
 import MarginsModel
 import SwiftUI
 
-/// A book's cover. Local files load immediately; an evicted iCloud cover
-/// requests a download and keeps the placeholder; a missing cover is the
-/// shared typeset placeholder — title and author set on a muted paper.
+/// A book's cover. The library is local-first, so a cover either loads
+/// from disk or falls back to the shared typeset placeholder — title and
+/// author set on a muted paper.
 struct CoverView: View {
     @Environment(AppModel.self) private var app
 
@@ -24,7 +24,7 @@ struct CoverView: View {
                 placeholder
             }
         }
-        .task(id: "\(coverPath ?? "")#\(app.downloadGeneration)") {
+        .task(id: "\(coverPath ?? "")#\(app.syncGeneration)") {
             await load()
         }
     }
@@ -48,17 +48,13 @@ struct CoverView: View {
     }
 
     private func load() async {
-        image = nil
-        guard let coverPath else { return }
-        switch LibraryLocation.availability(of: coverPath) {
-        case .local:
-            image = UIImage(contentsOfFile: coverPath)
-        case .evicted:
-            LibraryLocation.requestDownload(coverPath)
+        guard let coverPath,
+            FileManager.default.fileExists(atPath: coverPath)
+        else {
             image = nil
-        case .missing:
-            image = nil
+            return
         }
+        image = UIImage(contentsOfFile: coverPath)
     }
 }
 
@@ -105,5 +101,3 @@ struct TypesetCover: View {
         )
     }
 }
-
-
