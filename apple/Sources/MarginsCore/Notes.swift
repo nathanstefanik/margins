@@ -61,6 +61,98 @@ public enum Notes {
         return removed
     }
 
+    /// Rebuilds `notes/_index.json` from the chapter files on disk — the
+    /// repair path for an index that drifted from its files (a partial
+    /// sync, a hand-edited tree). Entries whose files are gone are dropped;
+    /// a file that fails to read or parse keeps its existing entry (it may
+    /// be an evicted iCloud placeholder whose content lives elsewhere).
+    /// Two files claiming one chapter key resolve to the later
+    /// `updated_at`, then the canonical file name, then lexical order.
+    /// Returns whether the index was rewritten — a consistent index, or a
+    /// book with neither notes nor an index, writes nothing.
+    @discardableResult
+    public static func reconcileIndex(bookDir: String) throws -> Bool {
+        let notesDir = bookDir.appendingPathComponent("notes")
+        let chaptersDir = notesDir.appendingPathComponent("chapters")
+        let indexPath = notesDir.appendingPathComponent("_index.json")
+
+        let previous = (try? readIndex(bookDir: bookDir)) ?? NotesIndex(chapters: [])
+        let meta = try? readMeta(bookDir: bookDir)
+
+        var names: [String] = []
+        if Files.exists(chaptersDir) {
+            names = try FileStore.contents(ofDirectory: chaptersDir)
+                .filter { $0.hasSuffix(".md") && FileStore.isFile($0) }
+                .map { ($0 as NSString).lastPathComponent }
+        }
+        if names.isEmpty && !FileStore.exists(indexPath) {
+            return false
+        }
+
+        // Candidates keyed by claimed chapter key — an unreadable file
+        // competes through its kept index entry — and survivors of the
+        // duplicate rule are the index's entries.
+        var candidates: [String: NotesIndexEntry] = [:]
+        func offer(_ entry: NotesIndexEntry) {
+            if let existing = candidates[entry.chapterKey] {
+                candidates[entry.chapterKey] = preferredNoteEntry(existing, entry)
+            } else {
+                candidates[entry.chapterKey] = entry
+            }
+        }
+        for name in names {
+            let file = "chapters/\(name)"
+            let parsed: NoteFile
+            do {
+                let raw = try FileStore.read(chaptersDir.appendingPathComponent(name))
+                let chapterKey = try Frontmatter.decode(splitFrontmatter(raw).yaml).chapterKey
+                parsed = try parseNoteContent(raw, chapterKey: chapterKey)
+            } catch {
+                if let entry = previous.chapters.first(where: { $0.file == file }) {
+                    offer(entry)
+                }
+                continue
+            }
+            let frontmatter = parsed.frontmatter
+            let chapter = meta?.chapters.first(where: { $0.key == frontmatter.chapterKey })
+            offer(
+                NotesIndexEntry(
+                    chapterKey: frontmatter.chapterKey,
+                    file: file,
+                    chapterIndex: chapter?.index ?? frontmatter.chapterIndex,
+                    chapterTitle: chapter?.title ?? frontmatter.chapterTitle,
+                    wordCount: frontmatter.wordCount,
+                    markCount: Marks.marks(parsed.items).count,
+                    updatedAt: frontmatter.updatedAt
+                )
+            )
+        }
+
+        var entries = Array(candidates.values)
+        entries.sort { ($0.chapterIndex, $0.file) < ($1.chapterIndex, $1.file) }
+        let encoded = try MarginsJSON.encode(NotesIndex(chapters: entries))
+        guard (try? FileStore.readData(indexPath)) != encoded else { return false }
+        try FileStore.writeData(encoded, to: indexPath)
+        return true
+    }
+
+    /// Which of two same-chapter entries the index keeps: the later
+    /// `updatedAt` (nil is oldest), then the canonical
+    /// `"<key>-<slugify(title)>.md"` file name, then lexical order.
+    private static func preferredNoteEntry(
+        _ lhs: NotesIndexEntry, _ rhs: NotesIndexEntry
+    ) -> NotesIndexEntry {
+        let lhsDate = lhs.updatedAt ?? .distantPast
+        let rhsDate = rhs.updatedAt ?? .distantPast
+        if lhsDate != rhsDate { return lhsDate > rhsDate ? lhs : rhs }
+        func isCanonical(_ entry: NotesIndexEntry) -> Bool {
+            entry.file
+                == "chapters/\(entry.chapterKey)-\(slugify(entry.chapterTitle)).md"
+        }
+        if isCanonical(lhs) != isCanonical(rhs) { return isCanonical(lhs) ? lhs : rhs }
+        return lhs.file <= rhs.file ? lhs : rhs
+    }
+
     // MARK: Reading
 
     /// The chapter's note, or a blank one when the chapter has no file yet.

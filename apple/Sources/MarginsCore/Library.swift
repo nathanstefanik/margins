@@ -55,28 +55,29 @@ public final class Library {
             let metaPath = path.appendingPathComponent("meta.json")
             guard FileStore.exists(metaPath) else { continue }
 
-            let loadedMeta: BookMeta
+            // One bad book must not sink the listing: any failure — an
+            // unreadable or corrupt meta, a backfill, the note count —
+            // skips that directory and moves on.
             do {
-                loadedMeta = try readMeta(at: metaPath)
-            } catch CoreError.notDownloaded {
+                var meta = try readMeta(at: metaPath)
+                backfillChapters(bookDir: path, meta: &meta)
+                let position = readPosition(bookID: meta.id)
+                summaries.append(
+                    BookSummary(
+                        id: meta.id,
+                        title: meta.title,
+                        author: meta.author,
+                        addedAt: meta.addedAt,
+                        chapterCount: meta.chapters.count,
+                        notesCount: try Notes.countNotes(bookDir: path),
+                        cover: meta.cover ?? backfillCover(bookDir: path, meta: meta),
+                        progressPercent: position?.percent,
+                        lastReadAt: position?.updatedAt
+                    )
+                )
+            } catch {
                 continue
             }
-            var meta = loadedMeta
-            backfillChapters(bookDir: path, meta: &meta)
-            let position = readPosition(bookID: meta.id)
-            summaries.append(
-                BookSummary(
-                    id: meta.id,
-                    title: meta.title,
-                    author: meta.author,
-                    addedAt: meta.addedAt,
-                    chapterCount: meta.chapters.count,
-                    notesCount: try Notes.countNotes(bookDir: path),
-                    cover: meta.cover ?? backfillCover(bookDir: path, meta: meta),
-                    progressPercent: position?.percent,
-                    lastReadAt: position?.updatedAt
-                )
-            )
         }
 
         summaries.sort { $0.addedAt > $1.addedAt }

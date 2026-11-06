@@ -24,12 +24,14 @@ struct MarginsApp: App {
                 .task { await app.activate() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
-                        Task { await app.downloadPass() }
+                        app.scheduleSync()
+                    } else if phase == .background {
+                        Task { await app.syncInBackground() }
                     }
                 }
                 .onChange(of: app.connectivity.isOnline) { wasOnline, isOnline in
                     if !wasOnline, isOnline {
-                        Task { await app.downloadPass() }
+                        app.scheduleSync()
                     }
                 }
                 .onOpenURL { url in

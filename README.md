@@ -117,14 +117,11 @@ fill in your Team ID — the project loads it via an optional include. In
 Xcode, sign in under *Settings → Accounts* so automatic provisioning can
 register devices and create profiles; on the phone, enable *Settings →
 Privacy & Security → Developer Mode* (the toggle appears after the device
-is paired with Xcode). The library lives in the iCloud Documents container
-`iCloud.io.github.nathanstefanik.margins` when an iCloud account is
-available — visible in the Files app and pointable at from the Mac via
-`MARGINS_LIBRARY_ROOT` — falling back to local `Documents/Library` at
-runtime otherwise; sync happens through iCloud, conflict detection surfaces
-`NSFileVersion` conflicts rather than discarding them. Books you have
-opened or imported on this iPhone stay readable offline even if iCloud
-later evicts the library copy.
+is paired with Xcode). The library lives on the iPhone under Files → On
+My iPhone → Margins and syncs file-by-file with the iCloud Drive Margins
+folder (which the Mac can read by pointing `MARGINS_LIBRARY_ROOT` at it),
+newest wins — so everything stays readable offline, after a restart, and
+after iOS clears iCloud downloads.
 
 macOS keybindings:
 

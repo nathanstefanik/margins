@@ -60,7 +60,7 @@ public enum Notebooks {
         if Set(summaries.map(\.file)) != Set(files) {
             summaries = try rebuildIndex(
                 dir: dir, files: files, index: index, writeIndex: !indexEvicted
-            )
+            ).summaries
         }
 
         // `isEvicted` is a live property, not stored: recompute per file.
@@ -82,14 +82,37 @@ public enum Notebooks {
             }
     }
 
+    /// Re-derives `_index.json` from the `.md` files even when the file
+    /// set already matches — the repair path for a stale title or count
+    /// that the lazy `listSummaries` rebuild never notices. Returns
+    /// whether the index was rewritten; a directory with no notebooks and
+    /// no index gets nothing written.
+    @discardableResult
+    static func reconcileIndex(dir: String) throws -> Bool {
+        let index = (try? readIndex(dir: dir)) ?? NotebooksIndex(notebooks: [])
+        let files =
+            (Files.isDirectory(dir)
+            ? (try? FileStore.contents(ofDirectory: dir)) ?? [] : [])
+            .filter { $0.hasSuffix(".md") && FileStore.isFile($0) }
+            .map { ($0 as NSString).lastPathComponent }
+        if files.isEmpty && !FileStore.exists(indexPath(dir: dir)) {
+            return false
+        }
+        return try rebuildIndex(
+            dir: dir, files: files, index: index,
+            writeIndex: !FileStore.isEvicted(indexPath(dir: dir))
+        ).wrote
+    }
+
     /// Re-derives `_index.json` from the `.md` files on disk; files that
     /// fail to parse are left out. An evicted file keeps its previous
     /// index entry when one exists (the content lives on the machine that
     /// has it) and is otherwise omitted; `writeIndex` is false when the
-    /// index itself is evicted.
+    /// index itself is evicted. `wrote` reports whether index bytes were
+    /// written — identical content skips the write.
     private static func rebuildIndex(
         dir: String, files: [String], index: NotebooksIndex, writeIndex: Bool
-    ) throws -> [NotebookSummary] {
+    ) throws -> (summaries: [NotebookSummary], wrote: Bool) {
         var summaries: [NotebookSummary] = []
         for file in files {
             let path = dir.appendingPathComponent(file)
@@ -103,6 +126,7 @@ public enum Notebooks {
             else { continue }
             summaries.append(summary(for: parsed, file: file))
         }
+        var wrote = false
         if writeIndex {
             let encoded = try MarginsJSON.encode(NotebooksIndex(notebooks: summaries))
             // Skip the write when nothing changed — an evicted file with
@@ -110,9 +134,10 @@ public enum Notebooks {
             // and rewriting identical bytes each listing is sync churn.
             if (try? FileStore.readData(indexPath(dir: dir))) != encoded {
                 try FileStore.writeData(encoded, to: indexPath(dir: dir))
+                wrote = true
             }
         }
-        return summaries
+        return (summaries, wrote)
     }
 
     private static func upsertIndex(dir: String, summary: NotebookSummary) throws {

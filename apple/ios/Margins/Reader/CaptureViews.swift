@@ -408,7 +408,7 @@ struct ChapterNoteEditorSheet: View {
                 }
             }
             .presentationDetents([.large])
-            .task(id: "\(reader.chapter?.key ?? "")#\(app.downloadGeneration)") {
+            .task(id: "\(reader.chapter?.key ?? "")#\(app.noteSyncGeneration)") {
                 await library.loadChapterNote(reader: reader)
                 editorFocused = true
             }

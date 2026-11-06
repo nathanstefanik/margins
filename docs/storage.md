@@ -11,7 +11,7 @@ Margins stores everything as plain files under a single library root. The layout
 | OS | Default data dir |
 |----|------------------|
 | macOS | `~/Library/Application Support/margins` |
-| iOS | the app's iCloud Documents container when an iCloud account is available, else local `Documents/Library` (resolved per launch; see `docs/architecture.md`) |
+| iOS | local `Documents/Library` (Files → On My iPhone → Margins); the iCloud container's `Documents/Library` is a replica `LibrarySync` keeps in step |
 
 Override the app data directory with `MARGINS_DATA_DIR`, or point `MARGINS_LIBRARY_ROOT` at a
 synced folder. The macOS directory picker (`R` or `:root`) saves the selected path in
@@ -261,7 +261,10 @@ Your notes on this chapter.
 
 - **One file per chapter** — plain text throughout: read `_index.json` first, or `glob **/*.md`
 - **Frontmatter** — structured metadata without a DB; easy to parse in any language
-- **`_index.json`** — O(1) lookup of which chapters have notes and word counts
+- **`_index.json`** — O(1) lookup of which chapters have notes and word counts.
+  It is derived: `Notes.reconcileIndex` rebuilds it from the chapter files
+  (keeping entries for files that cannot be parsed), which is how sync
+  pulls repair it.
 - **`index.json`** — library-wide catalog for batch operations
 
 ### Marks section
@@ -460,18 +463,34 @@ excluded from backup, never synced, and safe to delete wholesale.
 3. The sync folder (iCloud, Dropbox, rsync, an external drive) replicates
    to machine B.
 
-On iOS, writes inside the ubiquity container are wrapped in
-`NSFileCoordinator` (`FileStore`) and version conflicts surface as
-`NSFileVersion` conflicts rather than silently overwriting a file.
-Evicted iCloud items are refused rather than awaited: unavailable book
-metadata is omitted from the catalog, bookmark add/update/delete operations
-refuse an evicted `bookmarks.json`, and saving a chapter note refuses an
-evicted existing note so remote content is never overwritten blindly.
-`position.json` and the derived `index.json` stay last-writer-wins.
+### iOS: local-first sync
 
-The iOS EPUB mirror is a derived copy outside this tree: Application
-Support, excluded from backup, one file per content-hash book id. It is
-not synced, not part of the layout above, and is removed with the book.
+On iOS the library lives on the phone in `Documents/Library` and stays
+fully readable offline. The iCloud container's `Documents/Library` is a
+replica that `LibrarySync` keeps in step — the core never touches the
+container. Every file under both roots syncs except the root `index.json`
+(each device regenerates its catalog) and any path with a hidden
+component.
+
+Conflicts resolve newest-wins per file by modification time; a losing
+local edit is stashed under `{data_dir}/sync/overwritten/` for 30 days.
+An edit beats a delete, and deletes apply only to files a previous pass
+synced — a `source.epub` never moves once its base entry exists. As a
+brake, a side that would delete more than half of all books does the
+opposite instead (restore), because an empty listing usually means a
+broken iCloud listing, not a wiped library. A book's `meta.json` lands
+only after its `source.epub`, so a book never appears unreadable.
+
+The sync base — the stamps and hashes both sides agreed on — lives at
+`{data_dir}/sync/manifest.json`. Once the replica's `source.epub` has
+finished uploading, the engine evicts the container's downloaded copy so
+the phone doesn't store the EPUB twice — the library's own copy stays.
+After a pass pulls note or
+notebook files, `Notes.reconcileIndex`/`Notebooks.reconcileIndex` rebuild
+the derived `_index.json` files. The old Application Support EPUB mirror
+is folded into the library once, on the first launch with iCloud
+available; EPUBs of books that no longer exist are dropped rather than
+resurrected.
 
 Notebooks sync with the library like every other file under the root. The
 per-device text index never does: each device builds its own under its own

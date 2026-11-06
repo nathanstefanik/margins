@@ -131,9 +131,22 @@ struct LibraryTests {
 
         try Files.remove(placeholder)
         try Files.write("not json", to: evictedDir.appendingPathComponent("meta.json"))
-        #expect(throws: CoreError.self) {
-            try library.listBooks()
-        }
+        // A corrupt meta.json skips the book rather than failing the scan.
+        #expect(try library.listBooks().map(\.id) == [available.id])
+    }
+
+    @Test("a book with corrupt metadata is skipped, not fatal to the scan")
+    func corruptMetaSkipsTheBook() throws {
+        let harness = try Harness()
+        let good = try harness.library.importEpub(atPath: harness.epub("good.epub"))
+
+        let badDir = harness.library.bookDir("corrupt-book")
+        try Files.createDirectory(badDir)
+        try Files.write("not json", to: badDir.appendingPathComponent("meta.json"))
+
+        #expect(try harness.library.listBooks().map(\.id) == [good.id])
+        // The bad directory keeps losing on every scan, never errors.
+        #expect(try harness.library.listBooks().map(\.id) == [good.id])
     }
 
     @Test("the scan backfills covers for books imported before extraction existed")

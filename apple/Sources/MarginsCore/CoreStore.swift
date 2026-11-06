@@ -186,6 +186,19 @@ public actor CoreStore {
         }
     }
 
+    /// Rebuilds the book's `notes/_index.json` from the chapter files on
+    /// disk — the repair path after sync moved note files under the app's
+    /// feet. Returns whether the index was rewritten (false when the book
+    /// is absent); a rewrite refreshes the search index in place.
+    @discardableResult
+    public func reconcileNotesIndex(bookId: String) throws -> Bool {
+        let bookDir = library.bookDir(bookId)
+        guard Files.isDirectory(bookDir) else { return false }
+        let wrote = try Notes.reconcileIndex(bookDir: bookDir)
+        if wrote { library.refreshNoteIndex(bookID: bookId) }
+        return wrote
+    }
+
     /// The book's notes compiled into one spine-ordered document.
     public func compiledNotes(bookId: String) throws -> CompiledNotes {
         let bookDir = library.bookDir(bookId)
@@ -405,6 +418,17 @@ public actor CoreStore {
     /// markId → the notebooks citing it, for one book.
     public func notebooksCiting(bookId: String) throws -> [String: [NotebookSummary]] {
         try library.notebooksCiting(bookId: bookId)
+    }
+
+    /// Rebuilds `notebooks/_index.json` from the notebook files on disk —
+    /// the repair path for a stale entry the lazy listing rebuild never
+    /// notices. Returns whether the index was rewritten (false when the
+    /// library has no notebooks directory yet).
+    @discardableResult
+    public func reconcileNotebooksIndex() throws -> Bool {
+        let dir = library.root.appendingPathComponent("notebooks")
+        guard Files.isDirectory(dir) else { return false }
+        return try Notebooks.reconcileIndex(dir: dir)
     }
 
     // MARK: Clubs
