@@ -268,12 +268,6 @@ final class ReaderBridge: NSObject {
         evaluate("readerDisplay(\(Self.javaScriptLiteral(target)))")
     }
 
-    /// Jumps to a 1-based page inside the current chapter (the footer's
-    /// page scrubber).
-    func goToPage(_ page: Int) {
-        evaluate("readerGoToPage(\(page))")
-    }
-
     /// Re-measure paginated columns after the webview's layout changes
     /// (chrome show/hide resizes the page).
     func relayout() {
@@ -334,8 +328,8 @@ final class ReaderBridge: NSObject {
 
     /// Applies the reading-surface theme: the webview's traits (so
     /// `prefers-color-scheme` inside section documents agrees with the
-    /// paper) plus the page palette. The native chrome and sheets follow
-    /// the system appearance, not this.
+    /// paper) plus the page palette. Sheets follow the system appearance,
+    /// not this; the floating chrome takes its scheme from the paper.
     private func applyTheme() {
         let theme = reader.preferences.theme
         webView?.overrideUserInterfaceStyle = theme.palette.isDark ? .dark : .light

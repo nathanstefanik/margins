@@ -14,7 +14,7 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Reading papers: Light, Sepia, Dark, Night, or follow the system —
   matching the reading surface on both apps
 - Justified text and chapter ornaments (drop cap + small caps) on both apps
-- Chapter-scoped page scrubber: hover the footer on macOS, chrome rail on iOS
+- Chapter-scoped page scrubber: hover the footer on macOS
 - Page indicator modes — page count, learned "~N min left" reading pace,
   or none
 - Chapter-end page: pausing past a chapter's last page shows its marked

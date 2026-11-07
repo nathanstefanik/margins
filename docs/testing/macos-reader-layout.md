@@ -240,6 +240,12 @@ single page reports its own page).
 
 ## Reflow transactions (Phase 4)
 
+iOS uses these too for text-size, typeface, and prose changes. Those leave
+the stage size alone, so `rendition.resize()` returns early and the view
+keeps its old width. The transaction expands each view before re-anchoring,
+because `moveTo` clamps to the current scroll width and would otherwise land
+a page short.
+
 Every desktop geometry change (viewport, typography, page mode) runs as
 one transaction:
 

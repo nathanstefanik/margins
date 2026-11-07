@@ -104,8 +104,8 @@ public final class ReadingPace {
         estimateText(for: progress, suffix: " in chapter")
     }
 
-    /// The same estimate for the iOS resting footer, where the rail's
-    /// width is a finger-width. nil until the pace is known.
+    /// The same estimate for the iOS footer, where the label sits between
+    /// the controls. nil until the pace is known.
     public func shortTimeLeftText(for progress: ReaderProgress) -> String? {
         estimateText(for: progress, suffix: "")
     }

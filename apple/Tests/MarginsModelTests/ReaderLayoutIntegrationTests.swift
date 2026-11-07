@@ -740,10 +740,49 @@ struct ReaderLayoutIntegrationTests {
         #expect(abs(geometry.viewerWidth - geometry.innerWidth) < 1)
         // iOS spacing is unchanged: the CSS 1.4rem padding, not 24 px.
         #expect(abs(geometry.viewerPaddingLeft - 22.4) < 0.5)
+        // Bottom padding: one rem, half a line or more above the footer.
+        let paddingBottom = try await harness.evaluate(
+            "parseFloat(getComputedStyle(document.getElementById('viewer')).paddingBottom)"
+        ) as? Double
+        #expect(abs((paddingBottom ?? 0) - 16) < 0.5)
         // The engine is never asked for two columns on iOS.
         let spread = try await harness.evaluate("readerRendition.settings.spread") as? String
         #expect(spread == "none")
         #expect(try await harness.visibleParagraphIDs().isEmpty == false)
+    }
+
+    @Test("iOS prose fills the line; macOS keeps pretty wrapping")
+    func proseWrapPerPlatform() async throws {
+        let script = """
+            getComputedStyle(document.querySelector('iframe')
+                .contentDocument.querySelector('p')).textWrapStyle
+            """
+        for (platform, expected) in [(nil, "auto"), ("macos", "pretty")] as [(String?, String)] {
+            let harness = try makeHarness(width: 400, height: 760)
+            defer { harness.dismantle() }
+            try await harness.load(platform: platform, typography: (16, 1.65, 0, "px"))
+            _ = try await harness.waitForRelocation(after: 0)
+            #expect(try await harness.evaluate(script) as? String == expected)
+        }
+    }
+
+    @Test("a publisher's pretty wrapping cannot return on iOS")
+    func publisherPrettyWrapIsOverriddenOnIOS() async throws {
+        let harness = try makeHarness(width: 400, height: 760)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        _ = try await harness.waitForRelocation(after: 0)
+        // Standard Ebooks' core.css sets this on body and p.
+        let script = """
+            (() => {
+              const section = document.querySelector('iframe').contentDocument;
+              const sheet = section.createElement('style');
+              sheet.textContent = 'body, p { text-wrap: pretty; }';
+              section.head.appendChild(sheet);
+              return getComputedStyle(section.querySelector('p')).textWrapStyle;
+            })()
+            """
+        #expect(try await harness.evaluate(script) as? String == "auto")
     }
 
     // MARK: Page traversal over the fixture
@@ -971,17 +1010,95 @@ struct ReaderLayoutIntegrationTests {
         )
     }
 
-    @Test("a saved spot stays bookmarked on the single-column iOS page")
-    func savedSpotStaysBookmarkedOnIOSPage() async throws {
-        let harness = try makeHarness(width: 900, height: 700)
+    @Test("a publisher's no-wrap survives the iOS wrapping rule")
+    func publisherNoWrapSurvivesOnIOS() async throws {
+        let harness = try makeHarness(width: 400, height: 760)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        _ = try await harness.waitForRelocation(after: 0)
+        let script = """
+            (() => {
+              const p = document.querySelector('iframe').contentDocument.querySelector('p');
+              p.style.whiteSpace = 'nowrap';
+              return getComputedStyle(p).textWrapMode;
+            })()
+            """
+        #expect(try await harness.evaluate(script) as? String == "nowrap")
+    }
+
+    @Test("a reflow leaves a view that has not loaded yet alone")
+    func reflowSkipsUnloadedView() async throws {
+        let harness = try makeHarness(width: 400, height: 760)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        _ = try await harness.waitForRelocation(after: 0)
+        // A view joins the manager before its contents exist. Expanding it
+        // then throws and leaves it stuck, so it can never size itself.
+        try await harness.evaluate(
+            """
+            (() => {
+              const view = readerRendition.manager.views.first();
+              window.__loaded = view.contents;
+              view.contents = undefined;
+              readerRelayout();
+            })()
+            """)
+        try await Task.sleep(for: .milliseconds(500))
+        let stuck = try await harness.evaluate(
+            """
+            (() => {
+              const view = readerRendition.manager.views.first();
+              view.contents = window.__loaded;
+              return view._expanding === true;
+            })()
+            """) as? Bool
+        #expect(stuck == false)
+    }
+
+    // Several heights: whether a page lands correctly depends on where the
+    // columns happen to break, so one geometry can pass by luck.
+    @Test(
+        "a saved spot stays bookmarked on the single-column iOS page",
+        arguments: [700.0, 720.0, 760.0])
+    func savedSpotStaysBookmarkedOnIOSPage(height: Double) async throws {
+        let harness = try makeHarness(width: 900, height: height)
         defer { harness.dismantle() }
         try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
         try await savedSpotAcceptance(
             harness,
             pinId: "pin0000002",
-            initialTypography: nil,
-            reflowTypography: "readerApplyTypography(20,1.65,0,'px')"
+            initialTypography: "readerApplyTypography(20,1.65,0,'px')",
+            reflowTypography: "readerApplyTypography(14,1.65,0,'px')"
         )
+    }
+
+    @Test(
+        "growing the text keeps the passage on the iOS page",
+        arguments: [700.0, 720.0, 740.0, 760.0])
+    func textGrowthKeepsPassageOnIOSPage(height: Double) async throws {
+        let harness = try makeHarness(width: 900, height: height)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        var settled = try await harness.waitForRelocation(after: 0)
+        var anchorCfi = try #require(settled["cfi"] as? String)
+        var anchor = try await paragraphID(harness, containing: anchorCfi)
+        for _ in 0..<8 where anchor.index < 2 {
+            try await harness.evaluate("readerScrollBy(1)")
+            settled = try await harness.waitForRelocationChange(from: settled)
+            try await harness.waitForReaderIdle()
+            anchorCfi = try #require(settled["cfi"] as? String)
+            anchor = try await paragraphID(harness, containing: anchorCfi)
+        }
+
+        // The larger size adds a page after the anchor's old one.
+        try await harness.evaluate("readerApplyTypography(20,1.65,0,'px')")
+        try await harness.waitForLayoutSettled()
+
+        let current = try await currentLocation(harness)
+        let start = try #require(current["cfi"] as? String)
+        let end = try #require(current["endCfi"] as? String)
+        #expect(CFI.comparePoints(start, anchorCfi) != .orderedDescending)
+        #expect(CFI.comparePoints(anchorCfi, end) != .orderedDescending)
     }
 
     // MARK: Typeface

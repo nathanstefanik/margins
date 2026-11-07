@@ -7,17 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-06
+
 ### Changed
 
 - iOS keeps the whole library on the iPhone (Files → On My iPhone →
   Margins) and syncs it with iCloud Drive, so imported books stay
   readable offline, after a restart, and after iOS clears iCloud
   downloads; edits sync newest-wins per file
+- iOS reader text fills more of the column, so the right side no longer
+  looks over-padded, and the page reaches closer to the page number
+- iOS reader controls put Contents at the bottom left and the chapter
+  arrows at the bottom right, with glass that matches the paper
+
+### Removed
+
+- iOS in-chapter page slider
 
 ### Fixed
 
 - iOS no longer shows an empty library offline when iCloud has removed
   downloaded files
+- iOS reader keeps its passage when the text size, typeface, or justify
+  setting changes, instead of landing on another page
 - one unreadable book no longer hides the whole library
 
 ## [0.7.1] - 2026-10-01
@@ -279,7 +291,8 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.8.0
 [0.6.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.6.1
 [0.6.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.6.0
 [0.5.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.1
