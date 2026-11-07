@@ -6,8 +6,8 @@ import SwiftUI
 /// paging, a horizontally-swiping page turn, hardware-key support, and
 /// book-like chrome. The resting screen is a printed spread — chapter
 /// title centered at the top of the paper, page number at the bottom —
-/// and a center tap reveals back, hamburger, bookmark, and the new-note affordance
-/// as overlays that never reflow the page. Note capture lives here too:
+/// and a center tap reveals back, hamburger, bookmark, new note, Contents,
+/// and the chapter chevrons as overlays that never reflow the page. Note capture lives here too:
 /// the edit menu offers Note/Highlight on selections, the chrome carries
 /// the note button, and a chapter-end page pauses once per finished
 /// chapter to offer the contemplative note. Saving positions flushes on
@@ -52,9 +52,8 @@ struct ReaderScene: View {
     @State private var flashTick = 0
     /// Trigger counter for the bookmark-toggle haptic.
     @State private var bookmarkTick = 0
-    /// Footer scrubber state: the dragged page and whether a drag is live.
-    @State private var scrubValue: Double = 1
-    @State private var scrubbing = false
+    /// Merges the chapter chevrons into one glass capsule.
+    @Namespace private var chromeGlass
     /// A selection queued for the Add to Notebook sheet.
     @State private var notebookCandidate: NotebookAddCandidate?
     /// The "Search Library" sheet's own query state.
@@ -113,9 +112,11 @@ struct ReaderScene: View {
             headerOverlay
                 .safeAreaPadding(.top)
                 .offset(y: -DesignTokens.Spacing.readerHeaderLift)
+                .environment(\.colorScheme, paperColorScheme)
         }
         .overlay(alignment: .bottom) {
             footerOverlay
+                .environment(\.colorScheme, paperColorScheme)
         }
         .animation(reduceMotion ? nil : DesignTokens.Motion.chrome, value: chromeVisible)
         // A gentle pulse when a mark lands or a passage joins a notebook;
@@ -395,6 +396,7 @@ struct ReaderScene: View {
     private func chromeButton(
         _ systemName: String,
         _ label: String,
+        glassShape: some Shape = Circle(),
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -407,7 +409,7 @@ struct ReaderScene: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .glassEffect(.regular.interactive(), in: glassShape)
         .accessibilityLabel(label)
     }
 
@@ -471,89 +473,55 @@ struct ReaderScene: View {
     }
 
     /// The running foot: this chapter's paginated page number, expanding
-    /// to `12 of 40` while the chrome is up. Never hit-tested, so a
-    /// center tap over it still toggles the chrome. Sits directly on the
-    /// safe area, in the room `reader.html` leaves under the column.
+    /// to `12 of 40` while the chrome is up, with Contents at the leading
+    /// edge and the chapter chevrons at the trailing edge fading in around
+    /// it. The number is never hit-tested, so a center tap over it still
+    /// toggles the chrome. Sits directly on the safe area, in the room
+    /// `reader.html` leaves under the column.
     private var footerOverlay: some View {
-        Group {
-            if chromeVisible, let progress = reader.progress {
-                scrubberRail(progress)
-            } else {
-                Text(pageText)
-                    .font(pageNumberFont)
-                    .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-                    .allowsHitTesting(false)
-            }
-        }
-        .frame(height: DesignTokens.Control.readerTarget)
-        .transition(.opacity)
-    }
-
-    /// The running foot with chrome up: one glass rail — Contents, the
-    /// chapter chevrons, and a page scrubber. A drag lifts "12 of 40"
-    /// above the rail in the reader typeface and jumps on release.
-    private func scrubberRail(_ progress: ReaderProgress) -> some View {
-        VStack(spacing: 6) {
-            if scrubbing {
-                Text("\(Int(scrubValue)) of \(progress.totalPages)")
-                    .font(pageNumberFont)
-                    .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
-            }
-            HStack(spacing: DesignTokens.Spacing.actions) {
-                railButton("list.bullet", "Contents") { tocPresented = true }
-                railButton("chevron.backward", "Previous chapter") { stepChapter(-1) }
-                    .disabled(!canStepChapter(-1))
-                Slider(
-                    value: $scrubValue,
-                    in: 1...Double(max(progress.totalPages, 1)),
-                    step: 1,
-                    onEditingChanged: { editing in
-                        scrubbing = editing
-                        if !editing {
-                            bridge?.goToPage(Int(scrubValue))
+        ZStack {
+            Text(pageText)
+                .font(pageNumberFont)
+                .foregroundStyle(DesignTokens.Paper.secondaryInk(reader.preferences.theme))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .padding(
+                    .horizontal,
+                    chromeVisible
+                        ? DesignTokens.Control.readerTarget * 2 + DesignTokens.Spacing.actions : 0
+                )
+                .allowsHitTesting(false)
+            if chromeVisible {
+                GlassEffectContainer(spacing: DesignTokens.Spacing.chrome) {
+                    HStack(spacing: DesignTokens.Spacing.actions) {
+                        chromeButton("list.bullet", "Contents") { tocPresented = true }
+                            .accessibilityIdentifier("reader-contents")
+                        Spacer(minLength: 0)
+                        HStack(spacing: 0) {
+                            chromeButton(
+                                "chevron.backward", "Previous chapter", glassShape: Capsule()
+                            ) {
+                                stepChapter(-1)
+                            }
+                            .glassEffectUnion(id: "chapters", namespace: chromeGlass)
+                            .disabled(!canStepChapter(-1))
+                            .accessibilityIdentifier("reader-previous-chapter")
+                            chromeButton(
+                                "chevron.forward", "Next chapter", glassShape: Capsule()
+                            ) {
+                                stepChapter(1)
+                            }
+                            .glassEffectUnion(id: "chapters", namespace: chromeGlass)
+                            .disabled(!canStepChapter(1))
+                            .accessibilityIdentifier("reader-next-chapter")
                         }
                     }
-                )
-                .disabled(progress.totalPages <= 1)
-                .accessibilityLabel("Page")
-                .accessibilityValue("\(Int(scrubValue)) of \(progress.totalPages)")
-                // A tick per integer crossed; gated on scrubbing so the
-                // resync after a page lands stays silent.
-                .sensoryFeedback(.selection, trigger: scrubbing ? Int(scrubValue) : 0)
-                railButton("chevron.forward", "Next chapter") { stepChapter(1) }
-                    .disabled(!canStepChapter(1))
+                }
+                .transition(.opacity)
             }
-            .padding(.horizontal, DesignTokens.Spacing.controlInset)
-            .padding(.vertical, DesignTokens.Spacing.chrome)
-            .glassEffect(.regular.interactive(), in: .capsule)
         }
-        .padding(.horizontal, DesignTokens.Spacing.grid)
-        .onAppear { scrubValue = Double(progress.page) }
-        .onChange(of: progress.page) { _, page in
-            if !scrubbing { scrubValue = Double(page) }
-        }
-    }
-
-    /// Plain icon button inside the rail's shared glass — the pill is the
-    /// control plane, so the buttons don't carry their own glass.
-    private func railButton(
-        _ systemName: String,
-        _ label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.body.weight(.medium))
-                .frame(
-                    width: DesignTokens.Control.readerTarget,
-                    height: DesignTokens.Control.readerTarget
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        .padding(.horizontal, DesignTokens.Spacing.controlInset)
+        .frame(height: DesignTokens.Control.readerTarget)
     }
 
     /// Whether the spine has a chapter `delta` steps from the current one.
@@ -569,6 +537,13 @@ struct ReaderScene: View {
         else { return }
         chromeVisible = false
         bridge?.jumpToChapter(reader.displayTarget)
+    }
+
+    /// The floating chrome takes its appearance from the paper, not the
+    /// system, so dark glass never lands on light paper. Sheets are native
+    /// views and keep following the system.
+    private var paperColorScheme: ColorScheme {
+        reader.preferences.theme.isDayPaper ? .light : .dark
     }
 
     /// Chapter title and page number follow the reader's Serif/Sans/Easy

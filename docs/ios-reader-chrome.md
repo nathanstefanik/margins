@@ -17,11 +17,14 @@ changes glyph size.
 paper, page number centered at the bottom. No eye, no note, no toolbars.
 
 **Single tap.** Existing thirds stay: left/right turn the page (and hide
-chrome). Center tap toggles chrome. While chrome is up the footer becomes
-the **scrubber rail** — contents, previous/next chapter chevrons, and a
-page slider over the chapter's paginated pages (`12 of 40`, jumping on
-release). Those counts are **this chapter's paginated pages** (what
-epub.js reports). The app has no whole-book page total, only a percent.
+chrome). Center tap toggles chrome. While chrome is up the footer gains
+Contents at the leading edge and previous/next chapter chevrons, merged
+into one capsule, at the trailing edge. The page number stays in place
+between them and expands to `12 of 40`. Those counts are **this
+chapter's paginated pages** (what epub.js reports). The app has no
+whole-book page total, only a percent. There is no in-chapter slider on
+iOS: pages turn by tap or swipe, and Contents and the chevrons jump
+further.
 
 **Revealed chrome.** A hamburger (`line.3.horizontal`), a bookmark button
 (toggles the pin at this page: adds one when the visible range holds none,
@@ -92,18 +95,27 @@ disable at the ends of the ladder.
 
 Line height is a fixed 1.65 (iOS passes it at apply time). Line width is
 unused on iOS (`0` → full width). Side/top/bottom padding is **fixed
-CSS** on `#viewer` (`2.2rem` top, `2.0rem` bottom, `1.4rem` sides), sized
+CSS** on `#viewer` (`2.2rem` top, `1.0rem` bottom, `1.4rem` sides), sized
 so body text clears the running header and footer. There is no
 `safeAreaInset` chrome, so showing buttons never reflows the page.
+
+Prose wraps greedily on iOS, forced over publisher sheets because
+Standard Ebooks titles set `text-wrap: pretty` themselves. macOS keeps
+`pretty`, but on a phone's narrow column it shortens lines enough to
+leave the right side visibly under-filled.
 
 `ReaderPreferences` keeps the macOS `%` / line-height / measure API
 untouched. The iOS sheet is `ReaderSettingsSheet` (hamburger).
 
 ## Layout
 
-Title, page number, hamburger, and new note are **overlays on the
-paper**, not insets — the webview keeps a constant frame, so revealing
-chrome cannot reflow the page. Overlay controls use a 44pt
+Title, page number, and every control are **overlays on the paper**, not
+insets — the webview keeps a constant frame, so revealing chrome cannot
+reflow the page. The footer is a fixed 48pt tall directly on the safe
+area, so the page number does not move when controls appear. Chrome
+glass stays `.regular` because it sits over body text, and takes its
+appearance from the paper rather than the system; sheets keep following
+the system. Overlay controls use a 44pt
 `contentShape` so the hit survives WKWebView's bounds (the same class of
 bug as the old dead eye/note buttons); the title and page number are
 `allowsHitTesting(false)` so a center tap near them still hits the page
@@ -128,7 +140,7 @@ delay and double-tap zoom. Swipes are a native
 ## Files
 
 - `apple/ios/Margins/Reader/ReaderScene.swift` — rest/revealed chrome;
-  overlay header/footer; hamburger, bookmark, note
+  overlay header/footer; hamburger, bookmark, note, Contents, chevrons
 - `apple/ios/Margins/Reader/ReaderSettingsSheet.swift` — font A pair,
   Serif/Sans/Easy switch, Contents, Bookmarks, Marks, chapter note
 - `apple/ios/Margins/Reader/ReaderBridge.swift` — pass step/px/face;

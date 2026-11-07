@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Margins) and syncs it with iCloud Drive, so imported books stay
   readable offline, after a restart, and after iOS clears iCloud
   downloads; edits sync newest-wins per file
+- iOS reader text fills more of the column, so the right side no longer
+  looks over-padded, and the page reaches closer to the page number
+- iOS reader controls put Contents at the bottom left and the chapter
+  arrows at the bottom right, with glass that matches the paper
+
+### Removed
+
+- iOS in-chapter page slider
 
 ### Fixed
 
