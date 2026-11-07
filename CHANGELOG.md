@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - iOS no longer shows an empty library offline when iCloud has removed
   downloaded files
+- iOS reader keeps its passage when the text size, typeface, or justify
+  setting changes, instead of landing on another page
 - one unreadable book no longer hides the whole library
 
 ## [0.7.1] - 2026-10-01

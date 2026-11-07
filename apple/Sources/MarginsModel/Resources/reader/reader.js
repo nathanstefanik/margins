@@ -640,8 +640,8 @@ function readerMeasureGlyphInDocument(doc) {
 // The stage only re-lays out on window resizes (epub.js listens for those
 // exclusively), so changing the inner viewer's width must force one: without
 // it the columns keep the old pixel width and the next page peeks into the
-// wider viewport, cut off. On iOS a resize is all that is needed; on the
-// desktop this schedules a reflow transaction that preserves the passage.
+// wider viewport, cut off. This schedules a reflow transaction that
+// preserves the passage: a bare resize can land a page early.
 function readerQueueRelayout() {
   if (!readerOpened || !readerRendition) {
     return;
@@ -649,25 +649,16 @@ function readerQueueRelayout() {
   if (readerRelayoutTimer) {
     clearTimeout(readerRelayoutTimer);
   }
-  if (readerIsDesktop) {
-    // The anchor is read when the transaction starts, not here: the
-    // debounce can span a user navigation, and anchoring to the location
-    // captured before it would drag the reader back. The generation
-    // captured here still lets a newer schedule or navigation cancel it.
-    const rendition = readerRendition;
-    const token = readerNavigationToken;
-    const generation = (readerLayoutGeneration += 1);
-    readerRelayoutTimer = setTimeout(() => {
-      readerRelayoutTimer = null;
-      readerRunLayoutTransaction(generation, token, rendition);
-    }, 120);
-    return;
-  }
+  // The anchor is read when the transaction starts, not here: the
+  // debounce can span a user navigation, and anchoring to the location
+  // captured before it would drag the reader back. The generation
+  // captured here still lets a newer schedule or navigation cancel it.
+  const rendition = readerRendition;
+  const token = readerNavigationToken;
+  const generation = (readerLayoutGeneration += 1);
   readerRelayoutTimer = setTimeout(() => {
     readerRelayoutTimer = null;
-    if (readerRendition) {
-      readerRendition.resize();
-    }
+    readerRunLayoutTransaction(generation, token, rendition);
   }, 120);
 }
 
@@ -715,6 +706,11 @@ async function readerRunLayoutTransaction(generation, token, rendition) {
       return;
     }
     if (anchor) {
+      // A text-size change leaves the stage size alone, so resize() returns
+      // early and the view keeps its old width until epub.js notices. Grow
+      // it first: moveTo clamps to the current scroll width, which would
+      // land a page short of an anchor in the new columns.
+      rendition.views().forEach((view) => view.expand());
       await rendition.display(anchor);
     }
   } catch (error) {
