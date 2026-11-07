@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-06
+
 ### Changed
 
 - iOS keeps the whole library on the iPhone (Files → On My iPhone →
@@ -289,7 +291,8 @@ Initial release.
 - Universal (arm64 + x86_64) macOS app bundle via `make mac-app-universal`
 - Linux `.deb` / `.rpm` / `.AppImage` bundles via Tauri
 
-[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/nathanstefanik/margins/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.8.0
 [0.6.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.6.1
 [0.6.0]: https://github.com/nathanstefanik/margins/releases/tag/v0.6.0
 [0.5.1]: https://github.com/nathanstefanik/margins/releases/tag/v0.5.1
