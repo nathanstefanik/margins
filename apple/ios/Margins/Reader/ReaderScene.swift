@@ -116,7 +116,6 @@ struct ReaderScene: View {
         }
         .overlay(alignment: .bottom) {
             footerOverlay
-                .safeAreaPadding(.bottom)
         }
         .animation(reduceMotion ? nil : DesignTokens.Motion.chrome, value: chromeVisible)
         // A gentle pulse when a mark lands or a passage joins a notebook;
@@ -473,9 +472,8 @@ struct ReaderScene: View {
 
     /// The running foot: this chapter's paginated page number, expanding
     /// to `12 of 40` while the chrome is up. Never hit-tested, so a
-    /// center tap over it still toggles the chrome. Padded into the
-    /// home-indicator safe area because these overlays sit on the
-    /// full-bleed ZStack, not the inset webview.
+    /// center tap over it still toggles the chrome. Sits directly on the
+    /// safe area, in the room `reader.html` leaves under the column.
     private var footerOverlay: some View {
         Group {
             if chromeVisible, let progress = reader.progress {
@@ -489,7 +487,7 @@ struct ReaderScene: View {
                     .allowsHitTesting(false)
             }
         }
-        .frame(height: chromeVisible ? nil : 44)
+        .frame(height: DesignTokens.Control.readerTarget)
         .transition(.opacity)
     }
 

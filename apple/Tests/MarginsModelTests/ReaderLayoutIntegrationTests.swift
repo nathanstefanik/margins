@@ -740,6 +740,11 @@ struct ReaderLayoutIntegrationTests {
         #expect(abs(geometry.viewerWidth - geometry.innerWidth) < 1)
         // iOS spacing is unchanged: the CSS 1.4rem padding, not 24 px.
         #expect(abs(geometry.viewerPaddingLeft - 22.4) < 0.5)
+        // Bottom padding: one rem, half a line or more above the footer.
+        let paddingBottom = try await harness.evaluate(
+            "parseFloat(getComputedStyle(document.getElementById('viewer')).paddingBottom)"
+        ) as? Double
+        #expect(abs((paddingBottom ?? 0) - 16) < 0.5)
         // The engine is never asked for two columns on iOS.
         let spread = try await harness.evaluate("readerRendition.settings.spread") as? String
         #expect(spread == "none")
