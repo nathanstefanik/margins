@@ -766,6 +766,25 @@ struct ReaderLayoutIntegrationTests {
         }
     }
 
+    @Test("a publisher's pretty wrapping cannot return on iOS")
+    func publisherPrettyWrapIsOverriddenOnIOS() async throws {
+        let harness = try makeHarness(width: 400, height: 760)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        _ = try await harness.waitForRelocation(after: 0)
+        // Standard Ebooks' core.css sets this on body and p.
+        let script = """
+            (() => {
+              const section = document.querySelector('iframe').contentDocument;
+              const sheet = section.createElement('style');
+              sheet.textContent = 'body, p { text-wrap: pretty; }';
+              section.head.appendChild(sheet);
+              return getComputedStyle(section.querySelector('p')).textWrapStyle;
+            })()
+            """
+        #expect(try await harness.evaluate(script) as? String == "auto")
+    }
+
     // MARK: Page traversal over the fixture
 
     @Test("page turns traverse every paragraph in order across chapter boundaries")

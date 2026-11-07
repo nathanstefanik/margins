@@ -989,10 +989,9 @@ function readerStyleContents(contents) {
     };
     // Pretty wrapping evens the rag by shortening lines, which suits the
     // wide desktop measure but leaves a phone's narrow column visibly
-    // under-filled on the right.
-    if (readerIsDesktop) {
-      rules[proseAlign]["text-wrap"] = "pretty";
-    }
+    // under-filled on the right. Forced on iOS because some publisher
+    // sheets (Standard Ebooks) set pretty themselves.
+    rules[proseAlign]["text-wrap"] = readerIsDesktop ? "pretty" : "wrap !important";
     // Publisher sheets commonly justify body text; ragged-right reads
     // better and avoids the uneven word spacing justification creates.
     // Justify is the opt-in counterpoint, hyphenated via the section's
