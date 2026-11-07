@@ -90,6 +90,12 @@ struct ReaderScene: View {
             .accessibilityAction(named: Text("Show controls")) {
                 chromeVisible = true
             }
+            .accessibilityAction(named: Text("Next page")) {
+                pageForward()
+            }
+            .accessibilityAction(named: Text("Previous page")) {
+                pageBack()
+            }
             .accessibilityAction(named: Text("New note")) {
                 newNote()
             }
@@ -124,9 +130,8 @@ struct ReaderScene: View {
         .sensoryFeedback(.success, trigger: flashTick)
         .sensoryFeedback(.selection, trigger: bookmarkTick)
         // The reading surface owns its own palette (light by default, dark
-        // on request), applied to the page and to the floating chrome ink.
-        // The chrome itself follows the system appearance: sheets presented
-        // from the reader are native views and must not inherit the paper.
+        // on request), applied to the page and to the floating chrome. Sheets
+        // presented from the reader are native views and follow the system.
         .navigationTitle(reader.book?.title ?? "Reader")
         .navigationBarTitleDisplayMode(.inline)
         .navigationTransition(.zoom(sourceID: zoomSourceID, in: zoomNamespace))
@@ -366,6 +371,7 @@ struct ReaderScene: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .glassEffect(.regular, in: .capsule)
+            .environment(\.colorScheme, paperColorScheme)
             .accessibilityIdentifier("reader-flash")
     }
 

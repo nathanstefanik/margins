@@ -1010,6 +1010,51 @@ struct ReaderLayoutIntegrationTests {
         )
     }
 
+    @Test("a publisher's no-wrap survives the iOS wrapping rule")
+    func publisherNoWrapSurvivesOnIOS() async throws {
+        let harness = try makeHarness(width: 400, height: 760)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        _ = try await harness.waitForRelocation(after: 0)
+        let script = """
+            (() => {
+              const p = document.querySelector('iframe').contentDocument.querySelector('p');
+              p.style.whiteSpace = 'nowrap';
+              return getComputedStyle(p).textWrapMode;
+            })()
+            """
+        #expect(try await harness.evaluate(script) as? String == "nowrap")
+    }
+
+    @Test("a reflow leaves a view that has not loaded yet alone")
+    func reflowSkipsUnloadedView() async throws {
+        let harness = try makeHarness(width: 400, height: 760)
+        defer { harness.dismantle() }
+        try await harness.load(platform: nil, typography: (16, 1.65, 0, "px"))
+        _ = try await harness.waitForRelocation(after: 0)
+        // A view joins the manager before its contents exist. Expanding it
+        // then throws and leaves it stuck, so it can never size itself.
+        try await harness.evaluate(
+            """
+            (() => {
+              const view = readerRendition.manager.views.first();
+              window.__loaded = view.contents;
+              view.contents = undefined;
+              readerRelayout();
+            })()
+            """)
+        try await Task.sleep(for: .milliseconds(500))
+        let stuck = try await harness.evaluate(
+            """
+            (() => {
+              const view = readerRendition.manager.views.first();
+              view.contents = window.__loaded;
+              return view._expanding === true;
+            })()
+            """) as? Bool
+        #expect(stuck == false)
+    }
+
     // Several heights: whether a page lands correctly depends on where the
     // columns happen to break, so one geometry can pass by luck.
     @Test(

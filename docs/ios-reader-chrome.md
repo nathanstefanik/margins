@@ -33,6 +33,8 @@ land here; filled while any pin is on the page), and the
 new-note button. Back lives here too (leading chevron) so leaving the
 reader is not buried in a sheet. Title and footer stay put.
 
+VoiceOver also gets "Next page" and "Previous page" actions on the reader.
+
 **Resting footer.** The footer text follows `reader.pageIndicator`:
 Pages (`12`), Time left (the pace meter's estimate, "~6 min left",
 falling back to the page number until the pace is learned), or None.

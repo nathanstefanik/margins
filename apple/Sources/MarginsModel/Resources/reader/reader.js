@@ -710,7 +710,13 @@ async function readerRunLayoutTransaction(generation, token, rendition) {
       // early and the view keeps its old width until epub.js notices. Grow
       // it first: moveTo clamps to the current scroll width, which would
       // land a page short of an anchor in the new columns.
-      rendition.views().forEach((view) => view.expand());
+      // A view whose section is still loading has no contents yet; it
+      // sizes itself when it arrives.
+      rendition.views().forEach((view) => {
+        if (view.contents) {
+          view.expand();
+        }
+      });
       await rendition.display(anchor);
     }
   } catch (error) {
@@ -974,7 +980,7 @@ function readerStyleContents(contents) {
     // Flow-text refinements: tidy line breaking, real kerning and
     // ligatures, and hanging punctuation. Left unset by publisher sheets
     // they just apply; a publisher that picks its own keeps it (no
-    // !important). orphans/widows are deliberately absent: as pagination
+    // !important), except iOS wrapping below. orphans/widows are deliberately absent: as pagination
     // constraints they push paragraphs across column boundaries, which
     // broke the reflow anchor's keep-the-passage guarantee.
     const proseAlign = "body, p, li, dd, dt, blockquote, td, th, figcaption";
@@ -986,8 +992,13 @@ function readerStyleContents(contents) {
     // Pretty wrapping evens the rag by shortening lines, which suits the
     // wide desktop measure but leaves a phone's narrow column visibly
     // under-filled on the right. Forced on iOS because some publisher
-    // sheets (Standard Ebooks) set pretty themselves.
-    rules[proseAlign]["text-wrap"] = readerIsDesktop ? "pretty" : "wrap !important";
+    // sheets (Standard Ebooks) set pretty themselves; only the wrap style,
+    // so a publisher's no-wrap stands.
+    if (readerIsDesktop) {
+      rules[proseAlign]["text-wrap"] = "pretty";
+    } else {
+      rules[proseAlign]["text-wrap-style"] = "auto !important";
+    }
     // Publisher sheets commonly justify body text; ragged-right reads
     // better and avoids the uneven word spacing justification creates.
     // Justify is the opt-in counterpoint, hyphenated via the section's
