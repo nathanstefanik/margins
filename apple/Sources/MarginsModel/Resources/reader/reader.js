@@ -983,11 +983,16 @@ function readerStyleContents(contents) {
     // broke the reflow anchor's keep-the-passage guarantee.
     const proseAlign = "body, p, li, dd, dt, blockquote, td, th, figcaption";
     rules[proseAlign] = {
-      "text-wrap": "pretty",
       "hanging-punctuation": "first allow-end",
       "font-kerning": "normal",
       "font-variant-ligatures": "common-ligatures",
     };
+    // Pretty wrapping evens the rag by shortening lines, which suits the
+    // wide desktop measure but leaves a phone's narrow column visibly
+    // under-filled on the right.
+    if (readerIsDesktop) {
+      rules[proseAlign]["text-wrap"] = "pretty";
+    }
     // Publisher sheets commonly justify body text; ragged-right reads
     // better and avoids the uneven word spacing justification creates.
     // Justify is the opt-in counterpoint, hyphenated via the section's

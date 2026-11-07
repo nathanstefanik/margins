@@ -746,6 +746,21 @@ struct ReaderLayoutIntegrationTests {
         #expect(try await harness.visibleParagraphIDs().isEmpty == false)
     }
 
+    @Test("iOS prose fills the line; macOS keeps pretty wrapping")
+    func proseWrapPerPlatform() async throws {
+        let script = """
+            getComputedStyle(document.querySelector('iframe')
+                .contentDocument.querySelector('p')).textWrapStyle
+            """
+        for (platform, expected) in [(nil, "auto"), ("macos", "pretty")] as [(String?, String)] {
+            let harness = try makeHarness(width: 400, height: 760)
+            defer { harness.dismantle() }
+            try await harness.load(platform: platform, typography: (16, 1.65, 0, "px"))
+            _ = try await harness.waitForRelocation(after: 0)
+            #expect(try await harness.evaluate(script) as? String == expected)
+        }
+    }
+
     // MARK: Page traversal over the fixture
 
     @Test("page turns traverse every paragraph in order across chapter boundaries")
