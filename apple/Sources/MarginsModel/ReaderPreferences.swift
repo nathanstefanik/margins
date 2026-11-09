@@ -123,11 +123,10 @@ public final class ReaderPreferences {
     private static let typefaceKey = "reader.typeface"
     private static let pageIndicatorKey = "reader.pageIndicator"
     private static let hideSidebarKey = "reader.hideSidebarWhileReading"
-    /// Keys of preferences that became fixed reader behavior: flush-left
-    /// prose, chapter ornaments, and the chapter-end pause. Purged on
-    /// launch so a value stored by an older build can't resurface if a
-    /// key is ever reused.
-    private static let retiredKeys = ["reader.justify", "reader.ornaments", "reader.chapterEndPause"]
+    // Retired, never reuse: "reader.justify", "reader.ornaments", and
+    // "reader.chapterEndPause" were toggles before flush-left prose,
+    // chapter ornaments, and the chapter-end pause became fixed reader
+    // behavior. Older builds may have left values under them.
 
     private let defaults: UserDefaults
     private var _fixedTheme: ReaderTheme
@@ -163,9 +162,6 @@ public final class ReaderPreferences {
             ReaderPageIndicator(rawValue: defaults.string(forKey: Self.pageIndicatorKey) ?? "")
             ?? Self.defaultPageIndicator
         _hideSidebarWhileReading = defaults.bool(forKey: Self.hideSidebarKey)
-        for key in Self.retiredKeys {
-            defaults.removeObject(forKey: key)
-        }
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)

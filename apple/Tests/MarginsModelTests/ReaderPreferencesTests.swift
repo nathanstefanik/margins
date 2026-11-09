@@ -126,21 +126,6 @@ struct ReaderPreferencesTests {
         #expect(preferences.nightTheme == .dark)
     }
 
-    @Test("retired prose and pause keys are purged on load")
-    func retiredKeysArePurged() {
-        let defaults = makeDefaults()
-        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
-        let retired = ["reader.justify", "reader.ornaments", "reader.chapterEndPause"]
-        defaults.set(true, forKey: retired[0])
-        defaults.set(false, forKey: retired[1])
-        defaults.set(false, forKey: retired[2])
-
-        _ = ReaderPreferences(defaults: defaults)
-        for key in retired {
-            #expect(defaults.object(forKey: key) == nil)
-        }
-    }
-
     @Test("page indicator defaults to pages and round-trips")
     func pageIndicatorRoundTrips() {
         let defaults = makeDefaults()

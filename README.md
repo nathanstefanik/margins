@@ -153,9 +153,9 @@ macOS keybindings:
 
 macOS reader layout: the typography popover (textformat button) offers
 text size, the reader face, **Automatic** / **One Page** / **Two Pages**
-page layout, line width and height, and the page indicator. Automatic uses a single centered column or a
-two-page spread based on the actual window width and text size; One Page
-always keeps one column; Two Pages falls back to one when the minimum
+page layout, line width and height, and the page indicator. Automatic
+uses a single centered column or a two-page spread based on the actual
+window width and text size; One Page always keeps one column; Two Pages falls back to one when the minimum
 readable measure cannot fit (the popover says so). The layout choice
 persists locally under `reader.pageLayout.macos` and is separate from
 Reset Typography. Footer page numbers are chapter-local and describe

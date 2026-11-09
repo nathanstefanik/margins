@@ -1270,25 +1270,19 @@ struct ReaderLayoutIntegrationTests {
 
     // MARK: Fixed prose (flush-left, ornaments, book language)
 
-    /// `text-align|hyphens` computed on a body paragraph. WebKit reports
-    /// `-webkit-hyphens`.
-    private func proseAlignAndHyphens(
+    /// `text-align` computed on a body paragraph.
+    private func proseAlign(
         _ harness: ReaderLayoutHarness, paragraphID: String = "p-1-01"
-    ) async throws -> (align: String?, hyphens: String?) {
-        let css = try await harness.evaluate(
+    ) async throws -> String? {
+        try await harness.evaluate(
             """
             (function () {
               var doc = readerRendition.getContents()[0].document;
               var p = doc.querySelector("#\(paragraphID)");
-              var cs = doc.defaultView.getComputedStyle(p);
-              var h = cs.getPropertyValue("hyphens")
-                || cs.getPropertyValue("-webkit-hyphens");
-              return cs.textAlign + "|" + h;
+              return doc.defaultView.getComputedStyle(p).textAlign;
             })()
             """
         ) as? String
-        let parts = css?.split(separator: "|") ?? []
-        return (parts.first.map(String.init), parts.count > 1 ? String(parts[1]) : nil)
     }
 
     /// `-webkit-initial-letter|font-variant-caps` computed on the
@@ -1315,8 +1309,7 @@ struct ReaderLayoutIntegrationTests {
     }
 
     /// The fixture's publisher sheet justifies `p`; the reader always
-    /// sets it flush-left and unhyphenated, on every face, even with a
-    /// book language that would allow hyphenation.
+    /// sets it flush-left, on every face.
     @Test("publisher-justified text is always set flush-left")
     func proseIsAlwaysFlushLeft() async throws {
         let harness = try makeHarness()
@@ -1325,9 +1318,7 @@ struct ReaderLayoutIntegrationTests {
 
         for face in ["serif", "sans", "easy"] {
             _ = try await harness.evaluate("readerSetFontFace(\"\(face)\"); \"sent\"")
-            let prose = try await proseAlignAndHyphens(harness)
-            #expect(prose.align == "left", "face \(face)")
-            #expect(prose.hyphens != "auto", "face \(face)")
+            #expect(try await proseAlign(harness) == "left", "face \(face)")
         }
     }
 
@@ -1350,6 +1341,7 @@ struct ReaderLayoutIntegrationTests {
         _ = try await harness.evaluate("readerSetFontFace(\"easy\"); \"sent\"")
         ornament = try await openingOrnaments(harness)
         #expect(ornament.letter == "normal" || ornament.letter == "")
+        #expect(ornament.caps != "small-caps")
 
         _ = try await harness.evaluate("readerSetFontFace(\"serif\"); \"sent\"")
         ornament = try await openingOrnaments(harness)

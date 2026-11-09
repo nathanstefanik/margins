@@ -49,10 +49,10 @@ Marks, and the chapter-note editor. No line height, no measure.
 justification is overridden), chapter openings always get the ornaments
 (drop cap + small caps; the Easy face stays plain), and the chapter-end
 pause below always runs. These are the app's identity rather than
-preferences, so neither app offers a toggle; `ReaderPreferences` purges
-the retired `reader.justify`, `reader.ornaments`, and
-`reader.chapterEndPause` keys on launch. If a reading option is ever
-added back, give it a fresh key.
+preferences, so neither app offers a toggle. Values older builds stored
+under `reader.justify`, `reader.ornaments`, and `reader.chapterEndPause`
+are ignored; if a reading option is ever added back, give it a fresh key
+rather than reusing one of these.
 
 **Paging.** Swipe still turns pages. Page-turn hides chrome again.
 

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Body text is always flush-left, chapter openings always get the drop
+  cap and small caps (the Easy face stays plain), and the reader always
+  pauses on the chapter-end page — on both apps
+- The "~N min left" reading pace relearns once after updating
+
+### Removed
+
+- Justify text, Chapter ornaments, and Pause at chapter ends settings
+  (iOS reader sheet; macOS typography popover, Settings, and ⌘K palette)
+
 ## [0.8.0] - 2026-11-06
 
 ### Changed

@@ -711,7 +711,9 @@ struct ReaderModelTests {
     @Test("an older build's pause-off setting no longer skips the pause")
     @MainActor
     func finishIgnoresRetiredPausePreference() {
-        let defaults = UserDefaults(suiteName: "ReaderModelTests-\(UUID().uuidString)")!
+        let suite = "ReaderModelTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(false, forKey: "reader.chapterEndPause")
         let reader = ReaderModel(preferences: ReaderPreferences(defaults: defaults))
         let book = makeBook()
