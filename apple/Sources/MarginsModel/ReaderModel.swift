@@ -320,7 +320,8 @@ public final class ReaderModel {
             pace.noteJump()
         }
         // Chapter-end page: a plain turn past the last page into the
-        // immediate successor pauses once per chapter (marked shown via
+        // immediate successor pauses once per chapter — always, it is the
+        // reading rhythm the app is built around (marked shown via
         // the silence key). Any other real relocation — and `open`/`close`
         // — clears it; a re-reported same-spot relocation does not.
         if let book, let chapter,
@@ -333,7 +334,6 @@ public final class ReaderModel {
                 newProgress: progress,
                 chapters: book.chapters
             ),
-            preferences.pauseAtChapterEnds,
             !preferences.chapterEndPageSilenced(bookId: book.id, chapterKey: finished.key)
         {
             chapterEnd = finished

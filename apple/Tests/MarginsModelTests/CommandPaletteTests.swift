@@ -97,9 +97,7 @@ struct CommandPaletteTests {
             books: books,
             chaptersBook: chaptersBook,
             hasSelectedBook: hasSelectedBook,
-            readerOpen: readerOpen,
-            justify: false,
-            ornaments: true)
+            readerOpen: readerOpen)
     }
 
     @Test("empty query offers books then commands, no chapters")
@@ -180,14 +178,11 @@ struct CommandPaletteTests {
         #expect(items.contains { $0.title == "Focus Mode" && $0.subtitle == "On" })
     }
 
-    @Test("preference commands reflect current state")
+    @Test("preference commands cover paper and indicator, not fixed prose")
     func preferenceCommands() {
-        var ctx = context()
-        ctx.justify = true
-        ctx.ornaments = false
-        let items = CommandPalette.items(for: ctx)
-        #expect(items.contains { $0.title == "Justify Text" && $0.subtitle == "On" })
-        #expect(items.contains { $0.title == "Chapter Ornaments" && $0.subtitle == "Off" })
+        let items = CommandPalette.items(for: context())
+        #expect(!items.contains { $0.title == "Justify Text" })
+        #expect(!items.contains { $0.title == "Chapter Ornaments" })
         #expect(items.contains { $0.title == "Paper: Sepia" })
         #expect(items.contains { $0.title == "Page Indicator: Time left" })
     }

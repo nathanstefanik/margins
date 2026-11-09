@@ -13,7 +13,8 @@ Inspired by zathura's restraint: keyboard-first navigation, no clutter, your lib
 - Paginated reader with vim-style keybindings
 - Reading papers: Light, Sepia, Dark, Night, or follow the system —
   matching the reading surface on both apps
-- Justified text and chapter ornaments (drop cap + small caps) on both apps
+- Flush-left prose with chapter ornaments (drop cap + small caps) on both
+  apps — fixed house style, not settings
 - Chapter-scoped page scrubber: hover the footer on macOS
 - Page indicator modes — page count, learned "~N min left" reading pace,
   or none
@@ -152,10 +153,9 @@ macOS keybindings:
 
 macOS reader layout: the typography popover (textformat button) offers
 text size, the reader face, **Automatic** / **One Page** / **Two Pages**
-page layout, line width and height, justified text, chapter ornaments,
-and the page indicator. Automatic uses a single centered column or a
-two-page spread based on the actual window width and text size; One Page
-always keeps one column; Two Pages falls back to one when the minimum
+page layout, line width and height, and the page indicator. Automatic
+uses a single centered column or a two-page spread based on the actual
+window width and text size; One Page always keeps one column; Two Pages falls back to one when the minimum
 readable measure cannot fit (the popover says so). The layout choice
 persists locally under `reader.pageLayout.macos` and is separate from
 Reset Typography. Footer page numbers are chapter-local and describe
@@ -212,7 +212,7 @@ See [docs/storage.md](docs/storage.md) for the on-disk layout.
   mark quotes and thoughts searchable on both platforms
 - **Reader calm pass** on both apps: continue-reading cards, library
   shelves (Reading / Up next / Finished), reading papers with
-  follow-system, justify + chapter ornaments, page scrubber and
+  follow-system, chapter ornaments, page scrubber and
   page-indicator modes, the chapter-end page, a ⌘K command palette and
   `f` focus mode (macOS), and typeset paper covers for books without one
 

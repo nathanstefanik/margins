@@ -105,9 +105,7 @@ struct CommandPaletteOverlay: View {
             chaptersBook: chaptersBook,
             hasSelectedBook: model.selectedBookID != nil,
             readerOpen: reader.isOpen,
-            readerFocused: reader.focusMode,
-            justify: reader.preferences.justify,
-            ornaments: reader.preferences.ornaments)
+            readerFocused: reader.focusMode)
     }
 
     /// One pass over the model per render: the grouped rows for display
@@ -293,10 +291,6 @@ struct CommandPaletteOverlay: View {
             reader.preferences.theme = theme
         case .paperMatchSystem:
             reader.preferences.followsSystem = true
-        case .toggleJustify:
-            reader.preferences.justify.toggle()
-        case .toggleOrnaments:
-            reader.preferences.ornaments.toggle()
         case .pageIndicator(let mode):
             reader.preferences.pageIndicator = mode
         case .toggleFocus:

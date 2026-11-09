@@ -42,9 +42,17 @@ falling back to the page number until the pace is learned), or None.
 **Hamburger sheet.** `ReaderSettingsSheet`: paper swatches (Light /
 Sepia / Dark / Night, or Match system appearance — the system is
 inverted), text size as a small-A / large-A pair (internal ladder only),
-typeface (Serif/Sans/Easy), justify text, chapter ornaments, page
-indicator, "Pause at chapter ends", plus Contents, Bookmarks, Marks, and
-the chapter-note editor. No line height, no measure.
+typeface (Serif/Sans/Easy), page indicator, plus Contents, Bookmarks,
+Marks, and the chapter-note editor. No line height, no measure.
+
+**Fixed prose, not settings.** Body text is always flush-left (publisher
+justification is overridden), chapter openings always get the ornaments
+(drop cap + small caps; the Easy face stays plain), and the chapter-end
+pause below always runs. These are the app's identity rather than
+preferences, so neither app offers a toggle. Values older builds stored
+under `reader.justify`, `reader.ornaments`, and `reader.chapterEndPause`
+are ignored; if a reading option is ever added back, give it a fresh key
+rather than reusing one of these.
 
 **Paging.** Swipe still turns pages. Page-turn hides chrome again.
 
@@ -57,7 +65,7 @@ into the finished chapter and opens the note editor. Detection lives in
 `ReaderModel.relocated` (the finished-chapter predicate requires the
 successor chapter, so TOC jumps never pause); each chapter pauses once
 via the `notePrompt.dismissed.<book>.<chapter>` defaults key, marked
-when the page shows. `reader.chapterEndPause` gates it.
+when the page shows.
 
 ## Font-size implementation
 

@@ -346,7 +346,6 @@ final class ReaderBridge: NSObject {
             "readerApplyTypography(\(preferences.fontSizePx),\(ReaderPreferences.iosLineHeight),0,'px')"
         )
         evaluate("readerSetFontFace(\(Self.javaScriptLiteral(preferences.typeface.rawValue)))")
-        evaluate("readerSetProse(\(preferences.justify),\(preferences.ornaments))")
     }
 
     private func observePreferences() {
@@ -355,8 +354,6 @@ final class ReaderBridge: NSObject {
             _ = preferences.theme
             _ = preferences.fontStep
             _ = preferences.typeface
-            _ = preferences.justify
-            _ = preferences.ornaments
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -379,8 +376,9 @@ final class ReaderBridge: NSObject {
             // before readerSetTheme arrives (no cream flash in dark).
             URLQueryItem(name: "theme", value: reader.preferences.theme.rawValue),
         ]
-        // The book's declared language: justified hyphenation needs it,
-        // and section documents that omit lang inherit the book's.
+        // The book's declared language: section documents that omit lang
+        // inherit it, so WebKit and VoiceOver treat the text as that
+        // language.
         if let language = reader.book?.language, !language.isEmpty {
             queryItems.append(URLQueryItem(name: "lang", value: language))
         }

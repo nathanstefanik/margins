@@ -708,15 +708,18 @@ struct ReaderModelTests {
         #expect(reader.chapterEnd == nil)
     }
 
-    @Test("the preference gates the pause")
+    @Test("an older build's pause-off setting no longer skips the pause")
     @MainActor
-    func finishHonorsPausePreference() {
-        let reader = makeIsolatedReader()
-        reader.preferences.pauseAtChapterEnds = false
+    func finishIgnoresRetiredPausePreference() {
+        let suite = "ReaderModelTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "reader.chapterEndPause")
+        let reader = ReaderModel(preferences: ReaderPreferences(defaults: defaults))
         let book = makeBook()
         reader.open(book: book, chapter: book.chapters[0])
         finishChapterOne(on: reader, book: book)
-        #expect(reader.chapterEnd == nil)
+        #expect(reader.chapterEnd?.key == "ch1")
     }
 
     @Test("a TOC-style jump to the successor is not a finish")

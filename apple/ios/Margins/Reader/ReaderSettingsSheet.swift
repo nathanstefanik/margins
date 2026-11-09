@@ -39,14 +39,6 @@ struct ReaderSettingsSheet: View {
                         paperRow("Paper", themes: ReaderTheme.allCases, selection: $preferences.theme)
                     }
                 }
-                Section("Text layout") {
-                    Toggle("Justify text", isOn: $preferences.justify)
-                        .accessibilityIdentifier("reader-justify")
-                    Toggle("Chapter ornaments", isOn: $preferences.ornaments)
-                        .accessibilityIdentifier("reader-ornaments")
-                    Toggle("Pause at chapter ends", isOn: $preferences.pauseAtChapterEnds)
-                        .accessibilityIdentifier("reader-chapter-end-pause")
-                }
                 Section("Text size") {
                     HStack(spacing: DesignTokens.Spacing.actions) {
                         Button {

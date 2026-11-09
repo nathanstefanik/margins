@@ -1268,27 +1268,21 @@ struct ReaderLayoutIntegrationTests {
         try await harness.evaluate("readerTypography.lineWidthCh") as? Double ?? 72
     }
 
-    // MARK: Prose options (justify, ornaments, book language)
+    // MARK: Fixed prose (flush-left, ornaments, book language)
 
-    /// `text-align|hyphens` computed on a body paragraph — the pair
-    /// `readerSetProse` switches. WebKit reports `-webkit-hyphens`.
-    private func proseAlignAndHyphens(
+    /// `text-align` computed on a body paragraph.
+    private func proseAlign(
         _ harness: ReaderLayoutHarness, paragraphID: String = "p-1-01"
-    ) async throws -> (align: String?, hyphens: String?) {
-        let css = try await harness.evaluate(
+    ) async throws -> String? {
+        try await harness.evaluate(
             """
             (function () {
               var doc = readerRendition.getContents()[0].document;
               var p = doc.querySelector("#\(paragraphID)");
-              var cs = doc.defaultView.getComputedStyle(p);
-              var h = cs.getPropertyValue("hyphens")
-                || cs.getPropertyValue("-webkit-hyphens");
-              return cs.textAlign + "|" + h;
+              return doc.defaultView.getComputedStyle(p).textAlign;
             })()
             """
         ) as? String
-        let parts = css?.split(separator: "|") ?? []
-        return (parts.first.map(String.init), parts.count > 1 ? String(parts[1]) : nil)
     }
 
     /// `-webkit-initial-letter|font-variant-caps` computed on the
@@ -1314,53 +1308,23 @@ struct ReaderLayoutIntegrationTests {
         return (parts.first.map(String.init), parts.count > 1 ? String(parts[1]) : nil)
     }
 
-    /// The fixture's publisher sheet justifies `p`; the reader forces
-    /// left until justify is on — then alignment flips and hyphenation
-    /// turns on (the load carried a book language).
-    @Test("justify switches body text to justified with hyphenation")
-    func justifyTogglesAlignment() async throws {
+    /// The fixture's publisher sheet justifies `p`; the reader always
+    /// sets it flush-left, on every face.
+    @Test("publisher-justified text is always set flush-left")
+    func proseIsAlwaysFlushLeft() async throws {
         let harness = try makeHarness()
         defer { harness.dismantle() }
         try await harness.load(language: "en")
 
-        var prose = try await proseAlignAndHyphens(harness)
-        #expect(prose.align == "left")
-        #expect(prose.hyphens != "auto")
-
-        _ = try await harness.evaluate("readerSetProse(true, true); \"sent\"")
-        prose = try await proseAlignAndHyphens(harness)
-        #expect(prose.align == "justify")
-        #expect(prose.hyphens == "auto")
-
-        _ = try await harness.evaluate("readerSetProse(false, true); \"sent\"")
-        prose = try await proseAlignAndHyphens(harness)
-        #expect(prose.align == "left")
-        #expect(prose.hyphens != "auto")
+        for face in ["serif", "sans", "easy"] {
+            _ = try await harness.evaluate("readerSetFontFace(\"\(face)\"); \"sent\"")
+            #expect(try await proseAlign(harness) == "left", "face \(face)")
+        }
     }
 
-    /// The Easy face ignores justify — its spacing is the point.
-    @Test("the Easy face keeps flush-left text even when justify is on")
-    func easyStaysFlushLeft() async throws {
-        let harness = try makeHarness()
-        defer { harness.dismantle() }
-        try await harness.load(language: "en")
-
-        _ = try await harness.evaluate(
-            "readerSetFontFace(\"easy\"); readerSetProse(true, true); \"sent\""
-        )
-        let prose = try await proseAlignAndHyphens(harness)
-        #expect(prose.align == "left")
-
-        _ = try await harness.evaluate("readerSetFontFace(\"serif\"); \"sent\"")
-        let after = try await proseAlignAndHyphens(harness)
-        #expect(after.align == "justify")
-        #expect(after.hyphens == "auto")
-    }
-
-    /// With ornaments on, the paragraph right after the chapter heading
-    /// gets a three-line initial letter and a small-caps first line;
-    /// off — or the Easy face — leaves it plain. A mid-chapter paragraph
-    /// is never ornamented.
+    /// The paragraph right after the chapter heading gets a three-line
+    /// initial letter and a small-caps first line; the Easy face leaves
+    /// it plain. A mid-chapter paragraph is never ornamented.
     @Test("chapter ornaments mark only the opening paragraph")
     func ornamentsMarkOpeningParagraph() async throws {
         let harness = try makeHarness()
@@ -1374,15 +1338,14 @@ struct ReaderLayoutIntegrationTests {
         #expect(mid.letter == "normal" || mid.letter == nil || mid.letter == "")
         #expect(mid.caps != "small-caps")
 
-        _ = try await harness.evaluate("readerSetProse(false, false); \"sent\"")
+        _ = try await harness.evaluate("readerSetFontFace(\"easy\"); \"sent\"")
         ornament = try await openingOrnaments(harness)
         #expect(ornament.letter == "normal" || ornament.letter == "")
+        #expect(ornament.caps != "small-caps")
 
-        _ = try await harness.evaluate(
-            "readerSetFontFace(\"easy\"); readerSetProse(false, true); \"sent\""
-        )
+        _ = try await harness.evaluate("readerSetFontFace(\"serif\"); \"sent\"")
         ornament = try await openingOrnaments(harness)
-        #expect(ornament.letter == "normal" || ornament.letter == "")
+        #expect(ornament.letter == "3")
     }
 
     /// The book language lands on a section only when the document
