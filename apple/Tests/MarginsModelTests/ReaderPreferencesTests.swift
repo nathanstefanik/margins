@@ -126,20 +126,19 @@ struct ReaderPreferencesTests {
         #expect(preferences.nightTheme == .dark)
     }
 
-    @Test("justify defaults off, ornaments on; both round-trip")
-    func proseOptionsRoundTrip() {
+    @Test("retired prose and pause keys are purged on load")
+    func retiredKeysArePurged() {
         let defaults = makeDefaults()
         defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+        let retired = ["reader.justify", "reader.ornaments", "reader.chapterEndPause"]
+        defaults.set(true, forKey: retired[0])
+        defaults.set(false, forKey: retired[1])
+        defaults.set(false, forKey: retired[2])
 
-        let preferences = ReaderPreferences(defaults: defaults)
-        #expect(preferences.justify == false)
-        #expect(preferences.ornaments == true)
-
-        preferences.justify = true
-        preferences.ornaments = false
-        let second = ReaderPreferences(defaults: defaults)
-        #expect(second.justify == true)
-        #expect(second.ornaments == false)
+        _ = ReaderPreferences(defaults: defaults)
+        for key in retired {
+            #expect(defaults.object(forKey: key) == nil)
+        }
     }
 
     @Test("page indicator defaults to pages and round-trips")
@@ -176,19 +175,6 @@ struct ReaderPreferencesTests {
         #expect(preferences.pageIndicator == .timeLeft)
     }
     #endif
-
-    @Test("reset restores prose defaults")
-    func resetRestoresProseDefaults() {
-        let defaults = makeDefaults()
-        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
-
-        let preferences = ReaderPreferences(defaults: defaults)
-        preferences.justify = true
-        preferences.ornaments = false
-        preferences.resetTypography()
-        #expect(preferences.justify == false)
-        #expect(preferences.ornaments == true)
-    }
 
     @Test("setting the resolved theme picks a fixed paper and unfollows")
     func themeSetterUnfollows() {

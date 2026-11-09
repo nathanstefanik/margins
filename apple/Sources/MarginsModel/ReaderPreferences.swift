@@ -113,25 +113,21 @@ public final class ReaderPreferences {
     /// Serif by default: the printed-spread reading face.
     public static let defaultTypeface = ReaderTypeface.serif
 
-    /// Flush-left is the default read; justification is opt-in.
-    public static let defaultJustify = false
-    /// Drop cap and small caps at chapter openings; off means plain.
-    public static let defaultOrnaments = true
-
     /// The default page indicator: the plain page count.
     public static let defaultPageIndicator = ReaderPageIndicator.pages
-    public static let defaultPauseAtChapterEnds = true
 
     private static let themeKey = "reader.theme"
     private static let followsSystemKey = "reader.theme.followsSystem"
     private static let dayThemeKey = "reader.theme.day"
     private static let nightThemeKey = "reader.theme.night"
     private static let typefaceKey = "reader.typeface"
-    private static let justifyKey = "reader.justify"
-    private static let ornamentsKey = "reader.ornaments"
     private static let pageIndicatorKey = "reader.pageIndicator"
     private static let hideSidebarKey = "reader.hideSidebarWhileReading"
-    private static let chapterEndPauseKey = "reader.chapterEndPause"
+    /// Keys of preferences that became fixed reader behavior: flush-left
+    /// prose, chapter ornaments, and the chapter-end pause. Purged on
+    /// launch so a value stored by an older build can't resurface if a
+    /// key is ever reused.
+    private static let retiredKeys = ["reader.justify", "reader.ornaments", "reader.chapterEndPause"]
 
     private let defaults: UserDefaults
     private var _fixedTheme: ReaderTheme
@@ -139,11 +135,8 @@ public final class ReaderPreferences {
     private var _dayTheme: ReaderTheme
     private var _nightTheme: ReaderTheme
     private var _typeface: ReaderTypeface
-    private var _justify: Bool
-    private var _ornaments: Bool
     private var _pageIndicator: ReaderPageIndicator
     private var _hideSidebarWhileReading: Bool
-    private var _pauseAtChapterEnds: Bool
 
     /// - Parameter defaults: injection point for tests; pass a
     ///   `UserDefaults(suiteName:)` to keep suites isolated.
@@ -166,16 +159,13 @@ public final class ReaderPreferences {
             ReaderTheme(rawValue: defaults.string(forKey: Self.nightThemeKey) ?? "")
             .flatMap { $0.isDayPaper ? nil : $0 } ?? Self.defaultNightTheme
         _typeface = Self.typeface(from: defaults.string(forKey: Self.typefaceKey))
-        _justify = defaults.bool(forKey: Self.justifyKey)
-        _ornaments =
-            defaults.object(forKey: Self.ornamentsKey) as? Bool ?? Self.defaultOrnaments
         _pageIndicator =
             ReaderPageIndicator(rawValue: defaults.string(forKey: Self.pageIndicatorKey) ?? "")
             ?? Self.defaultPageIndicator
         _hideSidebarWhileReading = defaults.bool(forKey: Self.hideSidebarKey)
-        _pauseAtChapterEnds =
-            defaults.object(forKey: Self.chapterEndPauseKey) as? Bool
-            ?? Self.defaultPauseAtChapterEnds
+        for key in Self.retiredKeys {
+            defaults.removeObject(forKey: key)
+        }
 
         #if os(iOS)
         var storedStep = defaults.integer(forKey: Self.fontStepKey)
@@ -264,25 +254,6 @@ public final class ReaderPreferences {
     /// (`@Environment(\.colorScheme)`). Not persisted.
     public var systemIsDark = false
 
-    /// Justified body text with hyphenation. The Easy face ignores it —
-    /// its spacing is the point.
-    public var justify: Bool {
-        get { _justify }
-        set {
-            _justify = newValue
-            defaults.set(newValue, forKey: Self.justifyKey)
-        }
-    }
-
-    /// Drop cap and small caps on the paragraph opening a chapter.
-    public var ornaments: Bool {
-        get { _ornaments }
-        set {
-            _ornaments = newValue
-            defaults.set(newValue, forKey: Self.ornamentsKey)
-        }
-    }
-
     /// The page indicator mode the footers show. Not part of macOS's
     /// Reset Typography — it is display chrome, not typography.
     public var pageIndicator: ReaderPageIndicator {
@@ -302,16 +273,6 @@ public final class ReaderPreferences {
         set {
             _hideSidebarWhileReading = newValue
             defaults.set(newValue, forKey: Self.hideSidebarKey)
-        }
-    }
-
-    /// Pause on the chapter-end page when a forward turn runs past a
-    /// chapter's last page into its successor.
-    public var pauseAtChapterEnds: Bool {
-        get { _pauseAtChapterEnds }
-        set {
-            _pauseAtChapterEnds = newValue
-            defaults.set(newValue, forKey: Self.chapterEndPauseKey)
         }
     }
 
@@ -339,11 +300,7 @@ public final class ReaderPreferences {
     /// many words land on a page. Both platforms' knobs are included so
     /// the key only differs when the effective layout differs.
     public var typographyKey: String {
-        var parts = [
-            "face=\(_typeface.rawValue)",
-            "justify=\(_justify)",
-            "ornaments=\(_ornaments)",
-        ]
+        var parts = ["face=\(_typeface.rawValue)"]
         #if os(iOS)
         parts.append("step=\(_fontStep)")
         #else
@@ -508,8 +465,6 @@ public final class ReaderPreferences {
         lineHeight = Self.defaultLineHeight
         lineWidth = Self.defaultLineWidth
         typeface = Self.defaultTypeface
-        justify = Self.defaultJustify
-        ornaments = Self.defaultOrnaments
     }
 
     private static func clamp(_ value: Double, _ lower: Double, _ upper: Double) -> Double {

@@ -32,8 +32,6 @@ public enum CommandPalette {
         case settings
         case paper(ReaderTheme)
         case paperMatchSystem
-        case toggleJustify
-        case toggleOrnaments
         case pageIndicator(ReaderPageIndicator)
         case toggleFocus
 
@@ -49,8 +47,6 @@ public enum CommandPalette {
             case .settings: "settings"
             case .paper(let theme): "paper-\(theme.rawValue)"
             case .paperMatchSystem: "paperMatchSystem"
-            case .toggleJustify: "toggleJustify"
-            case .toggleOrnaments: "toggleOrnaments"
             case .pageIndicator(let mode): "indicator-\(mode.rawValue)"
             case .toggleFocus: "toggleFocus"
             }
@@ -82,25 +78,19 @@ public enum CommandPalette {
         public var hasSelectedBook: Bool
         public var readerOpen: Bool
         public var readerFocused: Bool
-        public var justify: Bool
-        public var ornaments: Bool
 
         public init(
             books: [BookSummary],
             chaptersBook: BookMeta?,
             hasSelectedBook: Bool,
             readerOpen: Bool,
-            readerFocused: Bool = false,
-            justify: Bool,
-            ornaments: Bool
+            readerFocused: Bool = false
         ) {
             self.books = books
             self.chaptersBook = chaptersBook
             self.hasSelectedBook = hasSelectedBook
             self.readerOpen = readerOpen
             self.readerFocused = readerFocused
-            self.justify = justify
-            self.ornaments = ornaments
         }
     }
 
@@ -169,9 +159,6 @@ public enum CommandPalette {
             items.append(command(.paper(theme), "Paper: \(theme.name)", "Reading"))
         }
         items.append(command(.paperMatchSystem, "Paper: Match System", "Reading"))
-        items.append(command(.toggleJustify, "Justify Text", context.justify ? "On" : "Off"))
-        items.append(
-            command(.toggleOrnaments, "Chapter Ornaments", context.ornaments ? "On" : "Off"))
         for mode in ReaderPageIndicator.allCases {
             items.append(
                 command(.pageIndicator(mode), "Page Indicator: \(mode.name)", "Reading"))
